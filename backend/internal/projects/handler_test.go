@@ -75,13 +75,6 @@ func (f *fakeStore) Archive(_ context.Context, userID, projectID uuid.UUID) (Pro
 	return Project{}, ErrProjectNotFound
 }
 
-func withPrincipal(req *http.Request, userID uuid.UUID) *http.Request {
-	ctx := context.WithValue(req.Context(), reflectContextKey{}, auth.Principal{UserID: userID})
-	return req.WithContext(ctx)
-}
-
-type reflectContextKey struct{}
-
 func TestValidateProjectInput(t *testing.T) {
 	if _, err := ValidateName("   "); !errors.Is(err, ErrInvalidProject) {
 		t.Fatal("expected blank name rejection")
@@ -123,7 +116,7 @@ func TestProjectCRUDAndOwnership(t *testing.T) {
 
 	userID := uuid.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", strings.NewReader(`{"name":" Studio ","description":"demo"}`))
-	req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, auth.Principal{UserID: userID}))
+	req = req.WithContext(auth.WithPrincipal(req.Context(), auth.Principal{UserID: userID}))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -135,7 +128,7 @@ func TestProjectCRUDAndOwnership(t *testing.T) {
 
 	projectID := store.items[0].ID
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String(), nil)
-	req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, auth.Principal{UserID: userID}))
+	req = req.WithContext(auth.WithPrincipal(req.Context(), auth.Principal{UserID: userID}))
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -144,7 +137,7 @@ func TestProjectCRUDAndOwnership(t *testing.T) {
 
 	otherID := uuid.New()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String(), nil)
-	req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, auth.Principal{UserID: otherID}))
+	req = req.WithContext(auth.WithPrincipal(req.Context(), auth.Principal{UserID: otherID}))
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
@@ -161,12 +154,10 @@ func TestProjectInputRejectsUnknownFields(t *testing.T) {
 	mux := http.NewServeMux()
 	handler.Register(mux)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", strings.NewReader(`{"name":"ok","unknown":true}`))
-	req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, auth.Principal{UserID: uuid.New()}))
+	req = req.WithContext(auth.WithPrincipal(req.Context(), auth.Principal{UserID: uuid.New()}))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d", rec.Code)
 	}
 }
-
-type authContextKey struct{}
