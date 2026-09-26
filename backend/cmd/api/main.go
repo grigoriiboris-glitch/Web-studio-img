@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
 	"github.com/oleg3190/Web-studio-img/backend/internal/httpapi"
+	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
@@ -24,7 +28,37 @@ func main() {
 	}
 
 	limiter := security.NewRateLimiter(cfg.RateLimit, cfg.RateWindow)
-	api := httpapi.NewServer(logger, cfg.CORSOrigins, limiter)
+	var projectDB *sql.DB
+	var projectHandler *projects.Handler
+	if cfg.DatabaseURL != "" {
+		projectDB, err = sql.Open("pgx", cfg.DatabaseURL)
+		if err != nil {
+			logger.Error("database open failed", "error", err)
+			os.Exit(1)
+		}
+		defer projectDB.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err = projectDB.PingContext(ctx)
+		cancel()
+		if err != nil {
+			logger.Error("database ping failed", "error", err)
+			os.Exit(1)
+		}
+
+		store, storeErr := projects.NewSQLStore(projectDB)
+		if storeErr != nil {
+			logger.Error("project store initialization failed", "error", storeErr)
+			os.Exit(1)
+		}
+		projectHandler, err = projects.NewHandler(store)
+		if err != nil {
+			logger.Error("project handler initialization failed", "error", err)
+			os.Exit(1)
+		}
+	}
+
+	api := httpapi.NewServerWithProjects(logger, cfg.CORSOrigins, limiter, projectHandler)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
 	errCh := make(chan error, 1)
