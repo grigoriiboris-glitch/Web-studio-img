@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
@@ -14,10 +15,21 @@ type Server struct {
 }
 
 func NewServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter) *Server {
+	return newServer(logger, origins, limiter, nil)
+}
+
+func NewServerWithProjects(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler) *Server {
+	return newServer(logger, origins, limiter, projectHandler)
+}
+
+func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
 	mux.HandleFunc("GET /api/v1/health", apiHealthHandler)
+	if projectHandler != nil {
+		projectHandler.Register(mux)
+	}
 
 	var handler http.Handler = mux
 	handler = withCORS(origins, handler)
