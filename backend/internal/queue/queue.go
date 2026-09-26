@@ -36,9 +36,9 @@ func NewClient(cfg Config) (*Client, error) {
 		return nil, err
 	}
 	return &Client{inner: asynq.NewClient(asynq.RedisClientOpt{
-		Addr:      cfg.Address,
-		Password:  cfg.Password,
-		DB:        cfg.DB,
+		Addr:     cfg.Address,
+		Password: cfg.Password,
+		DB:       cfg.DB,
 	})}, nil
 }
 
@@ -82,9 +82,9 @@ func NewServer(cfg ServerConfig, mux *asynq.ServeMux) (*Server, error) {
 		return nil, errors.New("serve mux is nil")
 	}
 	return &Server{inner: asynq.NewServer(asynq.RedisClientOpt{
-		Addr:      cfg.Redis.Address,
-		Password:  cfg.Redis.Password,
-		DB:        cfg.Redis.DB,
+		Addr:     cfg.Redis.Address,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
 	}, asynq.Config{
 		Concurrency:     cfg.Concurrency,
 		Queues:          cfg.Queues,
