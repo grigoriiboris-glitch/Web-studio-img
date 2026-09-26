@@ -9,7 +9,6 @@ const (
 	envRedisAddr     = "REDIS_ADDR"
 	envRedisPassword = "REDIS_PASSWORD"
 	envRedisDB       = "REDIS_DB"
-	envRedisPrefix   = "REDIS_PREFIX"
 )
 
 func ConfigFromEnv() Config {
