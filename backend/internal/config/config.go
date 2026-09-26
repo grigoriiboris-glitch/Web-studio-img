@@ -22,6 +22,8 @@ type Config struct {
 	S3UsePathStyle  bool
 	JWTSecret       string
 	CORSOrigins     []string
+	RateLimit       int
+	RateWindow      time.Duration
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
@@ -42,9 +44,11 @@ func Load() (Config, error) {
 		S3UsePathStyle:  boolEnv("S3_PATH_STYLE", false),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
 		CORSOrigins:     splitCSV(getenv("CORS_ORIGINS", "http://localhost:5173")),
-		ReadTimeout:    durationEnv("HTTP_READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:   durationEnv("HTTP_WRITE_TIMEOUT", 15*time.Second),
-		IdleTimeout:    durationEnv("HTTP_IDLE_TIMEOUT", 60*time.Second),
+		RateLimit:       intEnv("RATE_LIMIT_REQUESTS", 120),
+		RateWindow:      durationEnv("RATE_LIMIT_WINDOW", time.Minute),
+		ReadTimeout:     durationEnv("HTTP_READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:    durationEnv("HTTP_WRITE_TIMEOUT", 15*time.Second),
+		IdleTimeout:     durationEnv("HTTP_IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout: durationEnv("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 	}
 	if cfg.Port == "" {
@@ -53,8 +57,16 @@ func Load() (Config, error) {
 	if _, err := strconv.Atoi(cfg.Port); err != nil {
 		return Config{}, fmt.Errorf("APP_PORT must be numeric: %w", err)
 	}
-	if cfg.Env == "production" && cfg.JWTSecret == "" {
-		return Config{}, errors.New("JWT_SECRET is required in production")
+	if cfg.RateLimit <= 0 {
+		return Config{}, errors.New("RATE_LIMIT_REQUESTS must be positive")
+	}
+	if cfg.Env == "production" {
+		if len(cfg.JWTSecret) < 32 {
+			return Config{}, errors.New("JWT_SECRET must be at least 32 characters in production")
+		}
+		if len(cfg.CORSOrigins) == 0 {
+			return Config{}, errors.New("CORS_ORIGINS must not be empty in production")
+		}
 	}
 	return cfg, nil
 }
@@ -76,6 +88,18 @@ func durationEnv(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return duration
+}
+
+func intEnv(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }
 
 func boolEnv(key string, fallback bool) bool {
