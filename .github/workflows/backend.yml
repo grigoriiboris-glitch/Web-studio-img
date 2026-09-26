@@ -1,23 +1,20 @@
-name: backend
+name: CI
 
 on:
   push:
     branches: ["main"]
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend.yml"
-      - "docker-compose.yml"
   pull_request:
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend.yml"
-      - "docker-compose.yml"
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  backend:
+    name: Backend
     runs-on: ubuntu-latest
     services:
       redis:
@@ -29,7 +26,6 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
-
       postgres:
         image: postgres:16
         env:
@@ -43,11 +39,9 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
-
     defaults:
       run:
         working-directory: backend
-
     steps:
       - uses: actions/checkout@v4
 
@@ -55,21 +49,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
+          cache-dependency-path: backend/go.mod
 
       - name: Download dependencies
         run: go mod download
-
-      - name: Install sqlc
-        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
-
-      - name: Validate sqlc generation
-        run: sqlc generate
-
-      - name: Resolve generated-code dependencies
-        run: go mod tidy
-
-      - name: Format generated Go code
-        run: gofmt -w .
 
       - name: Format check
         run: test -z "$(gofmt -l .)"
@@ -80,27 +63,114 @@ jobs:
       - name: Unit tests
         run: go test ./...
 
-      - name: Install migrate
-        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3
+      - name: Race tests
+        run: go test -race ./...
 
-      - name: Apply migrations
+      - name: Build
+        run: go build ./...
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.4.0
+          working-directory: backend
+          args: --timeout=5m
+
+  sqlc:
+    name: SQLC validation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: backend/go.mod
+      - name: Install sqlc
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
+      - name: Generate
+        run: sqlc generate
+      - name: Check generated files
+        run: git diff --exit-code -- internal/db
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package.json
+      - name: Install dependencies
+        run: npm install
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+
+  migrations:
+    name: Migration validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: webstudio
+          POSTGRES_USER: webstudio
+          POSTGRES_PASSWORD: webstudio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U webstudio -d webstudio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install migrate
+        run: |
+          curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.18.3/migrate.linux-amd64.tar.gz | tar -xz
+          sudo mv migrate /usr/local/bin/migrate
+      - name: Apply all migrations
         env:
           DB_URL: postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable
-        run: migrate -path migrations -database "$DB_URL" up
-
+        run: migrate -path backend/migrations -database "$DB_URL" up
       - name: Verify schema
         env:
           DB_URL: postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable
         run: |
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "\dt"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) = 5 FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','projects','iterations','generations','assets');"
-
-      - name: Roll back migration
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) = 5 AS expected_tables FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','projects','iterations','generations','assets');"
+      - name: Roll back latest migration
         env:
           DB_URL: postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable
-        run: migrate -path migrations -database "$DB_URL" down 1
-
-      - name: Re-apply migration
+        run: migrate -path backend/migrations -database "$DB_URL" down 1
+      - name: Re-apply latest migration
         env:
           DB_URL: postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable
-        run: migrate -path migrations -database "$DB_URL" up
+        run: migrate -path backend/migrations -database "$DB_URL" up
+
+  docker:
+    name: Docker builds
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile backend
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile frontend
+      - name: Validate Compose
+        run: docker compose config
