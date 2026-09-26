@@ -40,7 +40,6 @@ func NewClient(cfg Config) (*Client, error) {
 		Addr:      cfg.Address,
 		Password:  cfg.Password,
 		DB:        cfg.DB,
-		Namespace: cfg.Prefix,
 	})}, nil
 }
 
