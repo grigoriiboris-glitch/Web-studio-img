@@ -2,7 +2,6 @@ package security
 
 import (
 	"bytes"
-	"net/http"
 	"testing"
 	"time"
 )
@@ -59,5 +58,3 @@ func TestAllowedImageMIME(t *testing.T) {
 		t.Fatal("SVG must not be accepted as an image upload")
 	}
 }
-
-var _ = http.MethodGet
