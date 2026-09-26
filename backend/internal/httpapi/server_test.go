@@ -8,7 +8,7 @@ import (
 )
 
 func TestHealthEndpoint(t *testing.T) {
-	server := NewServer(slog.Default(), []string{"http://localhost:5173"})
+	mp := metric.NewMeterProvider()\n\tmetrics, err := observability.NewAPIMetrics(otel.GetMeterProvider())\n\tif err != nil { t.Fatal(err) }\n\t_ = mp\n\tserver := NewServer(slog.Default(), []string{"http://localhost:5173"}, metrics)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 
