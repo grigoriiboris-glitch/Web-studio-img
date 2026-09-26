@@ -42,7 +42,7 @@ func (p *Providers) Shutdown(ctx context.Context) error {
 	return errors.Join(p.TracerProvider.Shutdown(ctx), p.MeterProvider.Shutdown(ctx))
 }
 
-type APIMetrics struct {
+type JobMetrics struct {\n\tStarted otelmetric.Int64Counter\n\tSucceeded otelmetric.Int64Counter\n\tFailed otelmetric.Int64Counter\n\tDuration otelmetric.Float64Histogram\n}\n\nfunc NewJobMetrics(mp otelmetric.MeterProvider) (JobMetrics, error) {\n\tmeter := mp.Meter("web-studio-img/job")\n\tstarted, err := meter.Int64Counter("job_started_total")\n\tif err != nil { return JobMetrics{}, err }\n\tsucceeded, err := meter.Int64Counter("job_succeeded_total")\n\tif err != nil { return JobMetrics{}, err }\n\tfailed, err := meter.Int64Counter("job_failed_total")\n\tif err != nil { return JobMetrics{}, err }\n\tduration, err := meter.Float64Histogram("job_duration_seconds")\n\tif err != nil { return JobMetrics{}, err }\n\treturn JobMetrics{Started: started, Succeeded: succeeded, Failed: failed, Duration: duration}, nil\n}\n\ntype APIMetrics struct {
 	Requests otelmetric.Int64Counter
 	Errors otelmetric.Int64Counter
 	Latency otelmetric.Float64Histogram
