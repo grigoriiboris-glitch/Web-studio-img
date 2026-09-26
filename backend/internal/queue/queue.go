@@ -50,7 +50,7 @@ func (c *Client) Enqueue(ctx context.Context, task *asynq.Task, opts ...asynq.Op
 }
 
 func (c *Client) Ping(ctx context.Context) error {
-	return c.inner.PingContext(ctx)
+	return c.inner.Ping()
 }
 
 func (c *Client) Close() error {
