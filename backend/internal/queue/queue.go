@@ -15,7 +15,6 @@ type Config struct {
 	Address  string
 	Password string
 	DB       int
-	Prefix   string
 }
 
 func (c Config) validate() error {
