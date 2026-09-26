@@ -43,7 +43,7 @@ func TestNewServerDefaults(t *testing.T) {
 func TestServerConfigShutdownTimeout(t *testing.T) {
 	mux := asynq.NewServeMux()
 	server, err := NewServer(ServerConfig{
-		Redis: Config{Address: "localhost:6379"},
+		Redis:           Config{Address: "localhost:6379"},
 		ShutdownTimeout: time.Second,
 	}, mux)
 	if err != nil {
