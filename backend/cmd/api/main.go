@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
 	"github.com/oleg3190/Web-studio-img/backend/internal/httpapi"
+	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
 func main() {
@@ -22,7 +23,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	api := httpapi.NewServer(logger, cfg.CORSOrigins)
+	limiter := security.NewRateLimiter(cfg.RateLimit, cfg.RateWindow)
+	api := httpapi.NewServer(logger, cfg.CORSOrigins, limiter)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
 	errCh := make(chan error, 1)
