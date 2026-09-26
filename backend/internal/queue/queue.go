@@ -85,7 +85,6 @@ func NewServer(cfg ServerConfig, mux *asynq.ServeMux) (*Server, error) {
 		Addr:      cfg.Redis.Address,
 		Password:  cfg.Redis.Password,
 		DB:        cfg.Redis.DB,
-		Namespace: cfg.Redis.Prefix,
 	}, asynq.Config{
 		Concurrency:     cfg.Concurrency,
 		Queues:          cfg.Queues,
