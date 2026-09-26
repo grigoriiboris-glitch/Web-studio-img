@@ -15,7 +15,6 @@ func ConfigFromEnv() Config {
 	cfg := Config{
 		Address:  os.Getenv(envRedisAddr),
 		Password: os.Getenv(envRedisPassword),
-		Prefix:   os.Getenv(envRedisPrefix),
 	}
 	if cfg.Address == "" {
 		cfg.Address = "localhost:6379"
