@@ -5,13 +5,15 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
 type Server struct {
 	handler http.Handler
 }
 
-func NewServer(logger *slog.Logger, origins []string) *Server {
+func NewServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
@@ -21,8 +23,9 @@ func NewServer(logger *slog.Logger, origins []string) *Server {
 	handler = withCORS(origins, handler)
 	handler = withSecurityHeaders(handler)
 	handler = withRequestID(handler)
+	handler = withRateLimit(limiter, handler)
 	handler = withLogging(logger, handler)
-	handler = http.MaxBytesHandler(handler, 10<<20)
+	handler = http.MaxBytesHandler(handler, security.DefaultMaxUploadSize)
 
 	return &Server{handler: handler}
 }
