@@ -14,6 +14,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Port != "8080" {
 		t.Fatalf("port=%q", cfg.Port)
 	}
+	if cfg.RateLimit != 120 {
+		t.Fatalf("rate limit=%d", cfg.RateLimit)
+	}
 }
 
 func TestProductionSecret(t *testing.T) {
@@ -22,6 +25,15 @@ func TestProductionSecret(t *testing.T) {
 	t.Setenv("JWT_SECRET", "")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestProductionSecretTooShort(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_PORT", "8080")
+	t.Setenv("JWT_SECRET", "short")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected minimum secret length error")
 	}
 }
 
