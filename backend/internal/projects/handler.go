@@ -181,7 +181,8 @@ func writeProjectError(w http.ResponseWriter, status int, code, message string) 
 	writeProjectJSON(w, status, map[string]any{
 		"error": map[string]string{
 			"code": code,
-			"message": message,\n\t\t\t"request_id": uuid.NewString(),
+			"message": message,
+			"request_id": uuid.NewString(),
 		},
 	})
 }
