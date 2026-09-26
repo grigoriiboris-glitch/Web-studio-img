@@ -10,5 +10,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.25.1
+	github.com/jackc/pgx/v5 v5.7.4
 	golang.org/x/crypto v0.41.0
 )
