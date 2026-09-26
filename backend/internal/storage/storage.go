@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path"
 	"strings"
 	"time"
 )
+
+const MaxPresignedURLExpiry = 15 * time.Minute
 
 type ObjectInfo struct {
 	Key         string
@@ -34,8 +37,17 @@ type StorageProvider interface {
 }
 
 func validateKey(key string) error {
-	if key == "" || strings.TrimSpace(key) == "" {
+	key = strings.TrimSpace(key)
+	if key == "" {
 		return fmt.Errorf("storage key must not be empty")
+	}
+	if strings.ContainsAny(key, "\\") || path.IsAbs(key) || path.Clean(key) != key {
+		return fmt.Errorf("invalid storage key")
+	}
+	for _, part := range strings.Split(key, "/") {
+		if part == ".." || part == "." || part == "" {
+			return fmt.Errorf("invalid storage key")
+		}
 	}
 	return nil
 }
@@ -43,6 +55,9 @@ func validateKey(key string) error {
 func validateExpiry(expiry time.Duration) error {
 	if expiry <= 0 {
 		return fmt.Errorf("presigned URL expiry must be positive")
+	}
+	if expiry > MaxPresignedURLExpiry {
+		return fmt.Errorf("presigned URL expiry exceeds maximum of %s", MaxPresignedURLExpiry)
 	}
 	return nil
 }
