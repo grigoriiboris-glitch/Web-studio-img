@@ -11,7 +11,7 @@ type Server struct {
 	handler http.Handler
 }
 
-func NewServer(logger *slog.Logger, origins []string) *Server {
+func NewServer(logger *slog.Logger, origins []string, metrics observability.APIMetrics) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
