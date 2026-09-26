@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
-	"web-studio-img/backend/internal/observability"
+	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 )
 
 func TestHealthEndpoint(t *testing.T) {
