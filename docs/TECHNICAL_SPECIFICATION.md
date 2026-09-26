@@ -84,7 +84,7 @@ Web Studio IMG — веб-платформа для создания изобр�
 - sqlc
 - Redis
 - Asynq или эквивалентная очередь
-- S3-compatible Object Storage
+- Yandex Object Storage (S3-compatible)
 - MinIO для локальной разработки
 - SSE для realtime
 - OpenTelemetry
@@ -105,7 +105,7 @@ Web Studio IMG — веб-платформа для создания изобр�
 ### Infrastructure
 - Docker Compose
 - GitHub Actions
-- S3-compatible storage
+- Yandex Object Storage (S3 API)
 - PostgreSQL backups
 
 ## 5. Структура репозитория
@@ -803,6 +803,8 @@ Stack traces не выдавать клиенту.
 
 ## 41. Storage
 
+Основное production-хранилище файлов — Yandex Object Storage через S3 API. MinIO используется только для локальной разработки и тестов.
+
 Object keys:
 users/{user_id}/projects/{project_id}/assets/{asset_id}/original
 users/{user_id}/projects/{project_id}/assets/{asset_id}/preview
@@ -1217,6 +1219,7 @@ S3_REGION
 S3_BUCKET
 S3_ACCESS_KEY
 S3_SECRET_KEY
+# Production: Yandex Object Storage S3 endpoint/bucket
 YANDEXART_API_KEY
 YANDEXART_FOLDER_ID
 JWT_SECRET
