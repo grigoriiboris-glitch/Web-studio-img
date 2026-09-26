@@ -68,6 +68,9 @@ jobs:
       - name: Resolve generated-code dependencies
         run: go mod tidy
 
+      - name: Format generated Go code
+        run: gofmt -w .
+
       - name: Format check
         run: test -z "$(gofmt -l .)"
 
