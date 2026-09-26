@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
 )
 
 func TestWriteError(t *testing.T) {
@@ -31,5 +30,4 @@ func TestWriteError(t *testing.T) {
 	if got := requestIDFromContext(req.Context()); got != "req-123" {
 		t.Fatalf("expected request id from context, got %q", got)
 	}
-
 }
