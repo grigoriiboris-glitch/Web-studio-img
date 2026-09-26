@@ -48,7 +48,7 @@ type APIMetrics struct {
 	Latency otelmetric.Float64Histogram
 }
 
-func NewAPIMetrics(mp *sdkmetric.MeterProvider) (APIMetrics, error) {
+func NewAPIMetrics(mp otelmetric.MeterProvider) (APIMetrics, error) {
 	meter := mp.Meter("web-studio-img/http")
 	requests, err := meter.Int64Counter("api_requests_total")
 	if err != nil { return APIMetrics{}, err }
