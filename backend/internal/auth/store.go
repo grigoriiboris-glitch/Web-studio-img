@@ -11,7 +11,7 @@ import (
 var ErrSessionRevoked = errors.New("session revoked")
 
 type User struct {
-	ID uuid.UUID
+	ID                        uuid.UUID
 	Email, Name, PasswordHash string
 }
 
