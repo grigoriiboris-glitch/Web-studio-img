@@ -1,0 +1,90 @@
+name: backend
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+      - "docker-compose.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+      - "docker-compose.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: webstudio
+          POSTGRES_USER: webstudio
+          POSTGRES_PASSWORD: webstudio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U webstudio -d webstudio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Install sqlc
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
+
+      - name: Validate sqlc generation
+        run: sqlc generate
+
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test ./...
+
+      - name: Install migrate
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3
+
+      - name: Apply migrations
+        env:
+          DB_URL: postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable
+        run: migrate -path migrations -database "$DB_URL" up
+
+      - name: Verify schema
+        env:
+          DB_URL: postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable
+        run: |
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "\dt"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) = 5 FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','projects','iterations','generations','assets');"
+
+      - name: Roll back migration
+        env:
+          DB_URL: postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable
+        run: migrate -path migrations -database "$DB_URL" down 1
+
+      - name: Re-apply migration
+        env:
+          DB_URL: postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable
+        run: migrate -path migrations -database "$DB_URL" up
