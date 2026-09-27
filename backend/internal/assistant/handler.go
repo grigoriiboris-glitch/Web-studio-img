@@ -109,6 +109,7 @@ func (h *Handler) listActions(w http.ResponseWriter,r *http.Request){
 func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 	p,ok:=auth.PrincipalFromContext(r.Context());if !ok{errJSON(w,401,"unauthorized","authentication required");return}
 	pid,e:=uuid.Parse(r.PathValue("project_id"));if e!=nil{errJSON(w,400,"invalid_project_id","invalid project id");return}
+	if !h.ownedProject(r.Context(),p.UserID,pid){errJSON(w,404,"project_not_found","project not found");return}
 	tool:=strings.TrimSpace(r.PathValue("tool"));d:=descriptor(tool);if d==nil{errJSON(w,404,"assistant_tool_not_found","tool is not allowlisted");return}
 	input:=map[string]any{}
 	if r.Body!=nil&&r.ContentLength!=0{if e:=decode(r,&input);e!=nil{errJSON(w,400,"invalid_request","invalid tool input");return}}
@@ -140,7 +141,8 @@ func (h *Handler) decide(w http.ResponseWriter,r *http.Request){
 	p,ok:=auth.PrincipalFromContext(r.Context());if !ok{errJSON(w,401,"unauthorized","authentication required");return}
 	pid,e:=uuid.Parse(r.PathValue("project_id"));if e!=nil{errJSON(w,400,"invalid_project_id","invalid project id");return}
 	aid,e:=uuid.Parse(r.PathValue("action_id"));if e!=nil{errJSON(w,400,"invalid_action_id","invalid action id");return}
-	if strings.TrimSpace(r.Header.Get("Idempotency-Key"))==""{errJSON(w,400,"missing_idempotency_key","Idempotency-Key header is required");return}
+	decisionKey:=strings.TrimSpace(r.Header.Get("Idempotency-Key"));if decisionKey==""{errJSON(w,400,"missing_idempotency_key","Idempotency-Key header is required");return}
+	if existing,e:=h.actions.GetByDecisionIdempotencyKey(r.Context(),p.UserID,pid,decisionKey);e==nil{writeJSON(w,200,existing);return}
 	var in struct{Decision string `json:"decision"`;FinalText *string `json:"final_text,omitempty"`;Components map[string]string `json:"components,omitempty"`}
 	if e=decode(r,&in);e!=nil{errJSON(w,400,"invalid_request","invalid recommendation decision");return}
 	current,e:=h.actions.GetOwned(r.Context(),p.UserID,pid,aid);if errors.Is(e,sql.ErrNoRows){errJSON(w,404,"assistant_action_not_found","assistant action not found");return};if e!=nil{errJSON(w,500,"assistant_action_failed","could not load assistant action");return}
@@ -165,7 +167,7 @@ func (h *Handler) decide(w http.ResponseWriter,r *http.Request){
 	case "ignore":
 	default:errJSON(w,400,"invalid_decision","decision must be apply, edit or ignore");return
 	}
-	updated,e:=h.actions.Decide(r.Context(),p.UserID,pid,aid,decision,output);if e!=nil{errJSON(w,409,"recommendation_decision_failed","could not record recommendation decision");return}
+	updated,e:=h.actions.Decide(r.Context(),p.UserID,pid,aid,decision,decisionKey,output);if e!=nil{errJSON(w,409,"recommendation_decision_failed","could not record recommendation decision");return}
 	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:p.UserID,ProjectID:pid,EntityType:"assistant_action",EntityID:aid,Action:"assistant.recommendation."+decision,Payload:map[string]any{"tool":current.Tool}})}
 	if h.events!=nil{_,_=h.events.Append(r.Context(),p.UserID,pid,"assistant.recommendation."+decision,"assistant_action",aid,map[string]any{"tool":current.Tool})}
 	writeJSON(w,200,updated)
@@ -274,6 +276,12 @@ func (h *Handler) applyComposition(ctx context.Context,userID,projectID uuid.UUI
 	if e!=nil{return e};out["applied_iteration_id"]=iid
 	if h.provenance!=nil{_,_=h.provenance.Append(ctx,provenance.Event{UserID:userID,ProjectID:projectID,IterationID:&iid,EntityType:"composition",EntityID:iid,Action:"assistant.composition.applied",Payload:map[string]any{"source":"assistant"}})}
 	return nil
+}
+
+func (h *Handler) ownedProject(ctx context.Context,userID,projectID uuid.UUID)bool{
+	var exists bool
+	err:=h.db.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM projects WHERE id=$1 AND user_id=$2 AND status <> 'deleted')`,projectID,userID).Scan(&exists)
+	return err==nil&&exists
 }
 
 func descriptor(name string)*ToolDescriptor{for i:=range toolCatalog{if toolCatalog[i].Name==name{return &toolCatalog[i]}};return nil}
