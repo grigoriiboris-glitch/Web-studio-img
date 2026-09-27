@@ -39,6 +39,9 @@ type Worker struct {
 }
 
 func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
+	if w.Assets != nil {
+		_ = w.Assets.CleanupExpired(ctx, 50)
+	}
 	var payload TaskPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("decode generation task: %w", err)
