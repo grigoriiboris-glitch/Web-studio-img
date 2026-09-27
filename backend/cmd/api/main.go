@@ -23,6 +23,10 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/humanactions"
 	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
 	"github.com/oleg3190/Web-studio-img/backend/internal/library"
+	"github.com/oleg3190/Web-studio-img/backend/internal/dna"
+	"github.com/oleg3190/Web-studio-img/backend/internal/rights"
+	"github.com/oleg3190/Web-studio-img/backend/internal/styles"
+	"github.com/oleg3190/Web-studio-img/backend/internal/layers"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
@@ -78,6 +82,10 @@ func main() {
 	var exportHandler *exports.Handler
 	var compositionHandler *composition.Handler
 	var libraryHandler *library.Handler
+	var styleHandler *styles.Handler
+	var dnaHandler *dna.Handler
+	var rightsHandler *rights.Handler
+	var layersHandler *layers.Handler
 	var assistantHandler *assistant.Handler
 	var assistantActionStore *assistant.Store
 	var compositionAnalyzer *composition.Analyzer
@@ -221,11 +229,19 @@ func main() {
 			logger.Error("composition handler initialization failed", "error", err)
 			os.Exit(1)
 		}
-		libraryHandler, err = library.NewHandler(projectDB)
+		libraryHandler, err = library.NewHandlerWithAudit(projectDB, actionStore, provenanceStore)
 		if err != nil {
 			logger.Error("library handler initialization failed", "error", err)
 			os.Exit(1)
 		}
+		styleHandler, err = styles.NewHandler(projectDB, actionStore, provenanceStore)
+		if err != nil { logger.Error("style handler initialization failed", "error", err); os.Exit(1) }
+		dnaHandler, err = dna.NewHandler(projectDB, actionStore, provenanceStore)
+		if err != nil { logger.Error("dna handler initialization failed", "error", err); os.Exit(1) }
+		rightsHandler, err = rights.NewHandler(projectDB, actionStore, provenanceStore)
+		if err != nil { logger.Error("rights handler initialization failed", "error", err); os.Exit(1) }
+		layersHandler, err = layers.NewHandler(projectDB, actionStore, provenanceStore)
+		if err != nil { logger.Error("layers handler initialization failed", "error", err); os.Exit(1) }
 		if cfg.RedisURL != "" && cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != "" {
 			redisCfg, redisErr := queue.ParseRedisURL(cfg.RedisURL)
 			if redisErr != nil {
@@ -284,7 +300,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservability(
 		logger, cfg.CORSOrigins, limiter, metrics,
 		projectHandler, iterationHandler, generationHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
