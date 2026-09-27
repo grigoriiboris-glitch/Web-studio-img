@@ -610,7 +610,21 @@ components:
         final_text: {type: string}
         components:
           type: object
-          additionalProperties: {type: string}
+          additionalProperties: {type: string, maxLength: 4000}
+          properties:
+            subject: {type: string}
+            composition: {type: string}
+            camera: {type: string}
+            lighting: {type: string}
+            material: {type: string}
+            texture: {type: string}
+            color: {type: string}
+            atmosphere: {type: string}
+            style: {type: string}
+            depth: {type: string}
+            detail: {type: string}
+            constraints: {type: string}
+            negative_constraints: {type: string}
         created_by: {type: string, enum: [human, ai, mixed]}
         created_at: {type: string, format: date-time}
     PromptInput:
@@ -661,8 +675,20 @@ components:
             request_id: {type: string}
 }
         notes: {type: string}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    ReferenceInfluence:
+      type: object
+      required: [composition, semantic, color, style, material, geometry]
+      properties:
+        composition: {type: number, minimum: 0, maximum: 1}
+        semantic: {type: number, minimum: 0, maximum: 1}
+        color: {type: number, minimum: 0, maximum: 1}
+        style: {type: number, minimum: 0, maximum: 1}
+        material: {type: number, minimum: 0, maximum: 1}
+        geometry: {type: number, minimum: 0, maximum: 1}
+        warning: {type: string}
     ReferenceInput:
       type: object
       additionalProperties: false
@@ -701,7 +727,7 @@ components:
         project_id: {type: string, format: uuid}
         iteration_id: {type: string, format: uuid}
         user_id: {type: string, format: uuid}
-        action_type: {type: string}
+        action_type: {type: string, enum: [IDEA_CREATED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SELECTED, VARIANT_REJECTED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED]}
         payload: {type: object, additionalProperties: true}
         old_state: {type: object, additionalProperties: true}
         new_state: {type: object, additionalProperties: true}
