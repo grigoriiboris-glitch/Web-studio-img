@@ -663,7 +663,7 @@ components:
         license: {type: string}
         license_verified: {type: boolean}
         user_owned: {type: boolean}
-        sha256: {type: string, pattern: '^[0-9a-f]{64}      type: object
+        sha256: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
       required: [error]
       properties:
         error:
@@ -673,7 +673,7 @@ components:
             code: {type: string}
             message: {type: string}
             request_id: {type: string}
-}
+
         notes: {type: string}
         influence: {$ref: '#/components/schemas/ReferenceInfluence'}
         created_at: {type: string, format: date-time}
@@ -700,7 +700,7 @@ components:
         license: {type: string, minLength: 1, maxLength: 500}
         license_verified: {type: boolean}
         user_owned: {type: boolean}
-        sha256: {type: string, pattern: '^[0-9a-f]{64}      type: object
+        sha256: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
       required: [error]
       properties:
         error:
@@ -710,7 +710,7 @@ components:
             code: {type: string}
             message: {type: string}
             request_id: {type: string}
-}
+
         notes: {type: string, maxLength: 10000}
     ReferenceList:
       type: object
