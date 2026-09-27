@@ -73,6 +73,13 @@ func main() {
 		logger.Error("asset store initialization failed", "error", err)
 		os.Exit(1)
 	}
+	securityScanner := assets.SecurityScanner(assets.ImageSecurityScanner{})
+	if cfg.ClamAVAddress != "" {
+		securityScanner = assets.CompositeScanner{
+			assets.ImageSecurityScanner{},
+			assets.ClamAVScanner{Address: cfg.ClamAVAddress, Timeout: 10 * time.Second},
+		}
+	}
 	objectStorage, err := storage.NewS3Storage(context.Background(), storage.S3Config{
 		Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, Bucket: cfg.S3Bucket,
 		AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, UsePathStyle: cfg.S3UsePathStyle,
@@ -88,7 +95,7 @@ func main() {
 	if err != nil { logger.Error("provenance store initialization failed", "error", err); os.Exit(1) }
 	worker := &generation.Worker{
 		Store: store, Provider: provider,
-		Assets: &assets.Processor{Storage: objectStorage, Store: assetStore},
+		Assets: &assets.Processor{Storage: objectStorage, Store: assetStore, Scanner: securityScanner},
 		Provenance: provenanceStore,
 		Events: eventStore,
 	}
