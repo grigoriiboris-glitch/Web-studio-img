@@ -1,6 +1,7 @@
 package assets
 
 import (
+ "context"
  "bytes"
  "encoding/json"
  "errors"
