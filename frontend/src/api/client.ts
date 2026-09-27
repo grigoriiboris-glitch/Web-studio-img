@@ -250,7 +250,7 @@ export const projectEventsApi = {
           },
           signal,
         })
-      } catch (err) {
+      } catch {
         if (signal?.aborted) return
         await new Promise(resolve => setTimeout(resolve, backoffMs))
         backoffMs = Math.min(backoffMs * 2, 10_000)
