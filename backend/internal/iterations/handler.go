@@ -8,19 +8,20 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 )
 
 type Handler struct {
 	store Store
+	events *events.Store
 }
 
-func NewHandler(store Store) (*Handler, error) {
-	if store == nil {
-		return nil, errors.New("iteration handler requires store")
-	}
-	return &Handler{store: store}, nil
-}
+func NewHandler(store Store) (*Handler, error) { return NewHandlerWithEvents(store, nil) }
 
+func NewHandlerWithEvents(store Store, eventStore *events.Store) (*Handler, error) {
+	if store == nil { return nil, errors.New("iteration handler requires store") }
+	return &Handler{store: store, events: eventStore}, nil
+}
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/iterations", h.list)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/iterations", h.create)
@@ -52,6 +53,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, ErrInvalidIteration) { writeIterationError(w, http.StatusBadRequest, "invalid_iteration", "iteration payload is invalid"); return }
 	if errors.Is(err, ErrIterationNotFound) { writeIterationError(w, http.StatusNotFound, "iteration_parent_or_project_not_found", "project or parent iteration not found"); return }
 	if err != nil { writeIterationError(w, http.StatusInternalServerError, "iteration_create_failed", "could not create iteration"); return }
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "iteration_created", "iteration", item.ID, map[string]any{"type": item.Type, "parent_iteration_id": item.ParentIterationID}) }
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "iteration_restored", "iteration", item.ID, map[string]any{"parent_iteration_id": iterationID}) }
 	writeIterationJSON(w, http.StatusCreated, item)
 }
 
