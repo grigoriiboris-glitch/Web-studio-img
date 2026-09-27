@@ -215,10 +215,12 @@ export interface ProvenanceVerification {
   reason?: string
 }
 
+type ProjectEventHandler = (...args: [ProjectEvent]) => void
+
 export const projectEventsApi = {
   stream: async (
     projectId: string,
-    onEvent: (event: ProjectEvent) => void,
+    onEvent: ProjectEventHandler,
     signal?: AbortSignal,
   ) => {
     const token = localStorage.getItem('web-studio-access-token')
