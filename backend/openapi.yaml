@@ -970,7 +970,7 @@ paths:
   /projects/{project_id}/assistant/tools/{tool}:
     post:
       operationId: executeAssistantTool
-      summary: Execute one allowlisted AI assistant tool
+      summary: Execute one allowlisted AI assistant tool; compare_iterations returns deterministic visual/composition scores and structured observations.
       parameters:
         - name: project_id
           in: path
@@ -1007,6 +1007,29 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AssistantToolResponse'}
+              examples:
+                compareIterationsResult:
+                  summary: Deterministic critic comparison
+                  value:
+                    explanation: Critic comparison combines persisted iteration metadata, prompt text, and deterministic visual/composition descriptors.
+                    confidence: 0.84
+                    uncertainty: This is a heuristic critic; semantic similarity is only a proxy from deterministic image descriptors.
+                    result:
+                      compared_at: "2026-09-27T12:00:00Z"
+                      prompts:
+                        similarity: 0.72
+                      image_comparison:
+                        visual_similarity: 0.81
+                        composition_similarity: 0.69
+                        semantic_similarity_proxy: 0.64
+                        style_similarity: 0.77
+                        algorithm: deterministic-image-descriptors
+                        algorithm_version: 1.0.0
+                      observations:
+                        - dimension: visual
+                          observation: Visual similarity is high between the iterations.
+                          reason: Perceptual hash and luminance histogram comparison.
+                          confidence: 0.90
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -1140,7 +1163,7 @@ components:
       required: [action, result, explanation, confidence, uncertainty]
       properties:
         action: {$ref: '#/components/schemas/AssistantAction'}
-        result: {type: object, additionalProperties: true}
+        result: {type: object, additionalProperties: true, description: compare_iterations returns iteration metadata, prompt comparison, optional image/composition features, scores, algorithm metadata, timestamp, and structured observations.}
         explanation: {type: string}
         confidence: {type: number, minimum: 0, maximum: 1}
         uncertainty: {type: string}
