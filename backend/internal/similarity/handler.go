@@ -181,7 +181,7 @@ func (h *Handler) analyzeInfluence(w http.ResponseWriter, r *http.Request) {
 	projectID, err := uuid.Parse(r.PathValue("project_id")); if err != nil { errJSON(w,400,"invalid_project_id","invalid project id"); return }
 	referenceID, err := uuid.Parse(r.PathValue("reference_id")); if err != nil { errJSON(w,400,"invalid_reference_id","invalid reference id"); return }
 	var in struct{ TargetAssetID uuid.UUID `json:"target_asset_id"` }
-	if err := decodeJSON(r,&in) || in.TargetAssetID == uuid.Nil { errJSON(w,400,"invalid_request","target_asset_id is required"); return }
+	if err := decodeJSON(r, &in); err != nil || in.TargetAssetID == uuid.Nil { errJSON(w,400,"invalid_request","target_asset_id is required"); return }
 	ref, err := h.refs.GetOwned(r.Context(),p.UserID,projectID,referenceID)
 	if err != nil || ref.AssetID == nil { errJSON(w,404,"reference_asset_not_found","reference must reference an asset"); return }
 	referenceAsset, err := h.assets.GetOwned(r.Context(),p.UserID,projectID,*ref.AssetID); if err != nil { errJSON(w,404,"reference_asset_not_found","reference asset not found"); return }
@@ -204,7 +204,9 @@ func parseUUID(w http.ResponseWriter, r *http.Request, name string) (uuid.UUID, 
 func decodeJSON(r *http.Request,v any) error { d:=json.NewDecoder(io.LimitReader(r.Body,1<<20)); d.DisallowUnknownFields(); if err:=d.Decode(v);err!=nil{return err}; var extra any; if err:=d.Decode(&extra);err!=io.EOF{return errors.New("multiple JSON values")}; return nil }
 func readObject(ctx context.Context,s storage.StorageProvider,key string)([]byte,error){obj,_,err:=s.Get(ctx,key);if err!=nil{return nil,err};defer obj.Close();return io.ReadAll(io.LimitReader(obj,10<<20+1))}
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
-func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}}
+func errJSON(w http.ResponseWriter,status int,code,msg string) {
+	writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})
+}
 
 func mustLoadCheck(db *sql.DB, ctx context.Context, userID, id uuid.UUID) Check {
 	var c Check
