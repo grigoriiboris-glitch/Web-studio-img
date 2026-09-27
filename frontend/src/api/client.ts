@@ -153,3 +153,175 @@ export const generationsApi = {
       method: 'POST',
     }),
 }
+
+
+export type ProjectEvent = {
+  id: number
+  project_id: string
+  user_id: string
+  event_type: string
+  entity_type: string
+  entity_id: string
+  payload?: Record<string, unknown>
+  created_at: string
+}
+
+export interface Prompt {
+  id: string
+  project_id: string
+  iteration_id?: string
+  parent_prompt_id?: string
+  version: number
+  original_text: string
+  ai_suggestions?: string[]
+  final_text?: string
+  components?: Record<string, string>
+  created_by: 'human' | 'ai' | 'mixed'
+  created_at: string
+}
+
+export interface Reference {
+  id: string
+  project_id: string
+  asset_id?: string
+  source_url?: string
+  source_type: 'inspiration' | 'reference' | 'direct_source' | 'user_created' | 'public_domain' | 'unknown'
+  license: string
+  license_verified: boolean
+  user_owned: boolean
+  sha256?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface HumanAction {
+  id: string
+  project_id: string
+  iteration_id?: string
+  user_id: string
+  action_type: string
+  payload?: Record<string, unknown>
+  old_state?: Record<string, unknown>
+  new_state?: Record<string, unknown>
+  ai_influence?: Record<string, unknown>
+  created_at: string
+}
+
+export interface ProvenanceVerification {
+  verified: boolean
+  event_count: number
+  first_invalid_event_id?: string
+  reason?: string
+}
+
+export const projectEventsApi = {
+  stream: async (
+    projectId: string,
+    onEvent: (event: ProjectEvent) => void,
+    signal?: AbortSignal,
+  ) => {
+    const token = localStorage.getItem('web-studio-access-token')
+    const response = await fetch(API_BASE_URL + '/projects/' + projectId + '/events', {
+      headers: {
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      },
+      signal,
+    })
+    if (!response.ok) throw new Error('Event stream failed with status ' + response.status)
+    if (!response.body) throw new Error('Event stream is unavailable')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let eventName = 'message'
+    let data = ''
+    const emit = () => {
+      if (!data) return
+      try {
+        const event = JSON.parse(data) as ProjectEvent
+        onEvent(event)
+      } finally {
+        eventName = 'message'
+        data = ''
+      }
+    }
+
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) break
+      buffer += decoder.decode(chunk.value, { stream: true })
+      const frames = buffer.split('\n\n')
+      buffer = frames.pop() ?? ''
+      for (const frame of frames) {
+        for (const line of frame.split('\n')) {
+          if (line.startsWith('event:')) eventName = line.slice(6).trim()
+          else if (line.startsWith('data:')) data += line.slice(5).trim()
+        }
+        if (eventName === 'message' || eventName.startsWith('generation_') || eventName.startsWith('prompt_') || eventName.startsWith('reference_')) emit()
+        else emit()
+      }
+    }
+  },
+}
+
+export const promptsApi = {
+  list: (projectId: string) => apiRequest<{ prompts: Prompt[] }>('/projects/' + projectId + '/prompts'),
+  get: (projectId: string, promptId: string) => apiRequest<Prompt>('/projects/' + projectId + '/prompts/' + promptId),
+  create: (projectId: string, input: {
+    iteration_id?: string
+    parent_prompt_id?: string
+    original_text: string
+    ai_suggestions?: string[]
+    final_text?: string
+    components?: Record<string, string>
+    created_by?: Prompt['created_by']
+  }) => apiRequest<Prompt>('/projects/' + projectId + '/prompts', { method: 'POST', body: JSON.stringify(input) }),
+  approve: (projectId: string, promptId: string, input: {
+    final_text: string
+    components?: Record<string, string>
+  }) => apiRequest<Prompt>('/projects/' + projectId + '/prompts/' + promptId + '/approve', { method: 'POST', body: JSON.stringify(input) }),
+}
+
+export const referencesApi = {
+  list: (projectId: string) => apiRequest<{ references: Reference[] }>('/projects/' + projectId + '/references'),
+  create: (projectId: string, input: {
+    asset_id?: string
+    source_url?: string
+    source_type: Reference['source_type']
+    license: string
+    license_verified?: boolean
+    user_owned?: boolean
+    sha256?: string
+    notes?: string
+  }) => apiRequest<Reference>('/projects/' + projectId + '/references', { method: 'POST', body: JSON.stringify(input) }),
+  update: (projectId: string, referenceId: string, input: {
+    asset_id?: string
+    source_url?: string
+    source_type: Reference['source_type']
+    license: string
+    license_verified?: boolean
+    user_owned?: boolean
+    sha256?: string
+    notes?: string
+  }) => apiRequest<Reference>('/projects/' + projectId + '/references/' + referenceId, { method: 'PATCH', body: JSON.stringify(input) }),
+  remove: (projectId: string, referenceId: string) =>
+    apiRequest<void>('/projects/' + projectId + '/references/' + referenceId, { method: 'DELETE' }),
+}
+
+export const humanActionsApi = {
+  list: (projectId: string) => apiRequest<{ actions: HumanAction[] }>('/projects/' + projectId + '/human-actions'),
+  create: (projectId: string, input: {
+    iteration_id?: string
+    action_type: string
+    payload?: Record<string, unknown>
+    old_state?: Record<string, unknown>
+    new_state?: Record<string, unknown>
+    ai_influence?: Record<string, unknown>
+  }) => apiRequest<HumanAction>('/projects/' + projectId + '/human-actions', { method: 'POST', body: JSON.stringify(input) }),
+}
+
+export const provenanceApi = {
+  verify: (projectId: string) => apiRequest<ProvenanceVerification>('/projects/' + projectId + '/provenance/verify'),
+}
