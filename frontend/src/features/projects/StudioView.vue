@@ -246,6 +246,23 @@ async function acceptSuggestion(prompt: Prompt, suggestion: string) {
   }
 }
 
+async function partiallyApplySuggestion(prompt: Prompt, suggestion: string) {
+  const current = promptForm.value.final_text.trim()
+  const next = current ? current + ', ' + suggestion : suggestion
+  promptForm.value.final_text = next
+  try {
+    await logHumanAction({
+      action_type: 'PROMPT_EDITED',
+      payload: { prompt_id: prompt.id, decision: 'partial', suggestion, version: prompt.version },
+      old_state: { final_text: current },
+      new_state: { final_text: next },
+      ai_influence: { source: 'prompt_suggestion', partially_accepted: true },
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record partial prompt suggestion'
+  }
+}
+
 async function rejectSuggestion(prompt: Prompt, suggestion: string) {
   try {
     await logHumanAction({
@@ -353,7 +370,9 @@ async function addReference() {
       user_owned: referenceForm.value.user_owned,
       sha256: referenceForm.value.sha256.trim() || undefined,
       notes: referenceForm.value.notes.trim() || undefined,
-      influence: { ...referenceForm.value.influence },
+      influence: Object.values(referenceForm.value.influence).some(value => value > 0)
+        ? { ...referenceForm.value.influence }
+        : undefined,
     })
     references.value = [created, ...references.value]
     referenceForm.value = {
@@ -545,6 +564,7 @@ onUnmounted(() => {
   <li v-for="suggestion in prompt.ai_suggestions" :key="suggestion">
     {{ suggestion }}
     <el-button size="small" link type="success" @click="acceptSuggestion(prompt, suggestion)">Use</el-button>
+    <el-button size="small" link type="warning" @click="partiallyApplySuggestion(prompt, suggestion)">Insert</el-button>
     <el-button size="small" link type="danger" @click="rejectSuggestion(prompt, suggestion)">Reject</el-button>
   </li>
 </ul>
