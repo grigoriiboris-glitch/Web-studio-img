@@ -156,7 +156,7 @@ func (p *Processor) ProcessUpload(ctx context.Context,userID,projectID uuid.UUID
 
 func (p *Processor) ProcessPendingUpload(ctx context.Context,userID,projectID,assetID uuid.UUID)(Asset,error){
 	item,err:=p.Store.GetOwned(ctx,userID,projectID,assetID);if err!=nil{return Asset{},err}
-	obj,_,err:=p.Storage.Get(ctx,item.StorageKey);if err!=nil{_ = p.Store.MarkOrphaned(ctx,userID,assetID);return Asset{},err};defer obj.Close()
+	obj,_,err:=p.Storage.Get(ctx,stagingKey(item.StorageKey));if err!=nil{_ = p.Store.MarkOrphaned(ctx,userID,assetID);return Asset{},err};defer obj.Close()
 	data,err:=io.ReadAll(io.LimitReader(obj,MaxAssetSize+1));if err!=nil{return Asset{},err};if int64(len(data))>MaxAssetSize{return Asset{},fmt.Errorf("asset exceeds %d bytes",MaxAssetSize)}
 	detected:=http.DetectContentType(data);if detected!=item.MIMEType{return Asset{},fmt.Errorf("MIME mismatch: declared=%q detected=%q",item.MIMEType,detected)}
 	if err:=p.scanner().Scan(ctx,data,detected);err!=nil{return Asset{},fmt.Errorf("security scan failed: %w",err)}
