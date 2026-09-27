@@ -86,7 +86,7 @@ func (s *Store) Reserve(
 		VALUES ($1,$2,$3,$4,'generated',$5,$6,$7,$8,$9,$10,$11,$12,$12,$13,'pending',now()+$14::interval)
 		ON CONFLICT (user_id, checksum) DO NOTHING
 		RETURNING id, project_id, generation_id, user_id, type, storage_key, preview_key, thumbnail_key, mime_type, size, width, height, checksum, exif, lifecycle_status, expires_at, deleted_at, created_at
-, assetID, userID, projectID, generationID, storageKey, previewKey, thumbnailKey, mime, size, width, height, checksum, raw, "24 hours").Scan(
+	`, assetID, userID, projectID, generationID, storageKey, previewKey, thumbnailKey, mime, size, width, height, checksum, raw, "24 hours").Scan(
 		&item.ID, &item.ProjectID, &item.GenerationID, &item.UserID, &item.Type, &item.StorageKey, &item.PreviewKey, &item.ThumbnailKey,
 		&item.MIMEType, &item.Size, &item.Width, &item.Height, &item.Checksum, &storedRaw, &item.LifecycleStatus, &expiresAt, &item.DeletedAt, &item.CreatedAt,
 	)
