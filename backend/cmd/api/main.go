@@ -58,6 +58,16 @@ func main() {
 			logger.Error("project handler initialization failed", "error", err)
 			os.Exit(1)
 		}
+		iterationStore, iterationStoreErr := iterations.NewSQLStore(projectDB)
+		if iterationStoreErr != nil {
+			logger.Error("iteration store initialization failed", "error", iterationStoreErr)
+			os.Exit(1)
+		}
+		iterationHandler, err = iterations.NewHandler(iterationStore)
+		if err != nil {
+			logger.Error("iteration handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	api := httpapi.NewServerWithProjectsAndIterations(logger, cfg.CORSOrigins, limiter, projectHandler, iterationHandler)
