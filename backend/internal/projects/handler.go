@@ -69,7 +69,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_create_failed", "could not create project")
 		return
 	}
-	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, project.ID, "project_created", "project", project.ID, map[string]any{"name": project.Name}) }
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, project.ID, "project.created", "project", project.ID, map[string]any{"name": project.Name}) }
 	writeProjectJSON(w, http.StatusCreated, project)
 }
 
@@ -93,8 +93,6 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_get_failed", "could not load project")
 		return
 	}
-	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, project.ID, "project_updated", "project", project.ID, map[string]any{"name": project.Name, "status": project.Status}) }
-	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, project.ID, "project_archived", "project", project.ID, map[string]any{"status": project.Status}) }
 	writeProjectJSON(w, http.StatusOK, project)
 }
 
@@ -127,6 +125,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_update_failed", "could not update project")
 		return
 	}
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "project.updated", "project", project.ID, map[string]any{"name": project.Name, "status": project.Status}) }
 	writeProjectJSON(w, http.StatusOK, project)
 }
 
@@ -150,6 +149,7 @@ func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_archive_failed", "could not archive project")
 		return
 	}
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "project.archived", "project", project.ID, map[string]any{"status": project.Status}) }
 	writeProjectJSON(w, http.StatusOK, project)
 }
 
