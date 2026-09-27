@@ -1082,6 +1082,17 @@ components:
     AssistantToolInput:
       type: object
       additionalProperties: true
+    AssistantRecommendation:
+      type: object
+      required: [recommendation, reason, evidence, confidence, affected_entity, expected_effect]
+      properties:
+        recommendation: {type: string}
+        reason: {type: string}
+        evidence: {type: object, additionalProperties: true}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        affected_entity: {type: object, additionalProperties: true}
+        expected_effect: {type: string}
+
     AssistantAction:
       type: object
       required: [id, project_id, user_id, tool, kind, input, output, explanation, confidence, uncertainty, created_at]
@@ -1094,7 +1105,7 @@ components:
           enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance]
         kind: {type: string, enum: [tool_execution, recommendation]}
         input: {type: object, additionalProperties: true}
-        output: {type: object, additionalProperties: true}
+        output: {type: object, additionalProperties: true, description: Recommendation tools include a nested recommendation object matching AssistantRecommendation.}
         explanation: {type: string}
         confidence: {type: number, minimum: 0, maximum: 1}
         uncertainty: {type: string}
