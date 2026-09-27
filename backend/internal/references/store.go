@@ -19,6 +19,12 @@ func NewStore(db *sql.DB) (*Store, error) {
 
 func (s *Store) Create(ctx context.Context, userID, projectID uuid.UUID, req Request) (Reference, error) {
 	if err := req.Validate(); err != nil { return Reference{}, err }
+	if req.AssetID != nil {
+		var assetProject uuid.UUID
+		if err := s.db.QueryRowContext(ctx, "SELECT project_id FROM assets WHERE id=$1", *req.AssetID).Scan(&assetProject); errors.Is(err, sql.ErrNoRows) || assetProject != projectID {
+			return Reference{}, ErrReferenceNotFound
+		} else if err != nil { return Reference{}, err }
+	}
 	var owner uuid.UUID
 	if err := s.db.QueryRowContext(ctx, "SELECT user_id FROM projects WHERE id=$1 AND status <> 'deleted'", projectID).Scan(&owner); errors.Is(err, sql.ErrNoRows) || owner != userID {
 		return Reference{}, ErrReferenceNotFound
