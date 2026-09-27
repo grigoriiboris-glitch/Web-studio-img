@@ -265,9 +265,12 @@ func (h *Handler) compareIterations(ctx context.Context,userID,projectID uuid.UU
 	assetB,e:=h.loadCriticAsset(ctx,userID,projectID,b)
 	if e!=nil{return nil,"",0,"",e}
 
+	promptScore,promptAvailable:=promptSimilarity(assetA.Prompt,assetB.Prompt)
+	comparedAt:=time.Now().UTC()
 	out:=map[string]any{
 		"a":ia,
 		"b":ib,
+		"compared_at":comparedAt,
 		"assets":map[string]any{
 			"a":map[string]any{"id":assetA.ID,"available":assetA.HasAsset},
 			"b":map[string]any{"id":assetB.ID,"available":assetB.HasAsset},
@@ -275,18 +278,22 @@ func (h *Handler) compareIterations(ctx context.Context,userID,projectID uuid.UU
 		"prompts":map[string]any{
 			"a":assetA.Prompt,
 			"b":assetB.Prompt,
-			"similarity":promptJaccard(assetA.Prompt,assetB.Prompt),
+			"similarity":nil,
 		},
+	}
+	if promptAvailable {
+		out["prompts"].(map[string]any)["similarity"]=promptScore
 	}
 	observations:=[]map[string]any{}
 	if valueOrString(ia.Title)!=valueOrString(ib.Title)||valueOrString(ia.Description)!=valueOrString(ib.Description)||ia.Type!=ib.Type{
 		observations=append(observations,criticObservation("iteration","Iteration metadata differs.","Stored iteration title, description, and type are compared directly.",0.99))
 	}
+	observations=append(observations,buildCriticPromptObservation(assetA.Prompt,assetB.Prompt))
 
 	if !assetA.HasAsset||!assetB.HasAsset||h.storage==nil{
 		observations=append(observations,criticObservation("visual","Visual and composition comparison is unavailable.","Both iterations must have an active generated image and configured object storage.",0.99))
 		out["observations"]=observations
-		return out,"Comparison uses persisted iteration metadata and deterministic analysis when both image assets are available.",0.99,"Visual/composition observations are unavailable when an active generated image is missing; no visual similarity is inferred.",nil
+		return out,"Comparison uses persisted iteration metadata and prompt text; visual/composition descriptors are included when both active images are available.",0.66,"Visual/composition observations are unavailable when an active generated image is missing; no visual similarity is inferred. Missing prompt text is reported as unavailable.",nil
 	}
 
 	dataA,e:=h.readCriticObject(ctx,assetA.StorageKey);if e!=nil{return nil,"",0,"",e}
@@ -306,16 +313,20 @@ func (h *Handler) compareIterations(ctx context.Context,userID,projectID uuid.UU
 		"algorithm":"deterministic-image-descriptors",
 		"algorithm_version":similarity.AlgorithmVersion,
 	}
+	out["visual_features"]=map[string]any{
+		"a":criticVisualFeatures(result.Reference),
+		"b":criticVisualFeatures(result.Target),
+	}
 	out["composition"]=map[string]any{"a":compA,"b":compB}
-	observations=append(observations,buildCriticObservations(result,compA,compB,assetA.Prompt,assetB.Prompt)...)
-	out["observations"]=observations
-	return out,"Critic comparison combines persisted iteration metadata, prompt overlap, and deterministic image/composition descriptors.",0.84,"This is a heuristic critic: it does not use an object detector, semantic vision model, or claim legal similarity/uniqueness.",nil
+	out["observations"]=append(observations,buildCriticObservations(result,compA,compB,assetA.Prompt,assetB.Prompt)...)
+	return out,"Critic comparison combines persisted iteration metadata, prompt text, and deterministic visual/composition descriptors.",0.84,"This is a heuristic critic: semantic similarity is only a proxy from deterministic image descriptors; it does not use object detection or claim legal similarity/uniqueness.",nil
 }
 
 func (h *Handler) loadCriticAsset(ctx context.Context,userID,projectID,iterationID uuid.UUID)(criticAsset,error){
 	var result criticAsset
 	var prompt,original sql.NullString
-	_ = h.db.QueryRowContext(ctx,"SELECT final_text,original_text FROM prompts WHERE iteration_id=$1 AND project_id=$2 ORDER BY version DESC LIMIT 1",iterationID,projectID).Scan(&prompt,&original)
+	promptErr:=h.db.QueryRowContext(ctx,"SELECT final_text,original_text FROM prompts WHERE iteration_id=$1 AND project_id=$2 ORDER BY version DESC LIMIT 1",iterationID,projectID).Scan(&prompt,&original)
+	if promptErr!=nil && !errors.Is(promptErr,sql.ErrNoRows){return criticAsset{},promptErr}
 	if prompt.Valid{result.Prompt=strings.TrimSpace(prompt.String)}else if original.Valid{result.Prompt=strings.TrimSpace(original.String)}
 	var generationPrompt,assetID,storageKey sql.NullString
 	err:=h.db.QueryRowContext(ctx,
@@ -428,3 +439,25 @@ func stringValue(v any)string{if s,ok:=v.(string);ok{return strings.TrimSpace(s)
 func parsePathUUID(r *http.Request,name string)uuid.UUID{id,e:=uuid.Parse(r.PathValue(name));if e!=nil{return uuid.Nil};return id}
 func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
+
+
+func buildCriticPromptObservation(promptA, promptB string) map[string]any {
+	if score, ok := promptSimilarity(promptA, promptB); ok {
+		return criticObservation("prompt", formatPromptObservation(score), "Prompt similarity is a token-set Jaccard comparison of persisted prompt text.", 0.95)
+	}
+	return criticObservation("prompt", "Prompt comparison is unavailable.", "At least one iteration has no persisted prompt text, so no similarity score is inferred.", 0.99)
+}
+
+func criticVisualFeatures(stats similarity.Stats) map[string]any {
+	return map[string]any{
+		"width": stats.Width,
+		"height": stats.Height,
+		"aspect_ratio": stats.Aspect,
+		"luminance_variance": stats.Variance,
+		"edge_density": stats.EdgeDensity,
+		"luminance_center": map[string]any{
+			"x": stats.CenterX,
+			"y": stats.CenterY,
+		},
+	}
+}
