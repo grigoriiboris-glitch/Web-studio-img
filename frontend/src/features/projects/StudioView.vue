@@ -592,9 +592,12 @@ onUnmounted(() => {
             </el-form-item>
             <el-form-item label="Influence scores (0–1)">
               <el-row :gutter="12" class="component-grid">
-                <el-col v-for="name in ['composition','semantic','color','style','material','geometry']" :key="name" :span="8">
-                  <el-input-number v-model="referenceForm.influence[name as keyof typeof referenceForm.influence]" :min="0" :max="1" :step="0.1" :aria-label="name" />
-                </el-col>
+                <el-col :span="8"><el-input-number v-model="referenceForm.influence.composition" :min="0" :max="1" :step="0.1" aria-label="composition" /></el-col>
+                <el-col :span="8"><el-input-number v-model="referenceForm.influence.semantic" :min="0" :max="1" :step="0.1" aria-label="semantic" /></el-col>
+                <el-col :span="8"><el-input-number v-model="referenceForm.influence.color" :min="0" :max="1" :step="0.1" aria-label="color" /></el-col>
+                <el-col :span="8"><el-input-number v-model="referenceForm.influence.style" :min="0" :max="1" :step="0.1" aria-label="style" /></el-col>
+                <el-col :span="8"><el-input-number v-model="referenceForm.influence.material" :min="0" :max="1" :step="0.1" aria-label="material" /></el-col>
+                <el-col :span="8"><el-input-number v-model="referenceForm.influence.geometry" :min="0" :max="1" :step="0.1" aria-label="geometry" /></el-col>
               </el-row>
             </el-form-item>
             <el-checkbox v-model="referenceForm.license_verified">License verified</el-checkbox>
