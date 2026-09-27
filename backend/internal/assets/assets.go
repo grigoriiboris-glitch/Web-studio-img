@@ -138,7 +138,7 @@ func (s *Store) MarkOrphaned(ctx context.Context, userID, assetID uuid.UUID) err
 		UPDATE assets
 		SET lifecycle_status='orphaned', expires_at=now()+$1::interval
 		WHERE id=$2 AND user_id=$3 AND lifecycle_status='pending'
-	`, AssetPendingTTL.String(), assetID, userID)
+	`, "24 hours", assetID, userID)
 	return err
 }
 
