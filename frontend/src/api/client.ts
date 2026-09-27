@@ -235,17 +235,11 @@ export const projectEventsApi = {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    let eventName = 'message'
     let data = ''
     const emit = () => {
       if (!data) return
-      try {
-        const event = JSON.parse(data) as ProjectEvent
-        onEvent(event)
-      } finally {
-        eventName = 'message'
-        data = ''
-      }
+      onEvent(JSON.parse(data) as ProjectEvent)
+      data = ''
     }
 
     while (true) {
@@ -256,11 +250,9 @@ export const projectEventsApi = {
       buffer = frames.pop() ?? ''
       for (const frame of frames) {
         for (const line of frame.split('\n')) {
-          if (line.startsWith('event:')) eventName = line.slice(6).trim()
-          else if (line.startsWith('data:')) data += line.slice(5).trim()
+          if (line.startsWith('data:')) data += line.slice(5).trim()
         }
-        if (eventName === 'message' || eventName.startsWith('generation_') || eventName.startsWith('prompt_') || eventName.startsWith('reference_')) emit()
-        else emit()
+        emit()
       }
     }
   },
