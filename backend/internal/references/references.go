@@ -27,6 +27,16 @@ var (
 
 var sha256Pattern = regexp.MustCompile("^[0-9a-f]{64}$")
 
+type Influence struct {
+	Composition float64 `json:"composition"`
+	Semantic    float64 `json:"semantic"`
+	Color       float64 `json:"color"`
+	Style       float64 `json:"style"`
+	Material    float64 `json:"material"`
+	Geometry    float64 `json:"geometry"`
+	Warning     string  `json:"warning,omitempty"`
+}
+
 type Reference struct {
 	ID              uuid.UUID  `json:"id"`
 	ProjectID       uuid.UUID  `json:"project_id"`
@@ -38,6 +48,7 @@ type Reference struct {
 	UserOwned       bool       `json:"user_owned"`
 	SHA256          *string    `json:"sha256,omitempty"`
 	Notes           *string    `json:"notes,omitempty"`
+	Influence       *Influence `json:"influence,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
@@ -51,6 +62,7 @@ type Request struct {
 	UserOwned       bool
 	SHA256          *string
 	Notes           *string
+	Influence       *Influence
 }
 
 func (r Request) Validate() error {
@@ -74,6 +86,13 @@ func (r Request) Validate() error {
 	}
 	if r.SHA256 != nil && !sha256Pattern.MatchString(*r.SHA256) {
 		return ErrInvalidReference
+	}
+	if r.Influence != nil {
+		for _, score := range []float64{r.Influence.Composition, r.Influence.Semantic, r.Influence.Color, r.Influence.Style, r.Influence.Material, r.Influence.Geometry} {
+			if score < 0 || score > 1 { return ErrInvalidReference }
+		}
+		r.Influence.Warning = ""
+		if r.Influence.Composition >= 0.8 { r.Influence.Warning = "High composition similarity; review before use." }
 	}
 	return nil
 }
