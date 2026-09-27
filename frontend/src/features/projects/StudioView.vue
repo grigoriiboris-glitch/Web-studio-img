@@ -1222,7 +1222,13 @@ onUnmounted(() => {
                 </details>
                 <el-space v-if="!action.decision" wrap>
                   <el-button size="small" type="success" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'apply')">Apply</el-button>
-                  <el-button size="small" type="warning" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'edit')">Edit</el-button>
+                  <el-button
+                    v-if="action.tool === 'suggest_prompt'"
+                    size="small"
+                    type="warning"
+                    :loading="assistantDecisionLoading === action.id"
+                    @click="decideAssistant(action, 'edit')"
+                  >Edit</el-button>
                   <el-button size="small" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'ignore')">Ignore</el-button>
                 </el-space>
               </div>
