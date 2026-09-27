@@ -78,6 +78,7 @@ var toolCatalog = []ToolDescriptor{
 	{Name:"create_generation",Description:"Queue a generation through the configured provider.",Mutating:true},
 	{Name:"compare_iterations",Description:"Compare two owned immutable iterations using prompts plus deterministic visual and composition descriptors."},
 	{Name:"verify_provenance",Description:"Verify the project's persisted provenance hash chain."},
+	{Name:"fact_check",Description:"Classify a factual claim from user-supplied evidence without inventing facts."},
 }
 
 func NewHandler(cfg Config) (*Handler,error) {
@@ -128,6 +129,7 @@ func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 	case "create_generation":result,explanation,confidence,uncertainty,e=h.createGeneration(r.Context(),p.UserID,pid,input,key)
 	case "compare_iterations":result,explanation,confidence,uncertainty,e=h.compareIterations(r.Context(),p.UserID,pid,input)
 	case "verify_provenance":result,explanation,confidence,uncertainty,e=h.verifyProvenance(r.Context(),p.UserID,pid)
+	case "fact_check":result,explanation,confidence,uncertainty,e=factCheck(input)
 	default:e=errors.New("unsupported tool")
 	}
 	if e!=nil{errJSON(w,400,"assistant_tool_failed",e.Error());return}
@@ -156,6 +158,9 @@ func (h *Handler) decide(w http.ResponseWriter,r *http.Request){
 		switch current.Tool{
 		case "suggest_prompt":e=h.applyPrompt(r.Context(),p.UserID,pid,output)
 		case "analyze_composition":e=h.applyComposition(r.Context(),p.UserID,pid,output)
+		case "suggest_materials":
+			output["decision_effect"] = "accepted_without_automatic_mutation"
+			output["project_mutated"] = false
 		default:e=errors.New("this recommendation has no automatic apply operation; use ignore")
 		}
 		if e!=nil{errJSON(w,409,"recommendation_apply_failed",e.Error());return}
@@ -416,7 +421,7 @@ func recommendationText(tool string, result map[string]any) string {
 func expectedEffect(tool string) string {
 	switch tool {
 	case "suggest_prompt": return "Create a new prompt version based on the proposed refinement."
-	case "suggest_materials": return "Help select project-visible materials or textures without changing the project automatically."
+	case "suggest_materials": return "Accept the suggested project-visible materials or textures for later manual selection; no project mutation occurs automatically."
 	case "analyze_composition": return "Persist the reviewed composition representation without overwriting immutable history."
 	}
 	return "No project mutation occurs until the user explicitly decides to apply or edit it."

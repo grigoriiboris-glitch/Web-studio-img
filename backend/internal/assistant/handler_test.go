@@ -14,6 +14,7 @@ func TestToolCatalogIsComplete(t *testing.T) {
 		"create_generation": true,
 		"compare_iterations": true,
 		"verify_provenance": true,
+		"fact_check": true,
 	}
 	for _, tool := range toolCatalog { delete(required, tool.Name) }
 	if len(required) != 0 { t.Fatalf("missing tools: %#v", required) }
@@ -31,4 +32,34 @@ func TestRecommendationContract(t *testing.T) {
 	}
 	if r["confidence"] != 0.63 { t.Fatalf("unexpected confidence: %#v", r["confidence"]) }
 	if r["evidence"].(map[string]any)["suggested_prompt"] != "A clearer focal point" { t.Fatal("evidence must preserve original result") }
+}
+
+
+func TestRecommendationSemanticsAreExplicit(t *testing.T) {
+	composition := withRecommendation("analyze_composition", map[string]any{
+		"asset_id": "asset-1",
+		"iteration_id": "iteration-1",
+	}, "Heuristic composition descriptors.", 0.62, "No learned vision model is used.")
+	recommendation, ok := composition["recommendation"].(map[string]any)
+	if !ok {
+		t.Fatal("recommendation missing")
+	}
+	if recommendation["affected_entity"].(map[string]any)["type"] != "iteration" {
+		t.Fatalf("expected iteration as affected entity, got %#v", recommendation["affected_entity"])
+	}
+	if recommendation["expected_effect"] == "" {
+		t.Fatal("expected effect must be explicit")
+	}
+}
+
+
+func TestMaterialRecommendationApplyIsDecisionOnly(t *testing.T) {
+	result := withRecommendation("suggest_materials", map[string]any{
+		"kind": "material",
+		"items": []any{map[string]any{"name": "Stone"}},
+	}, "Project-visible material suggestions.", 0.90, "Ranking is search/recency based.")
+	recommendation := result["recommendation"].(map[string]any)
+	if recommendation["expected_effect"] != "Accept the suggested project-visible materials or textures for later manual selection; no project mutation occurs automatically." {
+		t.Fatalf("unexpected material expected effect: %#v", recommendation["expected_effect"])
+	}
 }

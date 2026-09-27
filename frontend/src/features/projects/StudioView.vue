@@ -80,6 +80,17 @@ const criticAIterationId = ref('')
 const criticBIterationId = ref('')
 const criticResult = ref<Record<string, unknown> | null>(null)
 const criticLoading = ref(false)
+const factClaim = ref('')
+const factEvidenceJson = ref(JSON.stringify([
+  {
+    text: '',
+    source: '',
+    assessment: 'unknown',
+    confidence: 0.5,
+  },
+], null, 2))
+const factResult = ref<Record<string, unknown> | null>(null)
+const factLoading = ref(false)
 let eventAbort: AbortController | undefined
 
 const types: IterationType[] = ['idea', 'sketch', 'generation', 'selection', 'composition', 'prompt', 'manual_edit', 'final']
@@ -223,6 +234,61 @@ async function compareIterations() {
     error.value = err instanceof Error ? err.message : 'Could not compare iterations'
   } finally {
     criticLoading.value = false
+  }
+}
+
+async function runFactCheck() {
+  if (!factClaim.value.trim()) {
+    error.value = 'Enter a claim to check'
+    return
+  }
+  let evidence: unknown
+  try {
+    evidence = JSON.parse(factEvidenceJson.value)
+  } catch {
+    error.value = 'Evidence must be valid JSON'
+    return
+  }
+  if (!Array.isArray(evidence) || evidence.length === 0) {
+    error.value = 'Provide at least one evidence item'
+    return
+  }
+
+  factLoading.value = true
+  error.value = null
+  try {
+    const response = await assistantApi.execute<Record<string, unknown>>(
+      projectId(),
+      'fact_check',
+      {
+        claim: factClaim.value.trim(),
+        evidence,
+      },
+    )
+    factResult.value = response.result
+    assistantActions.value.push(response.action)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not run fact checker'
+  } finally {
+    factLoading.value = false
+  }
+}
+
+function factResultValue(name: string): unknown {
+  return factResult.value?.[name]
+}
+
+function factEvidenceItems(): Array<Record<string, unknown>> {
+  const value = factResult.value?.evidence
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+}
+
+function responseUncertainty(status: unknown): string {
+  switch (status) {
+    case 'SUPPORTED': return 'Supporting evidence was recorded, but source contents were not independently verified.'
+    case 'PARTIALLY_SUPPORTED': return 'Evidence is mixed or incomplete; review the supplied sources before relying on the claim.'
+    default: return 'The available evidence does not establish the claim; review the supplied sources.'
   }
 }
 
@@ -1156,12 +1222,91 @@ onUnmounted(() => {
                 </details>
                 <el-space v-if="!action.decision" wrap>
                   <el-button size="small" type="success" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'apply')">Apply</el-button>
-                  <el-button size="small" type="warning" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'edit')">Edit</el-button>
+                  <el-button
+                    v-if="action.tool === 'suggest_prompt'"
+                    size="small"
+                    type="warning"
+                    :loading="assistantDecisionLoading === action.id"
+                    @click="decideAssistant(action, 'edit')"
+                  >
+                    Edit
+                  </el-button>
                   <el-button size="small" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'ignore')">Ignore</el-button>
                 </el-space>
               </div>
             </el-timeline-item>
           </el-timeline>
+        </el-card>
+
+        <el-card class="create-card">
+          <template #header>AI Fact Checker</template>
+          <el-form label-position="top" @submit.prevent="runFactCheck">
+            <el-form-item label="Claim">
+              <el-input
+                v-model="factClaim"
+                maxlength="20000"
+                show-word-limit
+                placeholder="Enter the factual claim to assess"
+              />
+            </el-form-item>
+            <el-form-item label="Evidence (JSON)">
+              <el-input
+                v-model="factEvidenceJson"
+                type="textarea"
+                :rows="8"
+                placeholder="Evidence JSON: text, source, assessment (supports/contradicts/unknown), confidence (0..1)"
+              />
+            </el-form-item>
+            <el-button
+              type="primary"
+              native-type="submit"
+              :loading="factLoading"
+              :disabled="!assistantTools.some(tool => tool.name === 'fact_check')"
+            >
+              Check claim
+            </el-button>
+          </el-form>
+          <el-alert
+            title="The checker stores claim, evidence, source, confidence and status. It does not invent evidence or independently verify source contents."
+            type="info"
+            :closable="false"
+            style="margin-top: 12px"
+          />
+          <div v-if="factResult" aria-live="polite" style="margin-top: 12px">
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="Status">
+                {{ String(factResultValue('status') ?? 'UNKNOWN') }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Confidence">
+                {{ typeof factResultValue('confidence') === 'number' ? Number(factResultValue('confidence')).toFixed(2) : '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Supporting">
+                {{ String(factResultValue('supporting_count') ?? 0) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Contradicting">
+                {{ String(factResultValue('contradicting_count') ?? 0) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Unknown">
+                {{ String(factResultValue('unknown_count') ?? 0) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Method">
+                {{ String(factResultValue('method') ?? '—') }}
+              </el-descriptions-item>
+            </el-descriptions>
+            <el-alert
+              v-if="factResultValue('status') === 'UNSUPPORTED' || factResultValue('status') === 'PARTIALLY_SUPPORTED' || factResultValue('status') === 'UNKNOWN'"
+              :title="String(responseUncertainty(factResultValue('status')))"
+              type="warning"
+              :closable="false"
+              style="margin-top: 12px"
+            />
+            <el-table v-if="factEvidenceItems().length" :data="factEvidenceItems()" size="small" style="margin-top: 12px">
+              <el-table-column prop="source" label="Source" min-width="180" />
+              <el-table-column prop="assessment" label="Assessment" width="140" />
+              <el-table-column prop="confidence" label="Confidence" width="110" />
+              <el-table-column prop="text" label="Evidence" min-width="320" />
+            </el-table>
+          </div>
         </el-card>
 
         <el-card class="create-card">

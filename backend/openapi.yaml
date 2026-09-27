@@ -981,11 +981,11 @@ paths:
           required: true
           schema:
             type: string
-            enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance]
+            enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance, fact_check]
         - name: Idempotency-Key
           in: header
           required: false
-          description: Required for mutating assistant tools such as create_iteration and create_generation.
+          description: Required for mutating assistant tools such as create_iteration and create_generation. fact_check is read-only and stores its structured result in the assistant action log.
           schema: {type: string, maxLength: 200}
       requestBody:
         required: false
@@ -995,6 +995,7 @@ paths:
               oneOf:
                 - {$ref: '#/components/schemas/AssistantToolInput'}
                 - {$ref: '#/components/schemas/CompareIterationsInput'}
+                - {$ref: '#/components/schemas/FactCheckInput'}
             examples:
               compareIterations:
                 summary: Compare two immutable iterations
@@ -1007,6 +1008,27 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AssistantToolResponse'}
+                factCheckResult:
+                  summary: Structured fact check
+                  value:
+                    explanation: Fact check classifies only user-supplied evidence assessments; it does not invent evidence or fetch external sources.
+                    confidence: 0.85
+                    uncertainty: Confidence is the average of supplied evidence confidence values; source contents are not independently verified.
+                    result:
+                      claim: A claim with supporting evidence
+                      status: SUPPORTED
+                      confidence: 0.85
+                      supporting_count: 2
+                      contradicting_count: 0
+                      unknown_count: 0
+                      method: evidence-adjudicator-v1
+                      source_verification: not_performed
+                      evidence:
+                        - text: Primary source supports the claim.
+                          source: https://example.test/primary
+                          assessment: supports
+                          confidence: 0.90
+
               examples:
                 compareIterationsResult:
                   summary: Deterministic critic comparison
@@ -1114,6 +1136,28 @@ components:
     AssistantToolInput:
       type: object
       additionalProperties: true
+    FactCheckInput:
+      type: object
+      additionalProperties: false
+      required: [claim, evidence]
+      properties:
+        claim:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        evidence:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [text, source, assessment, confidence]
+            properties:
+              text: {type: string, minLength: 1, maxLength: 20000}
+              source: {type: string, minLength: 1, maxLength: 2000}
+              assessment: {type: string, enum: [supports, contradicts, unknown]}
+              confidence: {type: number, minimum: 0, maximum: 1}
     CompareIterationsInput:
       type: object
       additionalProperties: false
@@ -1141,7 +1185,7 @@ components:
         user_id: {type: string, format: uuid}
         tool:
           type: string
-          enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance]
+          enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance, fact_check]
         kind: {type: string, enum: [tool_execution, recommendation]}
         input: {type: object, additionalProperties: true}
         output: {type: object, additionalProperties: true, description: Recommendation tools include a nested recommendation object matching AssistantRecommendation.}
@@ -1163,7 +1207,7 @@ components:
       required: [action, result, explanation, confidence, uncertainty]
       properties:
         action: {$ref: '#/components/schemas/AssistantAction'}
-        result: {type: object, additionalProperties: true, description: compare_iterations returns iteration metadata, prompt comparison, optional image/composition features, scores, algorithm metadata, timestamp, and structured observations.}
+        result: {type: object, additionalProperties: true, description: Tool-specific result. fact_check returns claim, evidence, sources, confidence, status, checked_at, method, and source_verification.}
         explanation: {type: string}
         confidence: {type: number, minimum: 0, maximum: 1}
         uncertainty: {type: string}
