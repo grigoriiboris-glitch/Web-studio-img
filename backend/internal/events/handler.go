@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,8 +46,8 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	lastID := int64(0)
-	if value, err := strconv.ParseInt(r.Header.Get("Last-Event-ID"), 10, 64); err == nil && value >= 0 { lastID = value }
+	lastID, err := parseLastEventID(r.Header.Get("Last-Event-ID"))
+	if err != nil { http.Error(w, "invalid Last-Event-ID", http.StatusBadRequest); return }
 	ticker := time.NewTicker(750 * time.Millisecond)
 	defer ticker.Stop()
 	for {
