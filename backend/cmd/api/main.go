@@ -88,23 +88,53 @@ func main() {
 		actionHandler, err = humanactions.NewHandler(actionStore, eventStore, provenanceStore)
 		if err != nil { logger.Error("human action handler initialization failed", "error", err); os.Exit(1) }
 		provenanceHandler, err = provenance.NewHandler(provenanceStore)
-		if err != nil { logger.Error("provenance handler initialization failed", "error", err); os.Exit(1) }
+		if err != nil {
+			logger.Error("provenance handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 		assetStore, assetErr := assets.NewStore(projectDB)
-		if assetErr != nil { logger.Error("asset store initialization failed", "error", assetErr); os.Exit(1) }
+		if assetErr != nil {
+			logger.Error("asset store initialization failed", "error", assetErr)
+			os.Exit(1)
+		}
 		var objectStorage storage.StorageProvider
 		if cfg.S3Bucket != "" && cfg.S3AccessKey != "" && cfg.S3SecretKey != "" {
-			objectStorage, assetErr = storage.NewS3Storage(context.Background(), storage.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, Bucket: cfg.S3Bucket, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, UsePathStyle: cfg.S3UsePathStyle})
-			if assetErr != nil { logger.Error("object storage initialization failed", "error", assetErr); os.Exit(1) }
+			objectStorage, assetErr = storage.NewS3Storage(context.Background(), storage.S3Config{
+				Endpoint: cfg.S3Endpoint,
+				Region: cfg.S3Region,
+				Bucket: cfg.S3Bucket,
+				AccessKey: cfg.S3AccessKey,
+				SecretKey: cfg.S3SecretKey,
+				UsePathStyle: cfg.S3UsePathStyle,
+			})
+			if assetErr != nil {
+				logger.Error("object storage initialization failed", "error", assetErr)
+				os.Exit(1)
+			}
 		}
 		scanner := assets.SecurityScanner(assets.ImageSecurityScanner{})
-		if cfg.ClamAVAddress != "" { scanner = assets.CompositeScanner{assets.ImageSecurityScanner{}, assets.ClamAVScanner{Address: cfg.ClamAVAddress, Timeout: 10 * time.Second}} }
+		if cfg.ClamAVAddress != "" {
+			scanner = assets.CompositeScanner{
+				assets.ImageSecurityScanner{},
+				assets.ClamAVScanner{Address: cfg.ClamAVAddress, Timeout: 10 * time.Second},
+			}
+		}
 		assetProcessor := &assets.Processor{Storage: objectStorage, Store: assetStore, Scanner: scanner}
 		assetHandler, err = assets.NewUploadHandler(assetStore, assetProcessor, objectStorage, eventStore, provenanceStore)
-		if err != nil { logger.Error("asset handler initialization failed", "error": err); os.Exit(1) }
+		if err != nil {
+			logger.Error("asset handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 		similarityHandler, err = similarity.NewHandler(referenceStore, assetStore, objectStorage, eventStore, provenanceStore)
-		if err != nil { logger.Error("similarity handler initialization failed", "error": err); os.Exit(1) }
+		if err != nil {
+			logger.Error("similarity handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 		exportHandler, err = exports.NewHandler(assetStore, objectStorage, eventStore, provenanceStore, actionStore)
-		if err != nil { logger.Error("export handler initialization failed", "error", err); os.Exit(1) }
+		if err != nil {
+			logger.Error("export handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 
 		if cfg.RedisURL != "" && cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != "" {
 			redisCfg, redisErr := queue.ParseRedisURL(cfg.RedisURL)
