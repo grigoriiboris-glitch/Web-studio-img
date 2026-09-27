@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -69,9 +70,11 @@ func TestStreamReplaysFromLastEventID(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/projects/"+uuid.NewString()+"/events", nil).WithContext(ctx)
 	req.Header.Set("Last-Event-ID", "41")
 	rec := httptest.NewRecorder()
+	mux := http.NewServeMux()
+	handler.Register(mux)
 	done := make(chan struct{})
 	go func() {
-		handler.stream(rec, req)
+		mux.ServeHTTP(rec, req)
 		close(done)
 	}()
 	select {
