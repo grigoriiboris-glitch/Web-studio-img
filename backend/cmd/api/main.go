@@ -88,6 +88,7 @@ func main() {
 		actionHandler, err = humanactions.NewHandler(actionStore, eventStore, provenanceStore)
 		if err != nil { logger.Error("human action handler initialization failed", "error", err); os.Exit(1) }
 		provenanceHandler, err = provenance.NewHandler(provenanceStore)
+		if err != nil { logger.Error("provenance handler initialization failed", "error", err); os.Exit(1) }
 		assetStore, assetErr := assets.NewStore(projectDB)
 		if assetErr != nil { logger.Error("asset store initialization failed", "error", assetErr); os.Exit(1) }
 		var objectStorage storage.StorageProvider
@@ -104,7 +105,6 @@ func main() {
 		if err != nil { logger.Error("similarity handler initialization failed", "error": err); os.Exit(1) }
 		exportHandler, err = exports.NewHandler(assetStore, objectStorage, eventStore, provenanceStore, actionStore)
 		if err != nil { logger.Error("export handler initialization failed", "error", err); os.Exit(1) }
-		if err != nil { logger.Error("provenance handler initialization failed", "error", err); os.Exit(1) }
 
 		if cfg.RedisURL != "" && cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != "" {
 			redisCfg, redisErr := queue.ParseRedisURL(cfg.RedisURL)

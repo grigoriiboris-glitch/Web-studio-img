@@ -55,7 +55,7 @@ func (h *Handler) get(w http.ResponseWriter,r *http.Request){u,ok:=userID(r);if 
 func (h *Handler) record(r *http.Request,pid,eid uuid.UUID,iterationID *uuid.UUID,action string,payload map[string]any){
 	u,_:=userID(r)
 	if h.events!=nil{_,_=h.events.Append(r.Context(),u,pid,action,"prompt",eid,payload)}
-	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u,ProjectID:pid,IterationID:iterationID,EntityType:"prompt",EntityID:eid,Action:action,Payload:payload})}
+	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u,ProjectID:pid,IterationID:iterationID,EntityType:"prompt",EntityID:eid,Action:action,Payload:payload});if h.events!=nil{_,_=h.events.Append(r.Context(),u,pid,"provenance.updated","prompt",eid,map[string]any{"action":action})}}
 	if h.actions!=nil {
 		createdBy, _ := payload["created_by"].(CreatedBy)
 		if createdBy == "" {
