@@ -76,6 +76,10 @@ const assistantLoading = ref(false)
 const assistantDecisionLoading = ref('')
 const assistantEditAction = ref<AssistantAction | null>(null)
 const assistantEditText = ref('')
+const criticAIterationId = ref('')
+const criticBIterationId = ref('')
+const criticResult = ref<Record<string, unknown> | null>(null)
+const criticLoading = ref(false)
 let eventAbort: AbortController | undefined
 
 const types: IterationType[] = ['idea', 'sketch', 'generation', 'selection', 'composition', 'prompt', 'manual_edit', 'final']
@@ -139,6 +143,10 @@ async function loadStudio() {
   humanActions.value = loadedActions.actions
   assistantTools.value = loadedAssistantTools.tools
   assistantActions.value = loadedAssistantActions.actions
+  if (timeline.iterations.length >= 2 && !criticAIterationId.value && !criticBIterationId.value) {
+    criticAIterationId.value = timeline.iterations[timeline.iterations.length - 2].id
+    criticBIterationId.value = timeline.iterations[timeline.iterations.length - 1].id
+  }
 }
 
 async function refreshPrompts() {
@@ -151,6 +159,71 @@ async function refreshReferences() {
 
 async function refreshActions() {
   humanActions.value = (await humanActionsApi.list(projectId())).actions
+}
+
+function criticObservations(): Array<Record<string, unknown>> {
+  const value = criticResult.value?.observations
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+}
+
+function criticPromptSimilarity(): number | null {
+  const prompts = criticResult.value?.prompts
+  if (!prompts || typeof prompts !== 'object') return null
+  const value = (prompts as Record<string, unknown>).similarity
+  return typeof value === 'number' ? value : null
+}
+
+function criticAlgorithm(): string {
+  const comparison = criticResult.value?.image_comparison
+  if (!comparison || typeof comparison !== 'object') return 'metadata-only'
+  const value = (comparison as Record<string, unknown>).algorithm
+  return typeof value === 'string' ? value : 'metadata-only'
+}
+
+function criticAssetAvailable(side: 'a' | 'b'): boolean | null {
+  const assets = criticResult.value?.assets
+  if (!assets || typeof assets !== 'object') return null
+  const value = (assets as Record<string, unknown>)[side]
+  if (!value || typeof value !== 'object') return null
+  const available = (value as Record<string, unknown>).available
+  return typeof available === 'boolean' ? available : null
+}
+
+function criticMetric(name: string): number | null {
+  const comparison = criticResult.value?.image_comparison
+  if (!comparison || typeof comparison !== 'object') return null
+  const value = (comparison as Record<string, unknown>)[name]
+  return typeof value === 'number' ? value : null
+}
+
+async function compareIterations() {
+  if (!criticAIterationId.value || !criticBIterationId.value) {
+    error.value = 'Select two iterations to compare'
+    return
+  }
+  if (criticAIterationId.value === criticBIterationId.value) {
+    error.value = 'Select two different iterations'
+    return
+  }
+  criticLoading.value = true
+  error.value = null
+  try {
+    const response = await assistantApi.execute<Record<string, unknown>>(
+      projectId(),
+      'compare_iterations',
+      {
+        iteration_a_id: criticAIterationId.value,
+        iteration_b_id: criticBIterationId.value,
+      },
+    )
+    criticResult.value = response.result
+    assistantActions.value.push(response.action)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not compare iterations'
+  } finally {
+    criticLoading.value = false
+  }
 }
 
 async function runAssistantRecommendation(tool: string) {
@@ -1092,6 +1165,106 @@ onUnmounted(() => {
         </el-card>
 
         <el-card class="create-card">
+          <template #header>AI Critic / Compare iterations</template>
+          <el-space wrap>
+            <el-select
+              v-model="criticAIterationId"
+              filterable
+              clearable
+              placeholder="Iteration A"
+              aria-label="First iteration for critic comparison"
+              style="width: 320px"
+            >
+              <el-option
+                v-for="item in iterations"
+                :key="`critic-a-${item.id}`"
+                :value="item.id"
+                :label="`${item.type} · ${item.title || item.id}`"
+              />
+            </el-select>
+            <el-select
+              v-model="criticBIterationId"
+              filterable
+              clearable
+              placeholder="Iteration B"
+              aria-label="Second iteration for critic comparison"
+              style="width: 320px"
+            >
+              <el-option
+                v-for="item in iterations"
+                :key="`critic-b-${item.id}`"
+                :value="item.id"
+                :label="`${item.type} · ${item.title || item.id}`"
+              />
+            </el-select>
+            <el-button
+              type="primary"
+              :loading="criticLoading"
+              :disabled="!criticAIterationId || !criticBIterationId || criticAIterationId === criticBIterationId"
+              @click="compareIterations"
+            >
+              Compare
+            </el-button>
+          </el-space>
+          <el-alert
+            title="The critic uses persisted prompts plus deterministic visual/composition descriptors; it does not claim legal similarity or uniqueness."
+            type="info"
+            :closable="false"
+            style="margin-top: 12px"
+          />
+          <div v-if="criticResult" aria-live="polite">
+            <el-descriptions :column="2" border style="margin-top: 12px">
+              <el-descriptions-item label="Image A">
+                {{ criticAssetAvailable('a') === true ? 'available' : criticAssetAvailable('a') === false ? 'unavailable' : '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Image B">
+                {{ criticAssetAvailable('b') === true ? 'available' : criticAssetAvailable('b') === false ? 'unavailable' : '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Visual similarity">
+                {{ criticMetric('visual_similarity')?.toFixed(2) ?? '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Composition similarity">
+                {{ criticMetric('composition_similarity')?.toFixed(2) ?? '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Semantic proxy">
+                {{ criticMetric('semantic_similarity_proxy')?.toFixed(2) ?? '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Style similarity">
+                {{ criticMetric('style_similarity')?.toFixed(2) ?? '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Prompt similarity">
+                {{ criticPromptSimilarity()?.toFixed(2) ?? '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Algorithm">
+                {{ criticAlgorithm() }}
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <el-alert
+              v-if="criticResult?.uncertainty"
+              :title="String(criticResult.uncertainty)"
+              type="warning"
+              :closable="false"
+              style="margin-top: 12px"
+            />
+            <el-timeline v-if="criticObservations().length" style="margin-top: 16px">
+              <el-timeline-item
+                v-for="(item, index) in criticObservations()"
+                :key="`critic-observation-${index}`"
+                placement="top"
+              >
+                <div class="iteration-head">
+                  <el-tag size="small">{{ item.dimension }}</el-tag>
+                  <strong>{{ item.observation }}</strong>
+                </div>
+                <p><strong>Reason:</strong> {{ item.reason }}</p>
+                <p><strong>Confidence:</strong> {{ typeof item.confidence === 'number' ? item.confidence.toFixed(2) : '—' }}</p>
+              </el-timeline-item>
+            </el-timeline>
+          </div>
+        </el-card>
+
+        <el-card class="create-card">
           <template #header>Similarity Check</template>
           <el-space wrap>
             <el-input v-model="similarityTargetAsset" placeholder="Target asset ID (defaults to latest upload)" style="width: 360px" />
@@ -1250,4 +1423,9 @@ onUnmounted(() => {
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .form-actions { margin-top: 12px; }
 .action-payload { white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; font: inherit; }
+.assistant-recommendation {
+  border-inline-start: 3px solid var(--el-color-primary);
+  padding-inline-start: 12px;
+}
+
 </style>
