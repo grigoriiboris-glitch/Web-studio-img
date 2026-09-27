@@ -79,3 +79,13 @@ func TestCreateRejectsUnknownFields(t *testing.T) {
 	handler.create(rec, req)
 	if rec.Code != http.StatusBadRequest { t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest) }
 }
+
+func TestManualEditRequiresDescription(t *testing.T) {
+	if err := ValidateManualEditDescription(TypeManualEdit, nil); err == nil {
+		t.Fatal("expected manual edit description to be required")
+	}
+	description := "Retouched contrast and removed background artifact"
+	if err := ValidateManualEditDescription(TypeManualEdit, &description); err != nil {
+		t.Fatalf("unexpected manual edit validation error: %v", err)
+	}
+}
