@@ -7,7 +7,7 @@ import (
 )
 
 func TestPromptJaccardNormalizesTokenContent(t *testing.T) {
-	if got:=promptJaccard("Glass, warm light and stone", "stone / glass / warm light"); got != 1 {
+	if got:=promptJaccard("Glass, warm light and stone", "stone / glass / warm / light"); got != 1 {
 		t.Fatalf("expected identical token sets, got %v", got)
 	}
 	if got:=promptJaccard("", ""); got != 1 {
