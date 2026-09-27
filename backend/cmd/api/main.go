@@ -13,7 +13,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
-	"github.com/oleg3190/Web-studio-img/backend/internal/httpapi"
+	"github.com/oleg3190/Web-studio-img/backend/internal/httpapi"\n\t"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
@@ -29,7 +29,7 @@ func main() {
 
 	limiter := security.NewRateLimiter(cfg.RateLimit, cfg.RateWindow)
 	var projectDB *sql.DB
-	var projectHandler *projects.Handler
+	var projectHandler *projects.Handler\n\tvar iterationHandler *iterations.Handler
 	if cfg.DatabaseURL != "" {
 		projectDB, err = sql.Open("pgx", cfg.DatabaseURL)
 		if err != nil {
@@ -58,7 +58,7 @@ func main() {
 		}
 	}
 
-	api := httpapi.NewServerWithProjects(logger, cfg.CORSOrigins, limiter, projectHandler)
+	api := httpapi.NewServerWithProjectsAndIterations(logger, cfg.CORSOrigins, limiter, projectHandler, iterationHandler)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
 	errCh := make(chan error, 1)
