@@ -308,7 +308,7 @@ async function selectMaterial() {
   try {
     await logHumanAction({
       action_type: 'MATERIAL_SELECTED',
-      payload: { material: value, version: iterations.value.at(-1)?.id },
+      payload: { material: value, version: iterations.value[iterations.value.length - 1]?.id },
       old_state: { material: null },
       new_state: { material: value },
     })
@@ -324,7 +324,7 @@ async function selectTexture() {
   try {
     await logHumanAction({
       action_type: 'TEXTURE_SELECTED',
-      payload: { texture: value, version: iterations.value.at(-1)?.id },
+      payload: { texture: value, version: iterations.value[iterations.value.length - 1]?.id },
       old_state: { texture: null },
       new_state: { texture: value },
     })
@@ -350,7 +350,7 @@ async function approveProject() {
   try {
     await logHumanAction({
       action_type: 'APPROVED',
-      payload: { project_id: projectId(), version: iterations.value.at(-1)?.id },
+      payload: { project_id: projectId(), version: iterations.value[iterations.value.length - 1]?.id },
       new_state: { approved: true },
     })
   } catch (err) {
