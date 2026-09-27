@@ -153,10 +153,6 @@ async function refreshActions() {
   humanActions.value = (await humanActionsApi.list(projectId())).actions
 }
 
-async function refreshAssistantActions() {
-  assistantActions.value = (await assistantApi.actions(projectId())).actions
-}
-
 async function runAssistantRecommendation(tool: string) {
   assistantLoading.value = true
   error.value = null
@@ -1037,18 +1033,24 @@ onUnmounted(() => {
               type="primary"
               :loading="assistantLoading"
               @click="runAssistantRecommendation('suggest_prompt')"
-            >Suggest prompt</el-button>
+            >
+              Suggest prompt
+            </el-button>
             <el-button
               v-if="assistantTools.some(tool => tool.name === 'suggest_materials')"
               :loading="assistantLoading"
               @click="runAssistantRecommendation('suggest_materials')"
-            >Suggest materials</el-button>
+            >
+              Suggest materials
+            </el-button>
             <el-button
               v-if="assistantTools.some(tool => tool.name === 'analyze_composition')"
               :loading="assistantLoading"
               :disabled="!lastUploadedAsset"
               @click="runAssistantRecommendation('analyze_composition')"
-            >Analyze composition</el-button>
+            >
+              Analyze composition
+            </el-button>
           </el-space>
           <el-alert
             title="Recommendations are advisory. Nothing is applied until you choose Apply, Edit, or Ignore."
@@ -1089,7 +1091,7 @@ onUnmounted(() => {
           </el-timeline>
         </el-card>
 
-<el-card class="create-card">
+        <el-card class="create-card">
           <template #header>Similarity Check</template>
           <el-space wrap>
             <el-input v-model="similarityTargetAsset" placeholder="Target asset ID (defaults to latest upload)" style="width: 360px" />
@@ -1161,12 +1163,21 @@ onUnmounted(() => {
         <el-dialog :model-value="assistantEditAction !== null" title="Edit AI recommendation" width="560px" @update:model-value="(value: boolean) => { if (!value) assistantEditAction = null }">
           <el-input v-model="assistantEditText" type="textarea" :rows="7" maxlength="20000" show-word-limit />
           <template #footer>
-            <el-button @click="assistantEditAction = null">Cancel</el-button>
-            <el-button type="primary" :loading="assistantDecisionLoading === assistantEditAction?.id" :disabled="!assistantEditText.trim()" @click="submitAssistantEdit">Apply edit</el-button>
+            <el-button @click="assistantEditAction = null">
+              Cancel
+            </el-button>
+            <el-button
+              type="primary"
+              :loading="assistantDecisionLoading === assistantEditAction?.id"
+              :disabled="!assistantEditText.trim()"
+              @click="submitAssistantEdit"
+            >
+              Apply edit
+            </el-button>
           </template>
         </el-dialog>
 
-<el-card class="timeline-card">
+        <el-card class="timeline-card">
           <template #header>Human Contribution Map</template>
           <el-empty v-if="humanActions.length === 0" description="No explicit human actions recorded yet." />
           <el-timeline v-else>
