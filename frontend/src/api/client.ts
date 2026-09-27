@@ -57,3 +57,47 @@ export const projectsApi = {
   archive: (id: string) =>
     apiRequest<Project>(`/projects/${id}`, { method: 'DELETE' }),
 }
+
+export type IterationType =
+  | 'idea'
+  | 'sketch'
+  | 'generation'
+  | 'selection'
+  | 'composition'
+  | 'prompt'
+  | 'manual_edit'
+  | 'final'
+
+export interface Iteration {
+  id: string
+  project_id: string
+  parent_iteration_id?: string
+  type: IterationType
+  title?: string
+  description?: string
+  created_at: string
+}
+
+export const iterationsApi = {
+  list: (projectId: string) =>
+    apiRequest<{ iterations: Iteration[] }>(`/projects/${projectId}/iterations`),
+  create: (
+    projectId: string,
+    input: {
+      parent_iteration_id?: string
+      type: IterationType
+      title?: string
+      description?: string
+    },
+  ) =>
+    apiRequest<Iteration>(`/projects/${projectId}/iterations`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  get: (projectId: string, iterationId: string) =>
+    apiRequest<Iteration>(`/projects/${projectId}/iterations/${iterationId}`),
+  restore: (projectId: string, iterationId: string) =>
+    apiRequest<Iteration>(`/projects/${projectId}/iterations/${iterationId}/restore`, {
+      method: 'POST',
+    }),
+}
