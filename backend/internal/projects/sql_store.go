@@ -50,7 +50,7 @@ func (s *SQLStore) List(ctx context.Context, userID uuid.UUID) ([]Project, error
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	items := make([]Project, 0)
 	for rows.Next() {
