@@ -111,7 +111,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if created && h.projectEvents != nil { _, _ = h.projectEvents.Append(r.Context(), userID, projectID, "generation_queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
+	if created && h.projectEvents != nil { _, _ = h.projectEvents.Append(r.Context(), userID, projectID, "generation.queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
 	if created && h.provenance != nil {
 		_, _ = h.provenance.Append(r.Context(), provenance.Event{UserID: userID, ProjectID: projectID, IterationID: req.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_queued", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "prompt": item.Prompt, "negative_prompt": item.NegativePrompt, "seed": item.Seed, "aspect_ratio": item.AspectRatio, "parameters": item.Parameters}, CreatedAt: time.Now()})
 	}
@@ -172,7 +172,7 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "generation_not_cancellable", "generation cannot be cancelled")
 		return
 	}
-	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, item.ProjectID, "generation_cancelled", "generation", item.ID, nil) }
+	if h.projectEvents != nil { _, _ = h.projectEvents.Append(r.Context(), userID, item.ProjectID, "generation.cancelled", "generation", item.ID, nil) }
 	item.Status = StatusCancelled
 	writeJSON(w, http.StatusOK, item)
 }
