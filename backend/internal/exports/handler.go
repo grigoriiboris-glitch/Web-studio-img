@@ -157,15 +157,16 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 		StorageKey, MIMEType, Checksum string
 		Size int64
 		Width, Height int
+		CreatedAt time.Time
 	}
-	rows,err:=h.db.QueryContext(ctx,`SELECT DISTINCT a.id,a.storage_key,a.mime_type,a.checksum,a.size,a.width,a.height
+	rows,err:=h.db.QueryContext(ctx,`SELECT DISTINCT a.id,a.storage_key,a.mime_type,a.checksum,a.size,a.width,a.height,a.created_at
 		FROM assets a JOIN "references" r ON r.asset_id=a.id
 		WHERE r.project_id=$1 AND r.user_id=$2 AND a.lifecycle_status='active'
 		ORDER BY a.created_at ASC,a.id ASC`,projectID,userID)
 	if err!=nil{return fmt.Errorf("load source assets: %w",err)}
 	defer rows.Close()
 	var sourceAssets []sourceAsset
-	for rows.Next(){var x sourceAsset;if err:=rows.Scan(&x.ID,&x.StorageKey,&x.MIMEType,&x.Checksum,&x.Size,&x.Width,&x.Height);err!=nil{return fmt.Errorf("scan source asset: %w",err)};sourceAssets=append(sourceAssets,x)}
+	for rows.Next(){var x sourceAsset;if err:=rows.Scan(&x.ID,&x.StorageKey,&x.MIMEType,&x.Checksum,&x.Size,&x.Width,&x.Height,&x.CreatedAt);err!=nil{return fmt.Errorf("scan source asset: %w",err)};sourceAssets=append(sourceAssets,x)}
 	if err:=rows.Err();err!=nil{return fmt.Errorf("load source assets: %w",err)}
 
 	for _,src:=range sourceAssets {
