@@ -54,6 +54,9 @@ jobs:
       - name: Resolve dependencies
         run: go mod tidy
 
+      - name: Format Go code
+        run: gofmt -w .
+
       - name: Format check
         run: |
           files=$(gofmt -l .)
