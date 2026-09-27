@@ -846,6 +846,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/CompositionMutationInput'}
       responses:
+        '200': {description: Existing idempotent composition mutation suggestion, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionMutation'}}}}
         '201': {description: Composition mutation suggestions, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionMutation'}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
