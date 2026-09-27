@@ -60,17 +60,17 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 		items, err := h.store.ListSince(r.Context(), principal.UserID, projectID, lastID, 100)
 		if err != nil { return }
 		for _, item := range items {
-			fmt.Fprintf(w, "id: %d\n", item.ID)
-			fmt.Fprintf(w, "event: %s\n", item.EventType)
+			_, _ = fmt.Fprintf(w, "id: %d\n", item.ID)
+			_, _ = fmt.Fprintf(w, "event: %s\n", item.EventType)
 			data, _ := json.Marshal(item)
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 			lastID = item.ID
 		}
 		if len(items) > 0 { flusher.Flush() }
 		select {
 		case <-r.Context().Done(): return
 		case <-ticker.C:
-			fmt.Fprint(w, ": keepalive\n\n")
+			_, _ = fmt.Fprint(w, ": keepalive\n\n")
 			flusher.Flush()
 		}
 	}

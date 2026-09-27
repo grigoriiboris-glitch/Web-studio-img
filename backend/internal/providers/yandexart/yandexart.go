@@ -199,7 +199,7 @@ func (p *Provider) doJSONURL(ctx context.Context, endpoint, method, path string,
 	if err != nil {
 		return retryableError{fmt.Errorf("%w: %v", ErrProviderUnavailable, err)}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnprocessableEntity {

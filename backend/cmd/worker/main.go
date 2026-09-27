@@ -47,7 +47,7 @@ func main() {
 		logger.Error("database open failed", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	if err := db.PingContext(ctx); err != nil {

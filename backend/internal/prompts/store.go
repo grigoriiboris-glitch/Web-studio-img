@@ -27,7 +27,7 @@ func (s *Store) Create(ctx context.Context,userID,projectID uuid.UUID,req Reques
 	}
 	aiRaw,_:=json.Marshal(req.AISuggestions); compRaw,_:=json.Marshal(req.Components)
 	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil{return Prompt{},err}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var projectExists bool
 	if err=tx.QueryRowContext(ctx,"SELECT EXISTS (SELECT 1 FROM projects WHERE id=$1 AND user_id=$2 AND status <> 'deleted')",projectID,userID).Scan(&projectExists); err!=nil{return Prompt{},err}
 	if !projectExists{return Prompt{},ErrPromptNotFound}

@@ -263,7 +263,7 @@ func (c ClamAVScanner) Scan(ctx context.Context, data []byte, _ string) error {
 	if err != nil {
 		return fmt.Errorf("connect ClamAV: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 	if _, err := conn.Write([]byte("zINSTREAM\x00")); err != nil {
 		return fmt.Errorf("start ClamAV stream: %w", err)

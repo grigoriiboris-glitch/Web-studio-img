@@ -40,7 +40,7 @@ func(a *Analyzer) analyze(w http.ResponseWriter,r *http.Request){
 	var owned bool
 	e=a.db.QueryRowContext(r.Context(),`SELECT EXISTS(SELECT 1 FROM iterations i JOIN projects p ON p.id=i.project_id WHERE i.id=$1 AND i.project_id=$2 AND p.user_id=$3 AND p.status <> 'deleted')`,iid,pid,p.UserID).Scan(&owned);if e!=nil||!owned{returnErr(w,404,"iteration_not_found","iteration not found");return}
 	asset,e:=a.assets.GetOwned(r.Context(),p.UserID,pid,in.AssetID);if e!=nil{returnErr(w,404,"asset_not_found","asset not found");return}
-	obj,_,e:=a.storage.Get(r.Context(),asset.StorageKey);if e!=nil{returnErr(w,502,"asset_read_failed","could not read asset");return};defer obj.Close()
+	obj,_,e:=a.storage.Get(r.Context(),asset.StorageKey);if e!=nil{returnErr(w,502,"asset_read_failed","could not read asset");return};defer func() { _ = obj.Close() }()
 	data,e:=io.ReadAll(io.LimitReader(obj,assets.MaxAssetSize+1));if e!=nil{returnErr(w,502,"asset_read_failed","could not read asset");return};if int64(len(data))>assets.MaxAssetSize{returnErr(w,400,"asset_too_large","asset exceeds analysis limit");return}
 	desc,e:=similarity.AnalyzeComposition(data);if e!=nil{returnErr(w,400,"composition_analysis_failed","could not analyze composition");return}
 	raw:=func(key string)[]byte{b,_:=json.Marshal(desc[key]);if len(b)==0||string(b)=="null"{return []byte("{}")};return b}

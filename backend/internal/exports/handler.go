@@ -103,7 +103,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,asset assets.Asset) error {
 	imageData, _, err := h.storage.Get(ctx,asset.StorageKey); if err != nil { return fmt.Errorf("read final image: %w",err) }
-	defer imageData.Close()
+	defer func() { _ = imageData.Close() }()
 	source, err := io.ReadAll(io.LimitReader(imageData, assets.MaxAssetSize+1)); if err != nil { return fmt.Errorf("read final image: %w",err) }
 	if int64(len(source)) > assets.MaxAssetSize { return errors.New("final image exceeds export limit") }
 

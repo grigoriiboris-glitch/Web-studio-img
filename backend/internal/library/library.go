@@ -45,7 +45,7 @@ func(h *Handler)list(w http.ResponseWriter,r *http.Request,kind string){
 	if q!=""{query+=" AND (name ILIKE $3 OR COALESCE(description,'') ILIKE $3 OR prompt_fragment ILIKE $3)";args=append(args,"%"+q+"%")}
 	if category!=""{query+=fmt.Sprintf(" AND category=$%d",len(args)+1);args=append(args,category)}
 	query+=" ORDER BY user_id NULLS FIRST, created_at DESC LIMIT 200"
-	rows,e:=h.db.QueryContext(r.Context(),query,args...);if e!=nil{writeErr(w,500,"library_list_failed","could not list library items");return};defer rows.Close()
+	rows,e:=h.db.QueryContext(r.Context(),query,args...);if e!=nil{writeErr(w,500,"library_list_failed","could not list library items");return};defer func() { _ = rows.Close() }()
 	out:=[]Item{};for rows.Next(){var x Item;var tags []byte;if e:=rows.Scan(&x.ID,&x.UserID,&x.Kind,&x.Category,&x.Name,&x.Description,&tags,&x.PromptFragment,&x.PreviewKey,&x.CreatedAt,&x.UpdatedAt);e!=nil{writeErr(w,500,"library_list_failed","could not read library items");return};_=json.Unmarshal(tags,&x.Tags);out=append(out,x)}
 	if e:=rows.Err();e!=nil{writeErr(w,500,"library_list_failed","could not read library items");return};writeJSON(w,200,map[string]any{"items":out})
 }

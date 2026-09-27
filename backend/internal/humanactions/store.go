@@ -15,7 +15,7 @@ func marshal(v map[string]any)([]byte,error){if v==nil{return []byte("{}"),nil};
 func(s *Store)Create(ctx context.Context,userID,projectID uuid.UUID,req Request)(Action,error){
  if err:=req.Validate(projectID,userID);err!=nil{return Action{},err}
  p,err:=marshal(req.Payload);if err!=nil{return Action{},err};o,err:=marshal(req.OldState);if err!=nil{return Action{},err};n,err:=marshal(req.NewState);if err!=nil{return Action{},err};ai,err:=marshal(req.AIInfluence);if err!=nil{return Action{},err}
- tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return Action{},err};defer tx.Rollback()
+ tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return Action{},err};defer func() { _ = tx.Rollback() }()
  var ok bool;if err=tx.QueryRowContext(ctx,"SELECT EXISTS (SELECT 1 FROM projects WHERE id=$1 AND user_id=$2 AND status <> 'deleted')",projectID,userID).Scan(&ok);err!=nil{return Action{},err};if !ok{return Action{},fmt.Errorf("%w: project not found",ErrInvalidAction)}
  if _,err=tx.ExecContext(ctx,"SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))","human-actions:"+projectID.String());err!=nil{return Action{},err}
  var version int64;if err=tx.QueryRowContext(ctx,"SELECT COALESCE(MAX(version),0)+1 FROM human_actions WHERE project_id=$1",projectID).Scan(&version);err!=nil{return Action{},err}

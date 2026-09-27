@@ -34,8 +34,11 @@ func TestValidateImageRejectsOversized(t *testing.T) {
 func TestRateLimiter(t *testing.T) {
 	limiter := NewRateLimiter(2, time.Minute)
 	now := time.Unix(100, 0)
-	if !limiter.Allow("client", now) || !limiter.Allow("client", now) {
-		t.Fatal("expected first two requests to be allowed")
+	if !limiter.Allow("client", now) {
+		t.Fatal("expected first request to be allowed")
+	}
+	if !limiter.Allow("client", now) {
+		t.Fatal("expected second request to be allowed")
 	}
 	if limiter.Allow("client", now) {
 		t.Fatal("expected third request to be rejected")

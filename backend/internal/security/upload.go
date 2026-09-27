@@ -1,7 +1,6 @@
 package security
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"mime"
@@ -61,6 +60,3 @@ func IsAllowedImageMIME(value string) bool {
 	return ok
 }
 
-func sniffPrefix(data []byte) []byte {
-	return bytes.TrimSpace(data)
-}

@@ -52,7 +52,7 @@ func (s *Store) ListSince(ctx context.Context, userID, projectID uuid.UUID, afte
 		ORDER BY e.sequence ASC LIMIT $4
 	`, projectID, userID, after, limit)
 	if err != nil { return nil, fmt.Errorf("list project events: %w", err) }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var result []Event
 	for rows.Next() {
 		var item Event

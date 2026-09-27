@@ -91,7 +91,7 @@ func main() {
 			logger.Error("database open failed", "error", err)
 			os.Exit(1)
 		}
-		defer projectDB.Close()
+		defer func() { _ = projectDB.Close() }()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err = projectDB.PingContext(ctx)
@@ -237,7 +237,7 @@ func main() {
 				logger.Error("queue initialization failed", "error", queueErr)
 				os.Exit(1)
 			}
-			defer queueClient.Close()
+			defer func() { _ = queueClient.Close() }()
 			provider, providerErr := yandexart.New(yandexart.Config{
 				Endpoint: cfg.YandexARTEndpoint, OperationEndpoint: cfg.YandexARTOperationEndpoint,
 				APIKey: cfg.YandexARTAPIKey, FolderID: cfg.YandexARTFolderID, Model: cfg.YandexARTModel,
