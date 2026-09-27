@@ -34,7 +34,6 @@ const libraryEditing = ref<CreativeLibraryItem | null>(null)
 const libraryForm = reactive({ category: '', name: '', description: '', tags: '', prompt_fragment: '' })
 
 const styles = ref<StyleProfile[]>([])
-const styleLoading = ref(false)
 const styleDialog = ref(false)
 const styleEditing = ref<StyleProfile | null>(null)
 const styleForm = reactive({ name: '', description: '', parameters: '{}', prompt_influence: false })
