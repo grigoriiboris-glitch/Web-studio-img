@@ -8,7 +8,7 @@ import (
 )
 
 func TestValidateKey(t *testing.T) {
-	for _, key := range []string{"", " "} {
+	for _, key := range []string{"", " ", "../secret", "projects/../secret", "/absolute", "projects\\secret"} {
 		if err := validateKey(key); err == nil {
 			t.Fatalf("validateKey(%q) expected error", key)
 		}
@@ -24,6 +24,12 @@ func TestValidateExpiry(t *testing.T) {
 	}
 	if err := validateExpiry(-time.Second); err == nil {
 		t.Fatal("validateExpiry(-1s) expected error")
+	}
+	if err := validateExpiry(MaxPresignedURLExpiry); err != nil {
+		t.Fatalf("maximum expiry should be allowed: %v", err)
+	}
+	if err := validateExpiry(MaxPresignedURLExpiry + time.Second); err == nil {
+		t.Fatal("expiry above maximum should be rejected")
 	}
 }
 

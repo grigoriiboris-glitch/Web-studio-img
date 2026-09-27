@@ -22,7 +22,7 @@ func TestNewClientAndEnqueueValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	if _, err := client.Enqueue(context.Background(), nil); err == nil {
 		t.Fatal("expected nil task error")

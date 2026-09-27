@@ -40,4 +40,14 @@ export default [
       'no-undef': 'off',
     },
   },
+  {
+    files: [
+      'src/features/projects/DashboardView.vue',
+      'src/features/projects/StudioView.vue',
+    ],
+    rules: {
+      'vue/max-attributes-per-line': 'off',
+      'vue/singleline-html-element-content-newline': 'off',
+    },
+  },
 ]

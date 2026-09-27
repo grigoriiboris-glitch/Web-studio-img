@@ -2,19 +2,12 @@ openapi: 3.0.3
 info:
   title: Web Studio IMG API
   version: 1.0.0
-  description: |
-    Versioned REST contract for the Web Studio IMG modular monolith.
-    OpenAPI is the source contract shared by the Go backend and Vue frontend.
+  description: REST API for private Web Studio IMG projects and creative workflows.
 servers:
   - url: /api/v1
-    description: API v1
-tags:
-  - name: Health
-    description: Service health and readiness endpoints
 paths:
   /health:
     get:
-      tags: [Health]
       operationId: getApiHealth
       summary: API health check
       responses:
@@ -23,47 +16,1607 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                type: object
+                required: [status, service]
+                properties:
+                  status: {type: string, example: ok}
+                  service: {type: string, example: web-studio-img-api}
+  /projects:
+    get:
+      operationId: listProjects
+      summary: List projects owned by the authenticated user
+      responses:
+        '200':
+          description: Project list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createProject
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectInput'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /projects/{project_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getProject
+      summary: Get an owned project
+      responses:
+        '200':
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateProject
+      summary: Update an owned project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+      responses:
+        '200':
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: archiveProject
+      summary: Archive an owned project
+      responses:
+        '200':
+          description: Archived project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{project_id}/iterations:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listProjectIterations
+      summary: List immutable creative iterations
+      responses:
+        '200':
+          description: Iteration timeline
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IterationList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createIteration
+      summary: Create an immutable iteration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/IterationInput'}
+      responses:
+        '201':
+          description: Iteration created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Iteration'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/iterations/{iteration_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: iteration_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getIteration
+      summary: Get an immutable iteration
+      responses:
+        '200':
+          description: Iteration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Iteration'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/iterations/{iteration_id}/restore:
+    post:
+      operationId: restoreIteration
+      summary: Restore an iteration by creating a new child iteration
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: iteration_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Restored iteration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Iteration'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/generations:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: createGeneration
+      summary: Queue an asynchronous image generation
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GenerationInput'}
+      responses:
+        '202':
+          description: Generation queued
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Generation'}
+        '200':
+          description: Existing idempotent generation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Generation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /projects/{project_id}/generations/{generation_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: generation_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getGeneration
+      summary: Get generation status and provenance parameters
+      responses:
+        '200':
+          description: Generation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Generation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/generations/{generation_id}/cancel:
+    post:
+      operationId: cancelGeneration
+      summary: Cancel a queued or running generation
+      responses:
+        '200':
+          description: Cancelled generation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Generation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /projects/{project_id}/generations/{generation_id}/events:
+    get:
+      operationId: streamGenerationEvents
+      summary: Stream generation status over SSE
+      responses:
+        '200':
+          description: Server-sent generation status events
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/events:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: streamProjectEvents
+      summary: Stream project events over SSE
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: {type: integer, format: int64}
+      responses:
+        '200':
+          description: Project event stream
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/prompts:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listPrompts
+      summary: List versioned prompts
+      responses:
+        '200':
+          description: Prompt versions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PromptList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createPrompt
+      summary: Create a new prompt version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PromptInput'}
+      responses:
+        '201':
+          description: Prompt created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Prompt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /projects/{project_id}/prompts/{prompt_id}/approve:
+    post:
+      operationId: approvePrompt
+      summary: Create an approved prompt version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [final_text]
+              additionalProperties: false
+              properties:
+                final_text: {type: string, minLength: 1, maxLength: 20000}
+                components: {type: object, additionalProperties: {type: string}}
+      responses:
+        '201':
+          description: Approved prompt
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Prompt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/prompts/{prompt_id}:
+    patch:
+      operationId: patchPrompt
+      summary: Create a new immutable prompt version from an existing version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PromptPatch'}
+      responses:
+        '201':
+          description: New prompt version
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Prompt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    get:
+      operationId: getPrompt
+      summary: Get one prompt version
+      responses:
+        '200':
+          description: Prompt
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Prompt'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/references:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listReferences
+      summary: List project references
+      responses:
+        '200':
+          description: References
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReferenceList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createReference
+      summary: Add a reference with source and license metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReferenceInput'}
+      responses:
+        '201':
+          description: Reference created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Reference'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /projects/{project_id}/references/{reference_id}:
+    patch:
+      operationId: updateReference
+      summary: Update reference metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReferenceInput'}
+      responses:
+        '200':
+          description: Reference
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Reference'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteReference
+      summary: Delete a project reference
+      responses:
+        '204': {description: Reference deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/human-actions:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listHumanActions
+      summary: List recorded human contribution actions
+      responses:
+        '200':
+          description: Human actions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HumanActionList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createHumanAction
+      summary: Record an explicit user action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HumanActionInput'}
+      responses:
+        '201':
+          description: Human action
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HumanAction'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /projects/{project_id}/assets:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: uploadAssetMultipart
+      summary: Upload an image as multipart/form-data
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '201':
+          description: Asset uploaded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asset'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '413': {description: Asset too large}
+  /projects/{project_id}/assets/uploads:
+    post:
+      operationId: initAssetUpload
+      summary: Initialize a signed asset upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssetUploadInit'}
+      responses:
+        '201':
+          description: Upload initialized
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssetUpload'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/assets/{asset_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: asset_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getAsset
+      summary: Get an owned asset
+      responses:
+        '200':
+          description: Asset
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asset'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/assets/{asset_id}/download-url:
+    get:
+      operationId: getAssetDownloadUrl
+      summary: Get a short-lived signed asset download URL
+      responses:
+        '200':
+          description: Signed URL
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SignedURL'}
+  /projects/{project_id}/assets/{asset_id}/parts/{part_number}:
+    put:
+      operationId: uploadAssetPart
+      summary: Upload an asset part
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: part_number
+          in: path
+          required: true
+          schema: {type: integer, minimum: 0}
+        - name: Content-Range
+          in: header
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: Part uploaded}
+  /projects/{project_id}/assets/{asset_id}/complete:
+    post:
+      operationId: completeAssetUpload
+      summary: Complete and validate an asset upload
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Asset finalized
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asset'}
+  /projects/{project_id}/assets/{asset_id}/export:
+    post:
+      operationId: exportAsset
+      summary: Export an asset through a short-lived signed URL
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Export URL
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SignedURL'}
+  /projects/{project_id}/references/{reference_id}/influence:
+    post:
+      operationId: analyzeReferenceInfluence
+      summary: Calculate six reference influence scores against a target asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_asset_id]
+              properties:
+                target_asset_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated reference
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Reference'}
+  /prompts/{prompt_id}:
+    patch:
+      operationId: patchPromptByID
+      summary: Create a new immutable prompt version
+      parameters:
+        - name: prompt_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PromptPatch'}
+      responses:
+        '201': {description: New prompt version, content: {application/json: {schema: {$ref: '#/components/schemas/Prompt'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /iterations/{iteration_id}:
+    get:
+      operationId: getIterationByID
+      summary: Get an immutable iteration
+      parameters:
+        - name: iteration_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: Iteration, content: {application/json: {schema: {$ref: '#/components/schemas/Iteration'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /generations/{generation_id}:
+    parameters:
+      - name: generation_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getGenerationByID
+      summary: Get generation
+      responses:
+        '200': {description: Generation, content: {application/json: {schema: {$ref: '#/components/schemas/Generation'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /generations/{generation_id}/cancel:
+    post:
+      operationId: cancelGenerationByID
+      summary: Cancel generation
+      parameters:
+        - name: generation_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: Cancelled generation, content: {application/json: {schema: {$ref: '#/components/schemas/Generation'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /references/{reference_id}:
+    delete:
+      operationId: deleteReferenceByID
+      summary: Delete a project reference
+      parameters:
+        - name: reference_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '204': {description: Reference deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/similarity-checks:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: createSimilarityCheck
+      summary: Check similarity against available project reference sources
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SimilarityCheckInput'}
+      responses:
+        '201': {description: Similarity check, content: {application/json: {schema: {$ref: '#/components/schemas/SimilarityCheck'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /similarity-checks/{check_id}:
+    get:
+      operationId: getSimilarityCheck
+      summary: Get a similarity check result
+      parameters:
+        - name: check_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: Similarity check, content: {application/json: {schema: {$ref: '#/components/schemas/SimilarityCheck'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/exports:
+    post:
+      operationId: createCreationReport
+      summary: Create a Creation Report export
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                final_asset_id: {type: string, format: uuid}
+      responses:
+        '201': {description: Creation Report export, content: {application/json: {schema: {$ref: '#/components/schemas/Export'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /exports/{export_id}:
+    get:
+      operationId: getCreationReport
+      summary: Get Creation Report export
+      parameters:
+        - name: export_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: Export, content: {application/json: {schema: {$ref: '#/components/schemas/Export'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/iterations/{iteration_id}/composition:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: iteration_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getCompositionSpec
+      summary: Get structured composition state
+      responses:
+        '200': {description: Composition spec, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionSpec'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      operationId: updateCompositionSpec
+      summary: Update structured composition state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CompositionSpecInput'}
+      responses:
+        '200': {description: Composition spec, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionSpec'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/iterations/{iteration_id}/composition/analyze:
+    post:
+      operationId: analyzeComposition
+      summary: Analyze an owned image and persist a composition specification
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: iteration_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id]
+              additionalProperties: false
+              properties:
+                asset_id: {type: string, format: uuid}
+      responses:
+        '200': {description: Composition analysis result, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionAnalysisResponse'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {description: Composition analysis unavailable}
+
+  /projects/{project_id}/composition-mutation-suggestions:
+    post:
+      operationId: suggestCompositionMutations
+      summary: Suggest composition mutations at high similarity
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 200}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CompositionMutationInput'}
+      responses:
+        '200': {description: Existing idempotent composition mutation suggestion, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionMutation'}}}}
+        '201': {description: Composition mutation suggestions, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionMutation'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/materials:
+    get:
+      operationId: listMaterials
+      summary: Search material library
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: category, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Materials, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItemList'}}}}
+    post:
+      operationId: createMaterial
+      summary: Create user material
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LibraryItemInput'}
+      responses:
+        '201': {description: Material, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+  /projects/{project_id}/textures:
+    get:
+      operationId: listTextures
+      summary: Search texture library
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: category, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Textures, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItemList'}}}}
+    post:
+      operationId: createTexture
+      summary: Create user texture
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LibraryItemInput'}
+      responses:
+        '201': {description: Texture, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+
+  /projects/{project_id}/provenance:
+    get:
+      operationId: listProvenance
+      summary: List project provenance events in chain order
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Provenance events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items: {$ref: '#/components/schemas/ProvenanceEvent'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/provenance/verify:
+    get:
+      operationId: verifyProvenance
+      summary: Verify the project provenance hash chain
+      responses:
+        '200':
+          description: Provenance verification
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProvenanceVerification'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/assistant/tools:
+    get:
+      operationId: listAssistantTools
+      summary: List allowlisted AI assistant tools
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Tool catalog
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantToolList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/assistant/actions:
+    get:
+      operationId: listAssistantActions
+      summary: List recorded AI assistant actions for the project
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: AI assistant action log
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantActionList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/assistant/tools/{tool}:
+    post:
+      operationId: executeAssistantTool
+      summary: Execute one allowlisted AI assistant tool
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: tool
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance]
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Required for mutating assistant tools such as create_iteration and create_generation.
+          schema: {type: string, maxLength: 200}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssistantToolInput'}
+      responses:
+        '200':
+          description: Tool result plus logged AI action
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantToolResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /projects/{project_id}/assistant/recommendations/{action_id}/decision:
+    post:
+      operationId: decideAssistantRecommendation
+      summary: Apply, edit, or ignore an AI recommendation
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: action_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssistantDecisionInput'}
+      responses:
+        '200':
+          description: Updated recommendation action
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantAction'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
 components:
   responses:
-    InternalError:
-      description: Internal server error
+    BadRequest:
+      description: Invalid request
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
   schemas:
-    HealthResponse:
+
+    AssistantTool:
       type: object
-      additionalProperties: false
-      required: [status, service]
+      required: [name, description, mutating, recommendation]
       properties:
-        status:
+        name: {type: string}
+        description: {type: string}
+        mutating: {type: boolean}
+        recommendation: {type: boolean}
+    AssistantToolList:
+      type: object
+      required: [tools]
+      properties:
+        tools:
+          type: array
+          items: {$ref: '#/components/schemas/AssistantTool'}
+    AssistantToolInput:
+      type: object
+      additionalProperties: true
+    AssistantRecommendation:
+      type: object
+      required: [recommendation, reason, evidence, confidence, affected_entity, expected_effect]
+      properties:
+        recommendation: {type: string}
+        reason: {type: string}
+        evidence: {type: object, additionalProperties: true}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        affected_entity: {type: object, additionalProperties: true}
+        expected_effect: {type: string}
+
+    AssistantAction:
+      type: object
+      required: [id, project_id, user_id, tool, kind, input, output, explanation, confidence, uncertainty, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        tool:
           type: string
-          enum: [ok]
-        service:
-          type: string
-          example: web-studio-img-api
-    ErrorResponse:
+          enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance]
+        kind: {type: string, enum: [tool_execution, recommendation]}
+        input: {type: object, additionalProperties: true}
+        output: {type: object, additionalProperties: true, description: Recommendation tools include a nested recommendation object matching AssistantRecommendation.}
+        explanation: {type: string}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        uncertainty: {type: string}
+        decision: {type: string, enum: [apply, edit, ignore]}
+        created_at: {type: string, format: date-time}
+        decided_at: {type: string, format: date-time}
+    AssistantActionList:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          items: {$ref: '#/components/schemas/AssistantAction'}
+    AssistantToolResponse:
+      type: object
+      required: [action, result, explanation, confidence, uncertainty]
+      properties:
+        action: {$ref: '#/components/schemas/AssistantAction'}
+        result: {type: object, additionalProperties: true}
+        explanation: {type: string}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        uncertainty: {type: string}
+    AssistantDecisionInput:
       type: object
       additionalProperties: false
+      required: [decision]
+      properties:
+        decision: {type: string, enum: [apply, edit, ignore]}
+        final_text: {type: string, maxLength: 20000}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+
+    Iteration:
+      type: object
+      required: [id, project_id, type, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        parent_iteration_id: {type: string, format: uuid}
+        type: {type: string, enum: [idea, sketch, generation, selection, composition, prompt, manual_edit, final]}
+        title: {type: string, maxLength: 200}
+        description: {type: string, maxLength: 5000}
+        created_at: {type: string, format: date-time}
+    IterationInput:
+      type: object
+      required: [type]
+      additionalProperties: false
+      properties:
+        parent_iteration_id: {type: string, format: uuid}
+        type: {type: string, enum: [idea, sketch, generation, selection, composition, prompt, manual_edit, final]}
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 5000}
+    IterationList:
+      type: object
+      required: [iterations]
+      properties:
+        iterations:
+          type: array
+          items: {$ref: '#/components/schemas/Iteration'}
+    Project:
+      type: object
+      required: [id, user_id, name, status, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string}
+        status: {type: string, enum: [active, archived, deleted]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ProjectInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 2000}
+    ProjectUpdate:
+      type: object
+      required: [name, status]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 2000}
+        status: {type: string, enum: [active, archived, deleted]}
+    ProjectList:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+
+    Generation:
+      type: object
+      required: [id, project_id, user_id, provider, model, prompt, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        provider: {type: string}
+        model: {type: string}
+        model_version: {type: string}
+        prompt: {type: string}
+        negative_prompt: {type: string}
+        seed: {type: integer, format: int64}
+        aspect_ratio: {type: string}
+        parameters: {type: object, additionalProperties: true}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+        provider_job_id: {type: string}
+        error_code: {type: string}
+        error_message: {type: string}
+        cost: {type: number, format: double}
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    GenerationInput:
+      type: object
+      additionalProperties: false
+      required: [prompt]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        prompt: {type: string, minLength: 1, maxLength: 20000}
+        negative_prompt: {type: string, maxLength: 10000}
+        seed: {type: integer, format: int64}
+        aspect_ratio: {type: string, pattern: '^[0-9]+:[0-9]+$'}
+        parameters: {type: object, additionalProperties: true}
+
+    Prompt:
+      type: object
+      required: [id, project_id, version, original_text, created_by, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        parent_prompt_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        original_text: {type: string}
+        ai_suggestions:
+          type: array
+          items: {type: string}
+        final_text: {type: string}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+          properties:
+            subject: {type: string}
+            composition: {type: string}
+            camera: {type: string}
+            lighting: {type: string}
+            material: {type: string}
+            texture: {type: string}
+            color: {type: string}
+            atmosphere: {type: string}
+            style: {type: string}
+            depth: {type: string}
+            detail: {type: string}
+            constraints: {type: string}
+            negative_constraints: {type: string}
+        created_by: {type: string, enum: [human, ai, mixed]}
+        created_at: {type: string, format: date-time}
+    PromptInput:
+      type: object
+      additionalProperties: false
+      required: [original_text]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        parent_prompt_id: {type: string, format: uuid}
+        original_text: {type: string, minLength: 1, maxLength: 20000}
+        ai_suggestions:
+          type: array
+          maxItems: 20
+          items: {type: string, maxLength: 4000}
+        final_text: {type: string, maxLength: 20000}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+        created_by: {type: string, enum: [human, ai, mixed]}
+    PromptList:
+      type: object
+      required: [prompts]
+      properties:
+        prompts:
+          type: array
+          items: {$ref: '#/components/schemas/Prompt'}
+    Reference:
+      type: object
+      required: [id, project_id, source_type, license, license_verified, user_owned, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        source_url: {type: string, format: uri}
+        source_type: {type: string, enum: [inspiration, reference, direct_source, user_created, public_domain, unknown]}
+        license: {type: string}
+        license_verified: {type: boolean}
+        user_owned: {type: boolean}
+        sha256: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
+        notes: {type: string}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ReferenceInfluence:
+      type: object
+      required: [composition, semantic, color, style, material, geometry]
+      properties:
+        composition: {type: number, minimum: 0, maximum: 1}
+        semantic: {type: number, minimum: 0, maximum: 1}
+        color: {type: number, minimum: 0, maximum: 1}
+        style: {type: number, minimum: 0, maximum: 1}
+        material: {type: number, minimum: 0, maximum: 1}
+        geometry: {type: number, minimum: 0, maximum: 1}
+        warning: {type: string}
+    ReferenceInput:
+      type: object
+      additionalProperties: false
+      required: [source_type, license]
+      properties:
+        asset_id: {type: string, format: uuid}
+        source_url: {type: string, format: uri}
+        source_type: {type: string, enum: [inspiration, reference, direct_source, user_created, public_domain, unknown]}
+        license: {type: string, minLength: 1, maxLength: 500}
+        license_verified: {type: boolean}
+        user_owned: {type: boolean}
+        sha256: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
+        notes: {type: string, maxLength: 10000}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+    ReferenceList:
+      type: object
+      required: [references]
+      properties:
+        references:
+          type: array
+          items: {$ref: '#/components/schemas/Reference'}
+    HumanAction:
+      type: object
+      required: [id, project_id, user_id, action_type, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
+        action_type: {type: string, enum: [IDEA_CREATED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SELECTED, VARIANT_REJECTED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, COMPOSITION_MUTATION_ACCEPTED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED]}
+        payload: {type: object, additionalProperties: true}
+        old_state: {type: object, additionalProperties: true}
+        new_state: {type: object, additionalProperties: true}
+        ai_influence: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    HumanActionInput:
+      type: object
+      additionalProperties: false
+      required: [action_type]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        action_type: {type: string}
+        payload: {type: object, additionalProperties: true}
+        old_state: {type: object, additionalProperties: true}
+        new_state: {type: object, additionalProperties: true}
+        ai_influence: {type: object, additionalProperties: true}
+    HumanActionList:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          items: {$ref: '#/components/schemas/HumanAction'}
+    PromptPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        original_text: {type: string, minLength: 1, maxLength: 20000}
+        ai_suggestions:
+          type: array
+          maxItems: 20
+          items: {type: string, maxLength: 4000}
+        final_text: {type: string, maxLength: 20000}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+        created_by: {type: string, enum: [human, ai, mixed]}
+    Asset:
+      type: object
+      required: [id, project_id, user_id, type, storage_key, mime_type, size, checksum, lifecycle_status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        generation_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        type: {type: string}
+        storage_key: {type: string}
+        preview_key: {type: string}
+        thumbnail_key: {type: string}
+        mime_type: {type: string}
+        size: {type: integer, format: int64, minimum: 0}
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+        checksum: {type: string, pattern: '^[0-9a-fA-F]{64}
+      type: object
       required: [error]
       properties:
         error:
-          $ref: '#/components/schemas/Error'
-    Error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+}
+        exif: {type: object, additionalProperties: true}
+        lifecycle_status: {type: string, enum: [pending, active, orphaned, deleted]}
+        expires_at: {type: string, format: date-time}
+        deleted_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    AssetUploadInit:
+      type: object
+      required: [mime_type, size]
+      properties:
+        mime_type: {type: string, enum: [image/jpeg, image/png]}
+        size: {type: integer, format: int64, minimum: 1, maximum: 10485760}
+    AssetUpload:
+      type: object
+      required: [upload_id, asset, upload_url, expires_at]
+      properties:
+        upload_id: {type: string, format: uuid}
+        asset: {$ref: '#/components/schemas/Asset'}
+        upload_url: {type: string, format: uri}
+        expires_at: {type: string, format: date-time}
+    SignedURL:
+      type: object
+      required: [asset_id, url, expires_at]
+      properties:
+        asset_id: {type: string, format: uuid}
+        url: {type: string, format: uri}
+        expires_at: {type: string, format: date-time}
+    ProvenanceEvent:
+      type: object
+      required: [id, user_id, project_id, entity_type, entity_id, action, hash, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        entity_type: {type: string}
+        entity_id: {type: string, format: uuid}
+        action: {type: string}
+        payload: {type: object, additionalProperties: true}
+        parent_hash: {type: string}
+        hash: {type: string, pattern: '^[0-9a-fA-F]{64}
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+}
+        created_at: {type: string, format: date-time}
+    ProvenanceVerification:
+      type: object
+      required: [valid, events_checked, broken_links, verified_at]
+      properties:
+        valid: {type: boolean}
+        events_checked: {type: integer, minimum: 0}
+        broken_links:
+          type: array
+          items: {type: string}
+        verified_at: {type: string, format: date-time}
+
+    SimilarityCheckInput:
       type: object
       additionalProperties: false
-      required: [code, message, request_id]
+      required: [target_asset_id]
       properties:
-        code:
-          type: string
-          example: internal_error
-        message:
-          type: string
-          example: internal server error
-        request_id:
-          type: string
-          example: 01JEXAMPLE0000000000000000
+        target_asset_id: {type: string, format: uuid}
+        reference_ids: {type: array, items: {type: string, format: uuid}}
+        search_scope: {type: string, maxLength: 200}
+    SimilarityCheck:
+      type: object
+      required: [id, project_id, user_id, target_asset_id, visual_score, composition_score, semantic_score, style_score, search_scope, algorithm, algorithm_version, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        target_asset_id: {type: string, format: uuid}
+        visual_score: {type: number, minimum: 0, maximum: 1}
+        composition_score: {type: number, minimum: 0, maximum: 1}
+        semantic_score: {type: number, minimum: 0, maximum: 1}
+        style_score: {type: number, minimum: 0, maximum: 1}
+        search_scope: {type: string}
+        sources: {type: array, items: {type: string}}
+        unavailable_sources: {type: array, items: {type: string}}
+        algorithm: {type: string}
+        algorithm_version: {type: string}
+        metadata: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    Export:
+      type: object
+      required: [id, project_id, user_id, final_asset_id, status, artifacts, manifest, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        final_asset_id: {type: string, format: uuid}
+        status: {type: string, enum: [running, completed, failed]}
+        artifacts: {type: object, additionalProperties: {type: string, format: uri}}
+        manifest: {type: object, additionalProperties: true}
+        error: {type: string}
+        created_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    CompositionSpecInput:
+      type: object
+      additionalProperties: true
+      properties:
+        focal_points: {type: array, items: {}}
+        bounding_boxes: {type: array, items: {}}
+        relative_positions: {type: object, additionalProperties: true}
+        horizon: {type: number, minimum: 0, maximum: 1}
+        camera_elevation: {type: number}
+        perspective: {type: string}
+        hierarchy: {type: array, items: {}}
+        negative_space: {type: object, additionalProperties: true}
+        dominant_geometry: {type: object, additionalProperties: true}
+        object_scale: {type: object, additionalProperties: true}
+        light_direction: {type: object, additionalProperties: true}
+    CompositionSpec:
+      allOf:
+        - $ref: '#/components/schemas/CompositionSpecInput'
+        - type: object
+          required: [id, project_id, iteration_id, user_id, created_at, updated_at]
+          properties:
+            id: {type: string, format: uuid}
+            project_id: {type: string, format: uuid}
+            iteration_id: {type: string, format: uuid}
+            user_id: {type: string, format: uuid}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    CompositionMutationInput:
+      type: object
+      additionalProperties: false
+      required: [source_similarity_check_id]
+      description: The backend derives the authoritative composition score from the persisted similarity check; composition_similarity is accepted only as a client hint.
+      properties:
+        composition_spec_id: {type: string, format: uuid}
+        source_similarity_check_id: {type: string, format: uuid}
+        composition_similarity: {type: number, minimum: 0.8, maximum: 1}
+    CompositionAnalysisResponse:
+      type: object
+      required: [spec, analysis, uncertainty]
+      properties:
+        spec: {$ref: '#/components/schemas/CompositionSpec'}
+        analysis: {type: object, additionalProperties: true}
+        uncertainty: {type: string}
+    CompositionMutation:
+      type: object
+      required: [id, project_id, user_id, suggestions, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        composition_spec_id: {type: string, format: uuid}
+        source_similarity_check_id: {type: string, format: uuid}
+        suggestions: {type: array, items: {type: string}}
+        status: {type: string, enum: [proposed, accepted, rejected]}
+        accepted_iteration_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+    LibraryItemInput:
+      type: object
+      additionalProperties: false
+      required: [category, name, prompt_fragment]
+      properties:
+        category: {type: string, minLength: 1, maxLength: 100}
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string}
+        tags: {type: array, maxItems: 50, items: {type: string}}
+        prompt_fragment: {type: string, minLength: 1, maxLength: 4000}
+        preview_key: {type: string}
+    LibraryItem:
+      type: object
+      required: [id, kind, category, name, tags, prompt_fragment, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        kind: {type: string, enum: [material, texture]}
+        category: {type: string}
+        name: {type: string}
+        description: {type: string}
+        tags: {type: array, items: {type: string}}
+        prompt_fragment: {type: string}
+        preview_key: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    LibraryItemList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/LibraryItem'}}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}

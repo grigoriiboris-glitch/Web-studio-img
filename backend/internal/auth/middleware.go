@@ -38,6 +38,10 @@ func WithAuth(manager *TokenManager, store Store, next http.Handler) http.Handle
 	})
 }
 
+func WithPrincipal(ctx context.Context, principal Principal) context.Context {
+	return context.WithValue(ctx, contextKey{}, principal)
+}
+
 func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 	p, ok := ctx.Value(contextKey{}).(Principal)
 	return p, ok
