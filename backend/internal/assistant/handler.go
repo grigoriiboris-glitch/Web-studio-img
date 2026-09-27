@@ -131,6 +131,9 @@ func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 	default:e=errors.New("unsupported tool")
 	}
 	if e!=nil{errJSON(w,400,"assistant_tool_failed",e.Error());return}
+	if kind==kindRecommendation {
+		result = withRecommendation(tool, result, explanation, confidence, uncertainty)
+	}
 	action,e:=h.actions.Create(r.Context(),p.UserID,pid,tool,kind,input,result,explanation,confidence,uncertainty,key);if e!=nil{errJSON(w,500,"assistant_action_log_failed","could not record AI action");return}
 	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:p.UserID,ProjectID:pid,EntityType:"assistant_action",EntityID:action.ID,Action:"assistant.tool.executed",Payload:map[string]any{"tool":tool,"kind":kind,"confidence":confidence}})}
 	if h.events!=nil{_,_=h.events.Append(r.Context(),p.UserID,pid,"assistant.tool.completed","assistant_action",action.ID,map[string]any{"tool":tool,"kind":kind})}
@@ -276,6 +279,44 @@ func (h *Handler) applyComposition(ctx context.Context,userID,projectID uuid.UUI
 	if e!=nil{return e};out["applied_iteration_id"]=iid
 	if h.provenance!=nil{_,_=h.provenance.Append(ctx,provenance.Event{UserID:userID,ProjectID:projectID,IterationID:&iid,EntityType:"composition",EntityID:iid,Action:"assistant.composition.applied",Payload:map[string]any{"source":"assistant"}})}
 	return nil
+}
+
+func withRecommendation(tool string, result map[string]any, reason string, confidence float64, uncertainty string) map[string]any {
+	evidence:=clone(result)
+	affected:=map[string]any{"type":"project"}
+	if id,ok:=result["asset_id"];ok{affected=map[string]any{"type":"asset","id":id}}
+	if id,ok:=result["iteration_id"];ok{affected=map[string]any{"type":"iteration","id":id}}
+	recommendation:=map[string]any{
+		"recommendation": recommendationText(tool, result),
+		"reason": reason,
+		"evidence": evidence,
+		"confidence": confidence,
+		"affected_entity": affected,
+		"expected_effect": expectedEffect(tool),
+	}
+	result["recommendation"]=recommendation
+	return result
+}
+
+func recommendationText(tool string, result map[string]any) string {
+	switch tool {
+	case "suggest_prompt":
+		if v,ok:=result["suggested_prompt"].(string);ok{return v}
+	case "suggest_materials":
+		return "Review the suggested project-visible library items for the requested material or texture."
+	case "analyze_composition":
+		return "Review the detected composition descriptors and optionally apply them to the selected iteration."
+	}
+	return "Review this AI recommendation before applying it."
+}
+
+func expectedEffect(tool string) string {
+	switch tool {
+	case "suggest_prompt": return "Create a new prompt version based on the proposed refinement."
+	case "suggest_materials": return "Help select project-visible materials or textures without changing the project automatically."
+	case "analyze_composition": return "Persist the reviewed composition representation without overwriting immutable history."
+	}
+	return "No project mutation occurs until the user explicitly decides to apply or edit it."
 }
 
 func (h *Handler) ownedProject(ctx context.Context,userID,projectID uuid.UUID)bool{
