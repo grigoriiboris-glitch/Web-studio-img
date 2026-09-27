@@ -3,6 +3,7 @@ ALTER TABLE projects
   ADD COLUMN IF NOT EXISTS provenance_head_sequence BIGINT,
   ADD COLUMN IF NOT EXISTS provenance_head_hash TEXT;
 
+ALTER TABLE generations
   ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   ADD COLUMN IF NOT EXISTS idempotency_key TEXT,
   ADD COLUMN IF NOT EXISTS error_code TEXT,
