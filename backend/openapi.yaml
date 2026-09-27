@@ -741,6 +741,10 @@ paths:
       operationId: createCreationReport
       summary: Create a Creation Report export
       parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
         - name: project_id
           in: path
           required: true
@@ -832,7 +836,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/LibraryItemInput'}}
+            schema: {$ref: '#/components/schemas/LibraryItemInput'}
       responses:
         '201': {description: Material, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
   /projects/{project_id}/textures:
