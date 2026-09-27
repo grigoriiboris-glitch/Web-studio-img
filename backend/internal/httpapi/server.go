@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
+	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"\n\t"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
@@ -22,7 +22,7 @@ func NewServerWithProjects(logger *slog.Logger, origins []string, limiter *secur
 	return newServer(logger, origins, limiter, projectHandler)
 }
 
-func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler) *Server {
+func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
