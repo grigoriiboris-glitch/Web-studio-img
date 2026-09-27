@@ -158,6 +158,9 @@ func (h *Handler) decide(w http.ResponseWriter,r *http.Request){
 		switch current.Tool{
 		case "suggest_prompt":e=h.applyPrompt(r.Context(),p.UserID,pid,output)
 		case "analyze_composition":e=h.applyComposition(r.Context(),p.UserID,pid,output)
+		case "suggest_materials":
+			output["decision_effect"] = "accepted_without_automatic_mutation"
+			output["project_mutated"] = false
 		default:e=errors.New("this recommendation has no automatic apply operation; use ignore")
 		}
 		if e!=nil{errJSON(w,409,"recommendation_apply_failed",e.Error());return}
@@ -418,7 +421,7 @@ func recommendationText(tool string, result map[string]any) string {
 func expectedEffect(tool string) string {
 	switch tool {
 	case "suggest_prompt": return "Create a new prompt version based on the proposed refinement."
-	case "suggest_materials": return "Help select project-visible materials or textures without changing the project automatically."
+	case "suggest_materials": return "Accept the suggested project-visible materials or textures for later manual selection; no project mutation occurs automatically."
 	case "analyze_composition": return "Persist the reviewed composition representation without overwriting immutable history."
 	}
 	return "No project mutation occurs until the user explicitly decides to apply or edit it."
