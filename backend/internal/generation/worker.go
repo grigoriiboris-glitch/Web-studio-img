@@ -54,7 +54,7 @@ func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
 	if err := w.Store.MarkRunning(ctx, payload.UserID, item.ID, now); err != nil && !errors.Is(err, ErrGenerationNotFound) {
 		return err
 	}
-	if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation_running", "generation", item.ID, map[string]any{"status":"running"}) }
+	if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.started", "generation", item.ID, map[string]any{"status":"running"}) }
 	result, err := w.Provider.Generate(ctx, Request{
 		ProjectID: item.ProjectID, IterationID: item.IterationID, Prompt: item.Prompt,
 		NegativePrompt: item.NegativePrompt, Seed: item.Seed, AspectRatio: item.AspectRatio,
@@ -67,7 +67,7 @@ func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
 		}
 		if !isRetryable(err) {
 			_ = w.Store.MarkFailed(ctx, payload.UserID, item.ID, code, err.Error(), time.Now())
-			if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation_failed", "generation", item.ID, map[string]any{"code":code,"message":err.Error()}) }
+			if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.failed", "generation", item.ID, map[string]any{"code":code,"message":err.Error()}) }
 			if w.Provenance != nil { _, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_failed", Payload: map[string]any{"code": code, "message": err.Error()}, CreatedAt: time.Now()}) }
 			return nil
 		}
@@ -90,7 +90,7 @@ func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
 	if err := w.Store.MarkSucceeded(ctx, payload.UserID, item.ID, version, jobID, result.Cost, time.Now()); err != nil {
 		return err
 	}
-	if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation_succeeded", "generation", item.ID, map[string]any{"provider":item.Provider,"model":item.Model,"model_version":result.ModelVersion}) }
+	if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.completed", "generation", item.ID, map[string]any{"provider":item.Provider,"model":item.Model,"model_version":result.ModelVersion}) }
 	if w.Provenance != nil {
 		_, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_succeeded", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "model_version": result.ModelVersion, "provider_job_id": result.ProviderJobID, "cost": result.Cost}, CreatedAt: time.Now()})
 	}
