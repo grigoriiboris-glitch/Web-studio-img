@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 )
 
 func TestParseLastEventID(t *testing.T) {
@@ -63,7 +64,7 @@ func TestStreamReplaysFromLastEventID(t *testing.T) {
 	store := &fakeEventReader{queried: make(chan struct{}, 1)}
 	handler, err := NewHandler(store)
 	if err != nil { t.Fatal(err) }
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(auth.WithPrincipal(context.Background(), auth.Principal{UserID: uuid.New()}))
 	defer cancel()
 	req := httptest.NewRequest("GET", "/api/v1/projects/"+uuid.NewString()+"/events", nil).WithContext(ctx)
 	req.Header.Set("Last-Event-ID", "41")
