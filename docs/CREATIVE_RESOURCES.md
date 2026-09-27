@@ -68,3 +68,5 @@ The application remains the owner of project state and provenance:
 Vue -> Go REST -> application/domain -> PostgreSQL/Redis/object storage.
 
 Image providers remain replaceable infrastructure adapters. InvokeAI is intentionally excluded from #35–#39 implementation and is tracked as #70.
+
+CI note: backend lint uses the current official golangci-lint GitHub Action configuration.
