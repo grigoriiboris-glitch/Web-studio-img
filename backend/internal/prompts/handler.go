@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 	"github.com/oleg3190/Web-studio-img/backend/internal/events"
+	"github.com/oleg3190/Web-studio-img/backend/internal/humanactions"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
 	"github.com/oleg3190/Web-studio-img/backend/internal/humanactions"
 )
