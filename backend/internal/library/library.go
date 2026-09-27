@@ -61,4 +61,4 @@ func(h *Handler)create(w http.ResponseWriter,r *http.Request,kind string){
 	if e!=nil{writeErr(w,500,"library_create_failed","could not create library item");return};_=json.Unmarshal(stored,&x.Tags);writeJSON(w,201,x)
 }
 func writeJSON(w http.ResponseWriter,s int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(s);_=json.NewEncoder(w).Encode(v)}
-func writeErr(w http.ResponseWriter,s int,c,m string){writeJSON(w,s,map[string]any{"error":map[string]string{"code":c,"message":m,"request_id":uuid.NewString()}})
+func writeErr(w http.ResponseWriter,s int,c,m string){writeJSON(w,s,map[string]any{"error":map[string]string{"code":c,"message":m,"request_id":uuid.NewString()}})}
