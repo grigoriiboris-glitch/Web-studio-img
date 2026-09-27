@@ -43,7 +43,17 @@ func (h *Handler) record(r *http.Request,pid,eid uuid.UUID,iterationID *uuid.UUI
 	u,_:=userID(r)
 	if h.events!=nil{_,_=h.events.Append(r.Context(),u,pid,action,"prompt",eid,payload)}
 	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u,ProjectID:pid,IterationID:iterationID,EntityType:"prompt",EntityID:eid,Action:action,Payload:payload})}
-	if h.actions!=nil{actionType:="PROMPT_EDITED";if action=="prompt_approved"{actionType="PROMPT_APPROVED"};_,_=h.actions.Create(r.Context(), u, pid, humanactions.Request{IterationID: iterationID, ActionType: actionType, Payload: payload, NewState: payload, AIInfluence: map[string]any{"source":"user"}})}
+	if h.actions!=nil {
+		createdBy, _ := payload["created_by"].(CreatedBy)
+		if createdBy == "" {
+			if raw, ok := payload["created_by"].(string); ok { createdBy = CreatedBy(raw) }
+		}
+		if action=="prompt.approved" || createdBy != CreatedByAI {
+			actionType:="PROMPT_EDITED"
+			if action=="prompt.approved"{actionType="PROMPT_APPROVED"}
+			_,_=h.actions.Create(r.Context(),u,pid,humanactions.Request{IterationID:iterationID,ActionType:actionType,Payload:payload,NewState:payload})
+		}
+	}
 }
 func decode(r *http.Request,v any)error{d:=json.NewDecoder(io.LimitReader(r.Body,1<<20));d.DisallowUnknownFields();if err:=d.Decode(v);err!=nil{return err};var extra any;if err:=d.Decode(&extra);err!=io.EOF{return errors.New("multiple JSON values")};return nil}
 func userID(r *http.Request)(uuid.UUID,bool){p,ok:=auth.PrincipalFromContext(r.Context());if !ok{return uuid.Nil,false};return p.UserID,true}
