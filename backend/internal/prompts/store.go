@@ -20,12 +20,18 @@ func NewStore(db *sql.DB) (*Store,error) {
 
 func (s *Store) Create(ctx context.Context,userID,projectID uuid.UUID,req Request)(Prompt,error){
 	if err:=req.Validate(); err!=nil{return Prompt{},err}
+	if valueOrEmpty(req.FinalText) == "" {
+		if built := BuildFinalText(req.Components); built != "" {
+			req.FinalText = &built
+		}
+	}
 	aiRaw,_:=json.Marshal(req.AISuggestions); compRaw,_:=json.Marshal(req.Components)
 	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil{return Prompt{},err}
 	defer tx.Rollback()
 	var projectExists bool
 	if err=tx.QueryRowContext(ctx,"SELECT EXISTS (SELECT 1 FROM projects WHERE id=$1 AND user_id=$2 AND status <> 'deleted')",projectID,userID).Scan(&projectExists); err!=nil{return Prompt{},err}
 	if !projectExists{return Prompt{},ErrPromptNotFound}
+	if _,err=tx.ExecContext(ctx,"SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",projectID.String());err!=nil{return Prompt{},fmt.Errorf("lock prompt versions: %w",err)}
 	version:=0
 	if err=tx.QueryRowContext(ctx,"SELECT COALESCE(MAX(version),0)+1 FROM prompts WHERE project_id=$1",projectID).Scan(&version);err!=nil{return Prompt{},err}
 	if req.ParentPromptID!=nil {
@@ -69,3 +75,5 @@ func (s *Store) Get(ctx context.Context,userID,promptID uuid.UUID)(Prompt,error)
 	if errors.Is(err,sql.ErrNoRows){return Prompt{},ErrPromptNotFound};if err!=nil{return Prompt{},err}
 	_ = json.Unmarshal(a,&p.AISuggestions);_ = json.Unmarshal(c,&p.Components);return p,nil
 }
+
+func valueOrEmpty(value *string) string { if value == nil { return "" }; return *value }
