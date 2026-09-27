@@ -140,6 +140,17 @@ func main() {
 			os.Exit(1)
 		}
 
+		compositionHandler, err = composition.NewHandler(projectDB, eventStore, provenanceStore, actionStore)
+		if err != nil {
+			logger.Error("composition handler initialization failed", "error", err)
+			os.Exit(1)
+		}
+		libraryHandler, err = library.NewHandler(projectDB)
+		if err != nil {
+			logger.Error("library handler initialization failed", "error", err)
+			os.Exit(1)
+		}
+
 		if cfg.RedisURL != "" && cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != "" {
 			redisCfg, redisErr := queue.ParseRedisURL(cfg.RedisURL)
 			if redisErr != nil { logger.Error("redis configuration failed", "error", redisErr); os.Exit(1) }
