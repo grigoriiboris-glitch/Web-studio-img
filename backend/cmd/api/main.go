@@ -12,7 +12,9 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/oleg3190/Web-studio-img/backend/internal/config"\n\t"github.com/oleg3190/Web-studio-img/backend/internal/composition"\n\t"github.com/oleg3190/Web-studio-img/backend/internal/library"
+	"github.com/oleg3190/Web-studio-img/backend/internal/config"
+	"github.com/oleg3190/Web-studio-img/backend/internal/composition"
+	"github.com/oleg3190/Web-studio-img/backend/internal/library"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
@@ -47,7 +49,9 @@ func main() {
 	var provenanceHandler *provenance.Handler
 	var assetHandler *assets.UploadHandler
 	var similarityHandler *similarity.Handler
-	var exportHandler *exports.Handler\n\tvar compositionHandler *composition.Handler\n\tvar libraryHandler *library.Handler
+	var exportHandler *exports.Handler
+	var compositionHandler *composition.Handler
+	var libraryHandler *library.Handler
 	var projectDB *sql.DB
 
 	if cfg.DatabaseURL != "" {
