@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 )
 
 type Enqueuer interface {
@@ -25,17 +26,22 @@ type Handler struct {
 	queue Enqueuer
 	provider Provider
 	provenance *provenance.Store
+	events *events.Store
 }
 
 func NewHandler(store Store, queue Enqueuer, provider Provider) (*Handler, error) {
-	return NewHandlerWithProvenance(store, queue, provider, nil)
+	return NewHandlerWithDependencies(store, queue, provider, nil, nil)
 }
 
 func NewHandlerWithProvenance(store Store, queue Enqueuer, provider Provider, provenanceStore *provenance.Store) (*Handler, error) {
+	return NewHandlerWithDependencies(store, queue, provider, provenanceStore, nil)
+}
+
+func NewHandlerWithDependencies(store Store, queue Enqueuer, provider Provider, provenanceStore *provenance.Store, eventStore *events.Store) (*Handler, error) {
 	if store == nil || queue == nil || provider == nil {
 		return nil, errors.New("generation handler requires store, queue and provider")
 	}
-	return &Handler{store: store, queue: queue, provider: provider, provenance: provenanceStore}, nil
+	return &Handler{store: store, queue: queue, provider: provider, provenance: provenanceStore, events: eventStore}, nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -105,6 +111,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if created && h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "generation_queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
 	if created && h.provenance != nil {
 		_, _ = h.provenance.Append(r.Context(), provenance.Event{UserID: userID, ProjectID: projectID, IterationID: req.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_queued", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "prompt": item.Prompt, "negative_prompt": item.NegativePrompt, "seed": item.Seed, "aspect_ratio": item.AspectRatio, "parameters": item.Parameters}, CreatedAt: time.Now()})
 	}
@@ -165,6 +172,7 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "generation_not_cancellable", "generation cannot be cancelled")
 		return
 	}
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, item.ProjectID, "generation_cancelled", "generation", item.ID, nil) }
 	item.Status = StatusCancelled
 	writeJSON(w, http.StatusOK, item)
 }
