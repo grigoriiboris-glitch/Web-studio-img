@@ -1,7 +1,6 @@
 package iterations
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
