@@ -160,7 +160,8 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 
 	keys:=make([]string,0,len(hashes));for k:=range hashes{keys=append(keys,k)};sort.Strings(keys)
 	var hashText strings.Builder
-	for _,k:=range keys{fmt.Fprintf(&hashText,"%s  %s\n",hashes[k],k)}
+	for _,k:=range keys{fmt.Fprintf(&hashText,"%s  %s
+",hashes[k],k)}
 	hashBytes:=[]byte(hashText.String())
 	hashKey:=fmt.Sprintf("projects/%s/exports/%s/hashes.txt",projectID,exportID)
 	if err:=h.storage.Put(ctx,hashKey,strings.NewReader(hashText.String()),int64(len(hashBytes)),storage.PutOptions{ContentType:"text/plain"});err!=nil{return err}
@@ -209,6 +210,20 @@ func sha256Hex(data []byte)string{s:=sha256.Sum256(data);return hex.EncodeToStri
 func countJSON(raw []byte)int{var v []any;if json.Unmarshal(raw,&v)!=nil{return 0};return len(v)}
 func decodeJSON(r *http.Request,v any)error{d:=json.NewDecoder(io.LimitReader(r.Body,1<<20));d.DisallowUnknownFields();return d.Decode(v)}
 func buildPDFReport(meta map[string]any,verification provenance.Verification)[]byte{title:="Creation Report";lines:=[]string{title,fmt.Sprintf("Project: %v",meta["project_id"]),fmt.Sprintf("Export: %v",meta["export_id"]),fmt.Sprintf("Final asset: %v",meta["final_asset_id"]),fmt.Sprintf("Generated: %v",meta["generated_at"]),fmt.Sprintf("Provenance valid: %t; events: %d",verification.Valid,verification.EventsChecked),fmt.Sprintf("References: %v; prompts: %v; actions: %v",meta["reference_count"],meta["prompt_count"],meta["human_action_count"]),"Similarity analysis is informational, not a legal conclusion."};return minimalPDF(lines)}
-func minimalPDF(lines []string)[]byte{var b strings.Builder;offs:=[]int{};b.WriteString("%PDF-1.4\n");objs:=[]string{"<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"};content:="BT /F1 11 Tf 50 760 Td ";for _,line:=range lines{line=strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(line,"\\","\\\\"),"(","\\("),")","\\)");content+="("+line+") Tj 0 -18 Td ";};content+="ET";objs=append(objs,fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream",len(content),content));for i,obj:=range objs{offs=append(offs,b.Len());fmt.Fprintf(&b,"%d 0 obj\n%s\nendobj\n",i+1,obj)};xref:=b.Len();fmt.Fprintf(&b,"xref\n0 %d\n0000000000 65535 f \n",len(objs)+1);for _,off:=range offs{fmt.Fprintf(&b,"%010d 00000 n \n",off)};fmt.Fprintf(&b,"trailer << /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF",len(objs)+1,xref);return []byte(b.String())}
+func minimalPDF(lines []string)[]byte{var b strings.Builder;offs:=[]int{};b.WriteString("%PDF-1.4
+");objs:=[]string{"<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"};content:="BT /F1 11 Tf 50 760 Td ";for _,line:=range lines{line=strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(line,"\\","\\\\"),"(","\\("),")","\\)");content+="("+line+") Tj 0 -18 Td ";};content+="ET";objs=append(objs,fmt.Sprintf("<< /Length %d >>
+stream
+%s
+endstream",len(content),content));for i,obj:=range objs{offs=append(offs,b.Len());fmt.Fprintf(&b,"%d 0 obj
+%s
+endobj
+",i+1,obj)};xref:=b.Len();fmt.Fprintf(&b,"xref
+0 %d
+0000000000 65535 f 
+",len(objs)+1);for _,off:=range offs{fmt.Fprintf(&b,"%010d 00000 n 
+",off)};fmt.Fprintf(&b,"trailer << /Size %d /Root 1 0 R >>
+startxref
+%d
+%%%%EOF",len(objs)+1,xref);return []byte(b.String())}
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
-func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()})}
+func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})
