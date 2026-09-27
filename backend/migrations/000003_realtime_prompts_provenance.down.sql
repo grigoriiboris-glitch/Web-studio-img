@@ -1,3 +1,9 @@
+DROP TABLE IF EXISTS asset_upload_parts;
+DROP INDEX IF EXISTS human_actions_project_version_uq;
+ALTER TABLE human_actions DROP CONSTRAINT IF EXISTS human_actions_version_positive;
+ALTER TABLE human_actions DROP COLUMN IF EXISTS version;
+DROP SEQUENCE IF EXISTS human_action_version_seq;
+
 
 DROP TABLE IF EXISTS project_events;
 DROP TABLE IF EXISTS provenance_events;

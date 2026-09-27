@@ -36,6 +36,10 @@ const addingReference = ref(false)
 const verifying = ref(false)
 const provenanceVerified = ref<boolean | null>(null)
 const provenanceMessage = ref('')
+const compositionDecision = ref('')
+const manualEditText = ref('')
+const manualEditPrevious = ref('')
+const referenceAnalysisTarget = ref('')
 let eventAbort: AbortController | undefined
 
 const types: IterationType[] = ['idea', 'sketch', 'generation', 'selection', 'composition', 'prompt', 'manual_edit', 'final']
@@ -55,6 +59,7 @@ const promptForm = ref({
   components: {} as Record<string, string>,
 })
 const referenceForm = ref({
+  asset_id: '',
   source_url: '',
   source_type: 'reference' as Reference['source_type'],
   license: 'unknown',
@@ -318,6 +323,38 @@ async function selectMaterial() {
   }
 }
 
+async function recordComposition() {
+  const value = compositionDecision.value.trim()
+  if (!value) return
+  try {
+    await logHumanAction({
+      action_type: 'COMPOSITION_CHANGED',
+      payload: { decision: value, version: iterations.value[iterations.value.length - 1]?.id },
+      old_state: { composition: null },
+      new_state: { composition: value },
+    })
+    compositionDecision.value = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record composition decision'
+  }
+}
+
+async function recordManualEdit() {
+  const value = manualEditText.value
+  if (!value.trim()) return
+  try {
+    await logHumanAction({
+      action_type: 'MANUAL_EDIT',
+      payload: { version: iterations.value[iterations.value.length - 1]?.id },
+      old_state: { text: manualEditPrevious.value },
+      new_state: { text: value },
+    })
+    manualEditPrevious.value = value
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record manual edit'
+  }
+}
+
 async function selectTexture() {
   const value = textureDecision.value.trim()
   if (!value) return
@@ -331,6 +368,21 @@ async function selectTexture() {
     textureDecision.value = ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not record texture selection'
+  }
+}
+
+async function analyzeReference(reference: Reference) {
+  const target = referenceAnalysisTarget.value.trim()
+  if (!target) {
+    error.value = 'Enter target asset ID before analysis'
+    return
+  }
+  try {
+    const updated = await referencesApi.analyzeInfluence(projectId(), reference.id, target)
+    const index = references.value.findIndex(item => item.id === updated.id)
+    if (index >= 0) references.value[index] = updated
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not analyze reference influence'
   }
 }
 
@@ -363,6 +415,7 @@ async function addReference() {
   error.value = null
   try {
     const created = await referencesApi.create(projectId(), {
+      asset_id: referenceForm.value.asset_id.trim() || undefined,
       source_url: referenceForm.value.source_url.trim() || undefined,
       source_type: referenceForm.value.source_type,
       license: referenceForm.value.license.trim(),
@@ -376,6 +429,7 @@ async function addReference() {
     })
     references.value = [created, ...references.value]
     referenceForm.value = {
+      asset_id: '',
       source_url: '',
       source_type: 'reference',
       license: 'unknown',
@@ -405,10 +459,10 @@ async function verifyProvenance() {
   verifying.value = true
   try {
     const result = await provenanceApi.verify(projectId())
-    provenanceVerified.value = result.verified
-    provenanceMessage.value = result.verified
-      ? 'Hash chain is valid across ' + result.event_count + ' events.'
-      : (result.reason ?? 'Hash chain verification failed.')
+    provenanceVerified.value = result.valid
+    provenanceMessage.value = result.valid
+      ? 'Hash chain is valid across ' + result.events_checked + ' events.'
+      : (result.broken_links?.[0] ?? 'Hash chain verification failed.')
   } catch (err) {
     provenanceVerified.value = false
     provenanceMessage.value = err instanceof Error ? err.message : 'Could not verify provenance'
@@ -588,6 +642,9 @@ onUnmounted(() => {
         <el-card class="create-card">
           <template #header>References</template>
           <el-form label-position="top" @submit.prevent="addReference">
+            <el-form-item label="Asset ID (for uploaded reference)">
+              <el-input v-model="referenceForm.asset_id" placeholder="UUID" />
+            </el-form-item>
             <el-form-item label="Source URL">
               <el-input v-model="referenceForm.source_url" placeholder="https://..." />
             </el-form-item>
@@ -610,7 +667,10 @@ onUnmounted(() => {
             <el-form-item label="Notes">
               <el-input v-model="referenceForm.notes" type="textarea" maxlength="10000" />
             </el-form-item>
-            <el-form-item label="Influence scores (0–1)">
+            <el-form-item label="Influence analysis target asset ID">
+              <el-input v-model="referenceAnalysisTarget" placeholder="UUID of target asset" />
+            </el-form-item>
+            <el-form-item label="Influence scores (calculated by analysis)">
               <el-row :gutter="12" class="component-grid">
                 <el-col :span="8"><el-input-number v-model="referenceForm.influence.composition" :min="0" :max="1" :step="0.1" aria-label="composition" /></el-col>
                 <el-col :span="8"><el-input-number v-model="referenceForm.influence.semantic" :min="0" :max="1" :step="0.1" aria-label="semantic" /></el-col>
@@ -656,6 +716,9 @@ onUnmounted(() => {
                 <el-alert v-if="scope.row.influence?.warning" :title="scope.row.influence.warning" type="warning" :closable="false" />
               </template>
             </el-table-column>
+            <el-table-column label="Analyze" width="100">
+              <template #default="scope"><el-button link type="primary" @click="analyzeReference(scope.row)">Analyze</el-button></template>
+            </el-table-column>
             <el-table-column label="Use" width="90">
               <template #default="scope"><el-button link type="primary" @click="selectReference(scope.row)">Select</el-button></template>
             </el-table-column>
@@ -687,6 +750,10 @@ onUnmounted(() => {
         <el-card class="create-card">
           <template #header>Creative decisions</template>
           <el-space wrap>
+            <el-input v-model="compositionDecision" placeholder="Composition decision" @keyup.enter="recordComposition" />
+            <el-button type="primary" @click="recordComposition">Record composition</el-button>
+            <el-input v-model="manualEditText" placeholder="Manual edit state" @keyup.enter="recordManualEdit" />
+            <el-button type="primary" @click="recordManualEdit">Record manual edit</el-button>
             <el-input v-model="materialDecision" placeholder="Material selected" @keyup.enter="selectMaterial" />
             <el-button type="primary" @click="selectMaterial">Record material</el-button>
             <el-input v-model="textureDecision" placeholder="Texture selected" @keyup.enter="selectTexture" />

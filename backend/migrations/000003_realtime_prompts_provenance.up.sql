@@ -118,3 +118,24 @@ CREATE TABLE project_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX project_events_project_sequence_idx ON project_events(project_id, sequence);
+
+
+CREATE SEQUENCE IF NOT EXISTS human_action_version_seq;
+ALTER TABLE human_actions ADD COLUMN IF NOT EXISTS version BIGINT;
+UPDATE human_actions SET version = nextval('human_action_version_seq') WHERE version IS NULL;
+ALTER TABLE human_actions ALTER COLUMN version SET DEFAULT nextval('human_action_version_seq');
+ALTER TABLE human_actions ALTER COLUMN version SET NOT NULL;
+ALTER TABLE human_actions ADD CONSTRAINT human_actions_version_positive CHECK (version > 0);
+CREATE UNIQUE INDEX IF NOT EXISTS human_actions_project_version_uq ON human_actions(project_id, version);
+
+CREATE TABLE IF NOT EXISTS asset_upload_parts (
+  asset_id UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  part_number INTEGER NOT NULL,
+  storage_key TEXT NOT NULL,
+  size BIGINT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY(asset_id, part_number),
+  CONSTRAINT asset_upload_parts_number_check CHECK (part_number >= 0),
+  CONSTRAINT asset_upload_parts_size_check CHECK (size > 0)
+);
+CREATE INDEX IF NOT EXISTS asset_upload_parts_asset_idx ON asset_upload_parts(asset_id, part_number);

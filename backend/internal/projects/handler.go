@@ -9,11 +9,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 	"github.com/oleg3190/Web-studio-img/backend/internal/events"
+	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
 )
 
 type Handler struct {
-	store  Store
+	store Store
 	events *events.Store
+	provenance *provenance.Store
 }
 
 func NewHandler(store Store) (*Handler, error) {
@@ -21,10 +23,12 @@ func NewHandler(store Store) (*Handler, error) {
 }
 
 func NewHandlerWithEvents(store Store, eventStore *events.Store) (*Handler, error) {
-	if store == nil {
-		return nil, errors.New("project handler requires store")
-	}
-	return &Handler{store: store, events: eventStore}, nil
+	return NewHandlerWithEventsAndProvenance(store, eventStore, nil)
+}
+
+func NewHandlerWithEventsAndProvenance(store Store, eventStore *events.Store, provenanceStore *provenance.Store) (*Handler, error) {
+	if store == nil { return nil, errors.New("project handler requires store") }
+	return &Handler{store: store, events: eventStore, provenance: provenanceStore}, nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -69,7 +73,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_create_failed", "could not create project")
 		return
 	}
-	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, project.ID, "project.created", "project", project.ID, map[string]any{"name": project.Name}) }
+	h.recordMutation(r,userID,project.ID,project.ID,"project.created",map[string]any{"name":project.Name})
 	writeProjectJSON(w, http.StatusCreated, project)
 }
 
@@ -125,7 +129,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_update_failed", "could not update project")
 		return
 	}
-	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "project.updated", "project", project.ID, map[string]any{"name": project.Name, "status": project.Status}) }
+	h.recordMutation(r,userID,projectID,project.ID,"project.updated",map[string]any{"name":project.Name,"status":project.Status})
 	writeProjectJSON(w, http.StatusOK, project)
 }
 
@@ -149,7 +153,7 @@ func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_archive_failed", "could not archive project")
 		return
 	}
-	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "project.archived", "project", project.ID, map[string]any{"status": project.Status}) }
+	h.recordMutation(r,userID,projectID,project.ID,"project.archived",map[string]any{"status":project.Status})
 	writeProjectJSON(w, http.StatusOK, project)
 }
 
@@ -178,6 +182,12 @@ func currentUserID(r *http.Request) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return principal.UserID, true
+}
+
+func (h *Handler) recordMutation(r *http.Request,userID,projectID,entityID uuid.UUID,action string,payload map[string]any){
+	if h.events!=nil{_,_=h.events.Append(r.Context(),userID,projectID,action,"project",entityID,payload)}
+	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:userID,ProjectID:projectID,EntityType:"project",EntityID:entityID,Action:action,Payload:payload})}
+	if h.events!=nil&&h.provenance!=nil{_,_=h.events.Append(r.Context(),userID,projectID,"provenance.updated","project",entityID,map[string]any{"action":action})}
 }
 
 func writeProjectJSON(w http.ResponseWriter, status int, value any) {

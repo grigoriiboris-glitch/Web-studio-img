@@ -352,6 +352,23 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
 
   /projects/{project_id}/prompts/{prompt_id}:
+    patch:
+      operationId: patchPrompt
+      summary: Create a new immutable prompt version from an existing version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PromptPatch'}
+      responses:
+        '201':
+          description: New prompt version
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Prompt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
     get:
       operationId: getPrompt
       summary: Get one prompt version
@@ -456,6 +473,189 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
 
+  /projects/{project_id}/assets:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: uploadAssetMultipart
+      summary: Upload an image as multipart/form-data
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '201':
+          description: Asset uploaded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asset'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '413': {description: Asset too large}
+  /projects/{project_id}/assets/uploads:
+    post:
+      operationId: initAssetUpload
+      summary: Initialize a signed asset upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssetUploadInit'}
+      responses:
+        '201':
+          description: Upload initialized
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssetUpload'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/assets/{asset_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: asset_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getAsset
+      summary: Get an owned asset
+      responses:
+        '200':
+          description: Asset
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asset'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/assets/{asset_id}/download-url:
+    get:
+      operationId: getAssetDownloadUrl
+      summary: Get a short-lived signed asset download URL
+      responses:
+        '200':
+          description: Signed URL
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SignedURL'}
+  /projects/{project_id}/assets/{asset_id}/parts/{part_number}:
+    put:
+      operationId: uploadAssetPart
+      summary: Upload an asset part
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: part_number
+          in: path
+          required: true
+          schema: {type: integer, minimum: 0}
+        - name: Content-Range
+          in: header
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: Part uploaded}
+  /projects/{project_id}/assets/{asset_id}/complete:
+    post:
+      operationId: completeAssetUpload
+      summary: Complete and validate an asset upload
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Asset finalized
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asset'}
+  /projects/{project_id}/assets/{asset_id}/export:
+    post:
+      operationId: exportAsset
+      summary: Export an asset through a short-lived signed URL
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: asset_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Export URL
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SignedURL'}
+  /projects/{project_id}/references/{reference_id}/influence:
+    post:
+      operationId: analyzeReferenceInfluence
+      summary: Calculate six reference influence scores against a target asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_asset_id]
+              properties:
+                target_asset_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated reference
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Reference'}
+  /projects/{project_id}/provenance:
+    get:
+      operationId: listProvenance
+      summary: List project provenance events in chain order
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Provenance events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items: {$ref: '#/components/schemas/ProvenanceEvent'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /projects/{project_id}/provenance/verify:
     get:
       operationId: verifyProvenance
@@ -708,6 +908,7 @@ components:
         project_id: {type: string, format: uuid}
         iteration_id: {type: string, format: uuid}
         user_id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
         action_type: {type: string, enum: [IDEA_CREATED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SELECTED, VARIANT_REJECTED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED]}
         payload: {type: object, additionalProperties: true}
         old_state: {type: object, additionalProperties: true}
@@ -732,14 +933,110 @@ components:
         actions:
           type: array
           items: {$ref: '#/components/schemas/HumanAction'}
+    PromptPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        original_text: {type: string, minLength: 1, maxLength: 20000}
+        ai_suggestions:
+          type: array
+          maxItems: 20
+          items: {type: string, maxLength: 4000}
+        final_text: {type: string, maxLength: 20000}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+        created_by: {type: string, enum: [human, ai, mixed]}
+    Asset:
+      type: object
+      required: [id, project_id, user_id, type, storage_key, mime_type, size, checksum, lifecycle_status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        generation_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        type: {type: string}
+        storage_key: {type: string}
+        preview_key: {type: string}
+        thumbnail_key: {type: string}
+        mime_type: {type: string}
+        size: {type: integer, format: int64, minimum: 0}
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+        checksum: {type: string, pattern: '^[0-9a-fA-F]{64}
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+}
+        exif: {type: object, additionalProperties: true}
+        lifecycle_status: {type: string, enum: [pending, active, orphaned, deleted]}
+        expires_at: {type: string, format: date-time}
+        deleted_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    AssetUploadInit:
+      type: object
+      required: [mime_type, size]
+      properties:
+        mime_type: {type: string, enum: [image/jpeg, image/png]}
+        size: {type: integer, format: int64, minimum: 1, maximum: 10485760}
+    AssetUpload:
+      type: object
+      required: [upload_id, asset, upload_url, expires_at]
+      properties:
+        upload_id: {type: string, format: uuid}
+        asset: {$ref: '#/components/schemas/Asset'}
+        upload_url: {type: string, format: uri}
+        expires_at: {type: string, format: date-time}
+    SignedURL:
+      type: object
+      required: [asset_id, url, expires_at]
+      properties:
+        asset_id: {type: string, format: uuid}
+        url: {type: string, format: uri}
+        expires_at: {type: string, format: date-time}
+    ProvenanceEvent:
+      type: object
+      required: [id, user_id, project_id, entity_type, entity_id, action, hash, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        entity_type: {type: string}
+        entity_id: {type: string, format: uuid}
+        action: {type: string}
+        payload: {type: object, additionalProperties: true}
+        parent_hash: {type: string}
+        hash: {type: string, pattern: '^[0-9a-fA-F]{64}
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+}
+        created_at: {type: string, format: date-time}
     ProvenanceVerification:
       type: object
-      required: [verified, event_count]
+      required: [valid, events_checked, broken_links, verified_at]
       properties:
-        verified: {type: boolean}
-        event_count: {type: integer}
-        first_invalid_event_id: {type: string, format: uuid}
-        reason: {type: string}
+        valid: {type: boolean}
+        events_checked: {type: integer, minimum: 0}
+        broken_links:
+          type: array
+          items: {type: string}
+        verified_at: {type: string, format: date-time}
 
     Error:
       type: object

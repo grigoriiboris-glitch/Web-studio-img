@@ -13,6 +13,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
+	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
 	"github.com/oleg3190/Web-studio-img/backend/internal/humanactions"
@@ -24,6 +25,9 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
 	"github.com/oleg3190/Web-studio-img/backend/internal/queue"
 	"github.com/oleg3190/Web-studio-img/backend/internal/references"
+	"github.com/oleg3190/Web-studio-img/backend/internal/similarity"
+	"github.com/oleg3190/Web-studio-img/backend/internal/exports"
+	"github.com/oleg3190/Web-studio-img/backend/internal/storage"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
@@ -41,6 +45,9 @@ func main() {
 	var referenceHandler *references.Handler
 	var actionHandler *humanactions.Handler
 	var provenanceHandler *provenance.Handler
+	var assetHandler *assets.UploadHandler
+	var similarityHandler *similarity.Handler
+	var exportHandler *exports.Handler
 	var projectDB *sql.DB
 
 	if cfg.DatabaseURL != "" {
@@ -68,9 +75,9 @@ func main() {
 		referenceStore, err := references.NewStore(projectDB)
 		if err != nil { logger.Error("reference store initialization failed", "error", err); os.Exit(1) }
 
-		projectHandler, err = projects.NewHandlerWithEvents(projectStore, eventStore)
+		projectHandler, err = projects.NewHandlerWithEventsAndProvenance(projectStore, eventStore, provenanceStore)
 		if err != nil { logger.Error("project handler initialization failed", "error", err); os.Exit(1) }
-		iterationHandler, err = iterations.NewHandlerWithEvents(iterationStore, eventStore)
+		iterationHandler, err = iterations.NewHandlerWithEventsAndProvenance(iterationStore, eventStore, provenanceStore)
 		if err != nil { logger.Error("iteration handler initialization failed", "error", err); os.Exit(1) }
 		eventHandler, err = events.NewHandler(eventStore)
 		if err != nil { logger.Error("event handler initialization failed", "error", err); os.Exit(1) }
@@ -81,6 +88,22 @@ func main() {
 		actionHandler, err = humanactions.NewHandler(actionStore, eventStore, provenanceStore)
 		if err != nil { logger.Error("human action handler initialization failed", "error", err); os.Exit(1) }
 		provenanceHandler, err = provenance.NewHandler(provenanceStore)
+		assetStore, assetErr := assets.NewStore(projectDB)
+		if assetErr != nil { logger.Error("asset store initialization failed", "error", assetErr); os.Exit(1) }
+		var objectStorage storage.StorageProvider
+		if cfg.S3Bucket != "" && cfg.S3AccessKey != "" && cfg.S3SecretKey != "" {
+			objectStorage, assetErr = storage.NewS3Storage(context.Background(), storage.S3Config{Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, Bucket: cfg.S3Bucket, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, UsePathStyle: cfg.S3UsePathStyle})
+			if assetErr != nil { logger.Error("object storage initialization failed", "error", assetErr); os.Exit(1) }
+		}
+		scanner := assets.SecurityScanner(assets.ImageSecurityScanner{})
+		if cfg.ClamAVAddress != "" { scanner = assets.CompositeScanner{assets.ImageSecurityScanner{}, assets.ClamAVScanner{Address: cfg.ClamAVAddress, Timeout: 10 * time.Second}} }
+		assetProcessor := &assets.Processor{Storage: objectStorage, Store: assetStore, Scanner: scanner}
+		assetHandler, err = assets.NewUploadHandler(assetStore, assetProcessor, objectStorage, eventStore, provenanceStore)
+		if err != nil { logger.Error("asset handler initialization failed", "error": err); os.Exit(1) }
+		similarityHandler, err = similarity.NewHandler(referenceStore, assetStore, objectStorage, eventStore, provenanceStore)
+		if err != nil { logger.Error("similarity handler initialization failed", "error": err); os.Exit(1) }
+		exportHandler, err = exports.NewHandler(assetStore, objectStorage, eventStore, provenanceStore, actionStore)
+		if err != nil { logger.Error("export handler initialization failed", "error", err); os.Exit(1) }
 		if err != nil { logger.Error("provenance handler initialization failed", "error", err); os.Exit(1) }
 
 		if cfg.RedisURL != "" && cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != "" {
@@ -104,7 +127,7 @@ func main() {
 	api := httpapi.NewServerWithStudio(
 		logger, cfg.CORSOrigins, limiter,
 		projectHandler, iterationHandler, generationHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 

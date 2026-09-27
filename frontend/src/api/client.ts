@@ -211,6 +211,7 @@ export interface HumanAction {
   project_id: string
   iteration_id?: string
   user_id: string
+  version: number
   action_type: string
   payload?: Record<string, unknown>
   old_state?: Record<string, unknown>
@@ -220,10 +221,10 @@ export interface HumanAction {
 }
 
 export interface ProvenanceVerification {
-  verified: boolean
-  event_count: number
-  first_invalid_event_id?: string
-  reason?: string
+  valid: boolean
+  events_checked: number
+  broken_links: string[]
+  verified_at: string
 }
 
 // eslint-disable-next-line no-unused-vars
@@ -324,6 +325,13 @@ export const promptsApi = {
     components?: Record<string, string>
     created_by?: Prompt['created_by']
   }) => apiRequest<Prompt>('/projects/' + projectId + '/prompts', { method: 'POST', body: JSON.stringify(input) }),
+  patch: (projectId: string, promptId: string, input: {
+    original_text?: string
+    ai_suggestions?: string[]
+    final_text?: string
+    components?: Record<string, string>
+    created_by?: Prompt['created_by']
+  }) => apiRequest<Prompt>('/projects/' + projectId + '/prompts/' + promptId, { method: 'PATCH', body: JSON.stringify(input) }),
   approve: (projectId: string, promptId: string, input: {
     final_text: string
     components?: Record<string, string>
@@ -356,6 +364,8 @@ export const referencesApi = {
   }) => apiRequest<Reference>('/projects/' + projectId + '/references/' + referenceId, { method: 'PATCH', body: JSON.stringify(input) }),
   remove: (projectId: string, referenceId: string) =>
     apiRequest<void>('/projects/' + projectId + '/references/' + referenceId, { method: 'DELETE' }),
+  analyzeInfluence: (projectId: string, referenceId: string, targetAssetId: string) =>
+    apiRequest<Reference>('/projects/' + projectId + '/references/' + referenceId + '/influence', { method: 'POST', body: JSON.stringify({ target_asset_id: targetAssetId }) }),
 }
 
 export const humanActionsApi = {
@@ -371,5 +381,45 @@ export const humanActionsApi = {
 }
 
 export const provenanceApi = {
+  list: (projectId: string) => apiRequest<{ events: ProjectEvent[] }>('/projects/' + projectId + '/provenance'),
   verify: (projectId: string) => apiRequest<ProvenanceVerification>('/projects/' + projectId + '/provenance/verify'),
+}
+
+
+export interface Asset {
+  id: string
+  project_id: string
+  generation_id?: string
+  type: string
+  user_id: string
+  storage_key: string
+  preview_key?: string
+  thumbnail_key?: string
+  mime_type: string
+  size: number
+  width: number
+  height: number
+  checksum: string
+  exif?: Record<string, unknown>
+  lifecycle_status: string
+  created_at: string
+}
+
+export const assetsApi = {
+  get: (projectId: string, assetId: string) => apiRequest<Asset>('/projects/' + projectId + '/assets/' + assetId),
+  downloadUrl: (projectId: string, assetId: string) => apiRequest<{ asset_id: string; url: string; expires_at: string }>('/projects/' + projectId + '/assets/' + assetId + '/download-url'),
+  uploadMultipart: async (projectId: string, file: File) => {
+    const token = localStorage.getItem('web-studio-access-token')
+    const form = new FormData()
+    form.append('file', file)
+    const response = await fetch(API_BASE_URL + '/projects/' + projectId + '/assets', {
+      method: 'POST', body: form, headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+    })
+    if (!response.ok) throw new Error('Asset upload failed with status ' + response.status)
+    return await response.json() as Asset
+  },
+}
+
+export const exportsApi = {
+  create: (projectId: string, assetId: string) => apiRequest<{ asset_id: string; url: string; expires_at: string }>('/projects/' + projectId + '/assets/' + assetId + '/export', { method: 'POST' }),
 }
