@@ -161,7 +161,7 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 	payload:=map[string]any{"mutation_id":mid,"accepted_iteration_id":iterationID}
 	if h.events!=nil{_,_=h.events.Append(r.Context(),u.UserID,pid,"iteration.created","iteration",iterationID,payload)}
 	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u.UserID,ProjectID:pid,IterationID:&iterationID,EntityType:"composition_mutation",EntityID:mid,Action:"composition.mutation.accepted",Payload:payload})}
-	if h.actions!=nil{_,_=h.actions.Create(r.Context(),u.UserID,pid,humanactions.Request{IterationID:&iterationID,ActionType:"COMPOSITION_MUTATION_ACCEPTED",Payload:payload,NewState:payload,AIInfluence:map[string]any{"accepted":true}})}
+	if h.actions!=nil{_,_=h.actions.Create(r.Context(),u.UserID,pid,humanactions.Request{IterationID:&iterationID,ActionType:"COMPOSITION_MUTATION_ACCEPTED",Payload:payload,OldState:map[string]any{"status":"proposed","mutation_id":mid},NewState:map[string]any{"status":"accepted","mutation_id":mid,"accepted_iteration_id":iterationID},AIInfluence:map[string]any{"accepted":true}})}
 	_ = h.db.QueryRowContext(r.Context(),`SELECT id,project_id,user_id,composition_spec_id,source_similarity_check_id,suggestions,status,accepted_iteration_id,created_at FROM composition_mutations WHERE id=$1`,mid).Scan(&m.ID,&m.ProjectID,&m.UserID,&m.CompositionSpecID,&m.SourceSimilarityCheckID,&stored,&m.Status,&m.AcceptedIterationID,&m.CreatedAt)
 	_ = json.Unmarshal(stored,&m.Suggestions); writeJSON(w,200,m)
 }
@@ -172,7 +172,12 @@ func (h *Handler) reject(w http.ResponseWriter, r *http.Request) {
 	mid, err := uuid.Parse(r.PathValue("mutation_id")); if err != nil { writeErr(w,400,"invalid_mutation_id","invalid mutation id"); return }
 	var m Mutation; var s []byte
 	err=h.db.QueryRowContext(r.Context(),`UPDATE composition_mutations SET status='rejected' WHERE id=$1 AND project_id=$2 AND user_id=$3 AND status='proposed' RETURNING id,project_id,user_id,composition_spec_id,source_similarity_check_id,suggestions,status,accepted_iteration_id,created_at`,mid,pid,u.UserID).Scan(&m.ID,&m.ProjectID,&m.UserID,&m.CompositionSpecID,&m.SourceSimilarityCheckID,&s,&m.Status,&m.AcceptedIterationID,&m.CreatedAt)
-	if errors.Is(err,sql.ErrNoRows){writeErr(w,409,"mutation_already_decided","mutation not found or already decided");return};if err!=nil{writeErr(w,500,"mutation_reject_failed","could not reject mutation");return};_=json.Unmarshal(s,&m.Suggestions);writeJSON(w,200,m)
+	if errors.Is(err,sql.ErrNoRows){writeErr(w,409,"mutation_already_decided","mutation not found or already decided");return};if err!=nil{writeErr(w,500,"mutation_reject_failed","could not reject mutation");return};_=json.Unmarshal(s,&m.Suggestions)
+	payload:=map[string]any{"mutation_id":mid,"status":"rejected"}
+	if h.events!=nil{_,_=h.events.Append(r.Context(),u.UserID,pid,"composition.mutation.rejected","composition_mutation",mid,payload)}
+	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u.UserID,ProjectID:pid,EntityType:"composition_mutation",EntityID:mid,Action:"composition.mutation.rejected",Payload:payload})}
+	if h.actions!=nil{_,_=h.actions.Create(r.Context(),u.UserID,pid,humanactions.Request{ActionType:"AI_RECOMMENDATION_REJECTED",Payload:payload,OldState:map[string]any{"status":"proposed","mutation_id":mid},NewState:map[string]any{"status":"rejected","mutation_id":mid},AIInfluence:map[string]any{"source":"composition_mutation","rejected":true}})}
+	writeJSON(w,200,m)
 }
 
 func decode(r *http.Request,v any) error {
