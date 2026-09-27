@@ -65,6 +65,14 @@ type Request struct {
 	Influence       *Influence
 }
 
+func NormalizeInfluence(input *Influence) *Influence {
+	if input == nil { return nil }
+	value := *input
+	value.Warning = ""
+	if value.Composition >= 0.8 { value.Warning = "High composition similarity; review before use." }
+	return &value
+}
+
 func (r Request) Validate() error {
 	switch r.SourceType {
 	case SourceInspiration, SourceReference, SourceDirect, SourceUserCreated, SourcePublicDomain, SourceUnknown:
