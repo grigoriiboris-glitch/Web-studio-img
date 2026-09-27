@@ -425,6 +425,12 @@ func (p *Processor) CleanupExpired(ctx context.Context, limit int) error {
 		return err
 	}
 	for _, item := range items {
+		parts, partsErr := p.Store.ListUploadParts(ctx, item.UserID, item.ProjectID, item.ID)
+		if partsErr == nil {
+			for _, part := range parts {
+				_ = deleteObjectIfPresent(ctx, p.Storage, part.StorageKey)
+			}
+		}
 		_ = deleteObjectIfPresent(ctx, p.Storage, item.StorageKey)
 		_ = deleteObjectIfPresent(ctx, p.Storage, stagingKey(item.StorageKey))
 		if item.PreviewKey != nil {
