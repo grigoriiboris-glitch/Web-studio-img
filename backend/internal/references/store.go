@@ -57,17 +57,21 @@ func (s *Store) List(ctx context.Context,userID,projectID uuid.UUID)([]Reference
 
 func (s *Store) Update(ctx context.Context,userID,projectID,referenceID uuid.UUID,req Request)(Reference,error){
 	if err:=req.Validate();err!=nil{return Reference{},err}
+	if err:=s.validateAssetForProject(ctx,userID,projectID,req.AssetID);err!=nil{return Reference{},err}
+	influenceRaw,err:=json.Marshal(req.Influence);if err!=nil{return Reference{},err}
 	var r Reference
-	err:=s.db.QueryRowContext(ctx,`
+	err=s.db.QueryRowContext(ctx,`
 		UPDATE "references"
-		SET asset_id=$1,source_url=$2,source_type=$3,license=$4,license_verified=$5,user_owned=$6,sha256=$7,notes=$8,updated_at=now()
-		WHERE id=$9 AND project_id=$10
-		  AND project_id IN (SELECT id FROM projects WHERE user_id=$11 AND status <> 'deleted')
-		RETURNING id,project_id,asset_id,source_url,source_type,license,license_verified,user_owned,sha256,notes,created_at,updated_at
-		`,req.AssetID,req.SourceURL,req.SourceType,strings.TrimSpace(req.License),req.LicenseVerified,req.UserOwned,req.SHA256,req.Notes,influenceRaw,referenceID,projectID,userID).Scan(
+		SET asset_id=$1,source_url=$2,source_type=$3,license=$4,license_verified=$5,user_owned=$6,sha256=$7,notes=$8,influence=$9,updated_at=now()
+		WHERE id=$10 AND project_id=$11
+		  AND project_id IN (SELECT id FROM projects WHERE user_id=$12 AND status <> 'deleted')
+		RETURNING id,project_id,asset_id,source_url,source_type,license,license_verified,user_owned,sha256,notes,influence,created_at,updated_at
+	`,req.AssetID,req.SourceURL,req.SourceType,strings.TrimSpace(req.License),req.LicenseVerified,req.UserOwned,req.SHA256,req.Notes,influenceRaw,referenceID,projectID,userID).Scan(
 		&r.ID,&r.ProjectID,&r.AssetID,&r.SourceURL,&r.SourceType,&r.License,&r.LicenseVerified,&r.UserOwned,&r.SHA256,&r.Notes,&influenceRaw,&r.CreatedAt,&r.UpdatedAt)
-	_ = json.Unmarshal(influenceRaw, &r.Influence)
-	if errors.Is(err,sql.ErrNoRows){return Reference{},ErrReferenceNotFound};if err!=nil{return Reference{},err};return r,nil
+	if errors.Is(err,sql.ErrNoRows){return Reference{},ErrReferenceNotFound}
+	if err!=nil{return Reference{},err}
+	_ = json.Unmarshal(influenceRaw,&r.Influence)
+	return r,nil
 }
 
 func (s *Store) Delete(ctx context.Context,userID,projectID,referenceID uuid.UUID) error {
