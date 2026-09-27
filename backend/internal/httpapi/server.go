@@ -23,6 +23,10 @@ func NewServerWithProjects(logger *slog.Logger, origins []string, limiter *secur
 	return newServer(logger, origins, limiter, projectHandler, nil)
 }
 
+func NewServerWithProjectsAndIterations(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler) *Server {
+	return newServer(logger, origins, limiter, projectHandler, iterationHandler)
+}
+
 func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
