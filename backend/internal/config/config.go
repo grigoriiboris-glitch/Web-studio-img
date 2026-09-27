@@ -20,6 +20,7 @@ type Config struct {
 	S3AccessKey     string
 	S3SecretKey     string
 	S3UsePathStyle  bool
+	ClamAVAddress   string
 	JWTSecret       string
 	CORSOrigins     []string
 	RateLimit       int
@@ -28,6 +29,11 @@ type Config struct {
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+	YandexARTEndpoint string
+	YandexARTOperationEndpoint string
+	YandexARTAPIKey string
+	YandexARTFolderID string
+	YandexARTModel string
 }
 
 func Load() (Config, error) {
@@ -42,6 +48,7 @@ func Load() (Config, error) {
 		S3AccessKey:     os.Getenv("S3_ACCESS_KEY"),
 		S3SecretKey:     os.Getenv("S3_SECRET_KEY"),
 		S3UsePathStyle:  boolEnv("S3_PATH_STYLE", false),
+		ClamAVAddress:   strings.TrimSpace(os.Getenv("CLAMAV_ADDR")),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
 		CORSOrigins:     splitCSV(getenv("CORS_ORIGINS", "http://localhost:5173")),
 		RateLimit:       intEnv("RATE_LIMIT_REQUESTS", 120),
@@ -50,6 +57,11 @@ func Load() (Config, error) {
 		WriteTimeout:    durationEnv("HTTP_WRITE_TIMEOUT", 15*time.Second),
 		IdleTimeout:     durationEnv("HTTP_IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout: durationEnv("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
+		YandexARTEndpoint: getenv("YANDEXART_ENDPOINT", "https://llm.api.cloud.yandex.net"),
+		YandexARTOperationEndpoint: getenv("YANDEXART_OPERATION_ENDPOINT", "https://operation.api.cloud.yandex.net"),
+		YandexARTAPIKey: os.Getenv("YANDEXART_API_KEY"),
+		YandexARTFolderID: os.Getenv("YANDEXART_FOLDER_ID"),
+		YandexARTModel: getenv("YANDEXART_MODEL", "yandex-art/latest"),
 	}
 	if cfg.Port == "" {
 		return Config{}, errors.New("APP_PORT must not be empty")
