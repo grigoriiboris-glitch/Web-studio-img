@@ -991,7 +991,16 @@ paths:
         required: false
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/AssistantToolInput'}
+            schema:
+              oneOf:
+                - {$ref: '#/components/schemas/AssistantToolInput'}
+                - {$ref: '#/components/schemas/CompareIterationsInput'}
+            examples:
+              compareIterations:
+                summary: Compare two immutable iterations
+                value:
+                  iteration_a_id: 00000000-0000-0000-0000-000000000001
+                  iteration_b_id: 00000000-0000-0000-0000-000000000002
       responses:
         '200':
           description: Tool result plus logged AI action
@@ -1082,6 +1091,13 @@ components:
     AssistantToolInput:
       type: object
       additionalProperties: true
+    CompareIterationsInput:
+      type: object
+      additionalProperties: false
+      required: [iteration_a_id, iteration_b_id]
+      properties:
+        iteration_a_id: {type: string, format: uuid}
+        iteration_b_id: {type: string, format: uuid}
     AssistantRecommendation:
       type: object
       required: [recommendation, reason, evidence, confidence, affected_entity, expected_effect]
