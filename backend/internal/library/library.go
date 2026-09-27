@@ -45,7 +45,7 @@ func(h *Handler)list(w http.ResponseWriter,r *http.Request,kind string){
 	if q!=""{query+=" AND (name ILIKE $3 OR COALESCE(description,'') ILIKE $3 OR prompt_fragment ILIKE $3)";args=append(args,"%"+q+"%")}
 	if category!=""{query+=fmt.Sprintf(" AND category=$%d",len(args)+1);args=append(args,category)}
 	query+=" ORDER BY user_id NULLS FIRST, created_at DESC LIMIT 200"
-	rows,e:=h.db.QueryContext(r.Context(),query,args...);if err!=nil{writeErr(w,500,"library_list_failed","could not list library items");return};defer rows.Close()
+	rows,e:=h.db.QueryContext(r.Context(),query,args...);if e!=nil{writeErr(w,500,"library_list_failed","could not list library items");return};defer rows.Close()
 	out:=[]Item{};for rows.Next(){var x Item;var tags []byte;if e:=rows.Scan(&x.ID,&x.UserID,&x.Kind,&x.Category,&x.Name,&x.Description,&tags,&x.PromptFragment,&x.PreviewKey,&x.CreatedAt,&x.UpdatedAt);e!=nil{writeErr(w,500,"library_list_failed","could not read library items");return};_=json.Unmarshal(tags,&x.Tags);out=append(out,x)}
 	if e:=rows.Err();e!=nil{writeErr(w,500,"library_list_failed","could not read library items");return};writeJSON(w,200,map[string]any{"items":out})
 }
@@ -57,7 +57,7 @@ func(h *Handler)create(w http.ResponseWriter,r *http.Request,kind string){
 	in.Category=strings.TrimSpace(in.Category);in.Name=strings.TrimSpace(in.Name);in.PromptFragment=strings.TrimSpace(in.PromptFragment)
 	if in.Category==""||in.Name==""||in.PromptFragment==""||len(in.Tags)>50||len([]rune(in.Name))>200||len([]rune(in.Category))>100||len([]rune(in.PromptFragment))>4000{writeErr(w,400,"invalid_library_item","invalid library item");return}
 	raw,_:=json.Marshal(in.Tags);var x Item;var stored []byte
-	err:=h.db.QueryRowContext(r.Context(),`INSERT INTO library_items(user_id,kind,category,name,description,tags,prompt_fragment,preview_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,user_id,kind,category,name,description,tags,prompt_fragment,preview_key,created_at,updated_at`,u.UserID,kind,in.Category,in.Name,in.Description,raw,in.PromptFragment,in.PreviewKey).Scan(&x.ID,&x.UserID,&x.Kind,&x.Category,&x.Name,&x.Description,&stored,&x.PromptFragment,&x.PreviewKey,&x.CreatedAt,&x.UpdatedAt)
+	err=h.db.QueryRowContext(r.Context(),`INSERT INTO library_items(user_id,kind,category,name,description,tags,prompt_fragment,preview_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,user_id,kind,category,name,description,tags,prompt_fragment,preview_key,created_at,updated_at`,u.UserID,kind,in.Category,in.Name,in.Description,raw,in.PromptFragment,in.PreviewKey).Scan(&x.ID,&x.UserID,&x.Kind,&x.Category,&x.Name,&x.Description,&stored,&x.PromptFragment,&x.PreviewKey,&x.CreatedAt,&x.UpdatedAt)
 	if err!=nil{writeErr(w,500,"library_create_failed","could not create library item");return};_=json.Unmarshal(stored,&x.Tags);writeJSON(w,201,x)
 }
 func writeJSON(w http.ResponseWriter,s int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(s);_=json.NewEncoder(w).Encode(v)}
