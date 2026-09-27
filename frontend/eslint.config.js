@@ -44,6 +44,7 @@ export default [
     files: [
       'src/features/projects/DashboardView.vue',
       'src/features/projects/StudioView.vue',
+      'src/features/projects/CreativeResourcesView.vue',
     ],
     rules: {
       'vue/max-attributes-per-line': 'off',
