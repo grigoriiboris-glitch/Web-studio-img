@@ -115,8 +115,6 @@ func (h *Handler) putSpec(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) getSpec(w http.ResponseWriter, r *http.Request) {
 	u, ok := auth.PrincipalFromContext(r.Context()); if !ok { writeErr(w,401,"unauthorized","authentication required"); return }
-	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-	if idempotencyKey == "" { writeErr(w,400,"missing_idempotency_key","Idempotency-Key header is required"); return }
 	pid, err := uuid.Parse(r.PathValue("project_id")); if err != nil { writeErr(w,400,"invalid_project_id","invalid project id"); return }
 	iid, err := uuid.Parse(r.PathValue("iteration_id")); if err != nil { writeErr(w,400,"invalid_iteration_id","invalid iteration id"); return }
 	var s Spec; var fp,bb,rp,hi,ns,dg,os,ld []byte
@@ -130,7 +128,9 @@ func (h *Handler) getSpec(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) suggest(w http.ResponseWriter, r *http.Request) {
-	u, ok := auth.PrincipalFromContext(r.Context()); if !ok { writeErr(w,401,"unauthorized","authentication required"); return }
+	u, ok := auth.PrincipalFromContext(r.Context()); if !ok { writeErr(w,401,"unauthorized","authentication required"); return }	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idempotencyKey == "" { writeErr(w,400,"missing_idempotency_key","Idempotency-Key header is required"); return }
+
 	pid, err := uuid.Parse(r.PathValue("project_id")); if err != nil { writeErr(w,400,"invalid_project_id","invalid project id"); return }
 	var in struct { CompositionSpecID *uuid.UUID `json:"composition_spec_id"`; SourceSimilarityCheckID *uuid.UUID `json:"source_similarity_check_id"`; CompositionSimilarity float64 `json:"composition_similarity"` }
 	if err := decode(r,&in); err != nil { writeErr(w,400,"invalid_request","invalid mutation payload"); return }
