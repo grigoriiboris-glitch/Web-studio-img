@@ -420,6 +420,139 @@ export const assetsApi = {
   },
 }
 
+export interface SimilarityCheck {
+  id: string
+  project_id: string
+  user_id: string
+  target_asset_id: string
+  visual_score: number
+  composition_score: number
+  semantic_score: number
+  style_score: number
+  search_scope: string
+  sources: string[]
+  unavailable_sources: string[]
+  algorithm: string
+  algorithm_version: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+export const similarityApi = {
+  create: (projectId: string, input: { target_asset_id: string; reference_ids?: string[]; search_scope?: string }, idempotencyKey: string) =>
+    apiRequest<SimilarityCheck>('/projects/' + projectId + '/similarity-checks', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify(input),
+    }),
+  get: (checkId: string) => apiRequest<SimilarityCheck>('/similarity-checks/' + checkId),
+}
+
+export interface CreationExport {
+  id: string
+  project_id: string
+  user_id: string
+  final_asset_id: string
+  status: 'running' | 'completed' | 'failed'
+  artifacts: Record<string, string>
+  manifest: Record<string, unknown>
+  error?: string
+  created_at: string
+  completed_at?: string
+}
+
 export const exportsApi = {
-  create: (projectId: string, assetId: string) => apiRequest<{ asset_id: string; url: string; expires_at: string }>('/projects/' + projectId + '/assets/' + assetId + '/export', { method: 'POST' }),
+  create: (projectId: string, finalAssetId?: string, idempotencyKey?: string) =>
+    apiRequest<CreationExport>('/projects/' + projectId + '/exports', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify(finalAssetId ? { final_asset_id: finalAssetId } : {}),
+    }),
+  get: (exportId: string) => apiRequest<CreationExport>('/exports/' + exportId),
+}
+
+export interface CompositionSpec {
+  id: string
+  project_id: string
+  iteration_id: string
+  user_id: string
+  focal_points: unknown[]
+  bounding_boxes: unknown[]
+  relative_positions: Record<string, unknown>
+  horizon?: number
+  camera_elevation?: number
+  perspective?: string
+  hierarchy: unknown[]
+  negative_space: Record<string, unknown>
+  dominant_geometry: Record<string, unknown>
+  object_scale: Record<string, unknown>
+  light_direction: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface CompositionMutation {
+  id: string
+  project_id: string
+  user_id: string
+  composition_spec_id?: string
+  source_similarity_check_id?: string
+  suggestions: string[]
+  status: 'proposed' | 'accepted' | 'rejected'
+  accepted_iteration_id?: string
+  created_at: string
+}
+
+export const compositionApi = {
+  get: (projectId: string, iterationId: string) =>
+    apiRequest<CompositionSpec>('/projects/' + projectId + '/iterations/' + iterationId + '/composition'),
+  update: (projectId: string, iterationId: string, input: Partial<Omit<CompositionSpec, 'id' | 'project_id' | 'iteration_id' | 'user_id' | 'created_at' | 'updated_at'>>) =>
+    apiRequest<CompositionSpec>('/projects/' + projectId + '/iterations/' + iterationId + '/composition', {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  suggest: (projectId: string, input: { composition_spec_id?: string; source_similarity_check_id?: string; composition_similarity: number }) =>
+    apiRequest<CompositionMutation>('/projects/' + projectId + '/composition-mutation-suggestions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  accept: (projectId: string, mutationId: string) =>
+    apiRequest<CompositionMutation>('/projects/' + projectId + '/composition-mutation-suggestions/' + mutationId + '/accept', { method: 'POST' }),
+  reject: (projectId: string, mutationId: string) =>
+    apiRequest<CompositionMutation>('/projects/' + projectId + '/composition-mutation-suggestions/' + mutationId + '/reject', { method: 'POST' }),
+}
+
+export interface LibraryItem {
+  id: string
+  user_id?: string
+  kind: 'material' | 'texture'
+  category: string
+  name: string
+  description?: string
+  tags: string[]
+  prompt_fragment: string
+  preview_key?: string
+  created_at: string
+  updated_at: string
+}
+
+function queryString(values: Record<string, string | undefined>) {
+  const params = new URLSearchParams()
+  Object.entries(values).forEach(([key, value]) => { if (value?.trim()) params.set(key, value.trim()) })
+  const query = params.toString()
+  return query ? '?' + query : ''
+}
+
+export const materialsApi = {
+  list: (projectId: string, q?: string, category?: string) =>
+    apiRequest<{ items: LibraryItem[] }>('/projects/' + projectId + '/materials' + queryString({ q, category })),
+  create: (projectId: string, input: { category: string; name: string; description?: string; tags?: string[]; prompt_fragment: string; preview_key?: string }) =>
+    apiRequest<LibraryItem>('/projects/' + projectId + '/materials', { method: 'POST', body: JSON.stringify(input) }),
+}
+
+export const texturesApi = {
+  list: (projectId: string, q?: string, category?: string) =>
+    apiRequest<{ items: LibraryItem[] }>('/projects/' + projectId + '/textures' + queryString({ q, category })),
+  create: (projectId: string, input: { category: string; name: string; description?: string; tags?: string[]; prompt_fragment: string; preview_key?: string }) =>
+    apiRequest<LibraryItem>('/projects/' + projectId + '/textures', { method: 'POST', body: JSON.stringify(input) }),
 }
