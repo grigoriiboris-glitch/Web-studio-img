@@ -112,6 +112,82 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /projects/{project_id}/iterations:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listProjectIterations
+      summary: List immutable creative iterations
+      responses:
+        '200':
+          description: Iteration timeline
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IterationList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createIteration
+      summary: Create an immutable iteration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/IterationInput'}
+      responses:
+        '201':
+          description: Iteration created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Iteration'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/iterations/{iteration_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: iteration_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getIteration
+      summary: Get an immutable iteration
+      responses:
+        '200':
+          description: Iteration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Iteration'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/iterations/{iteration_id}/restore:
+    post:
+      operationId: restoreIteration
+      summary: Restore an iteration by creating a new child iteration
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: iteration_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Restored iteration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Iteration'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
 components:
   responses:
     BadRequest:
@@ -133,6 +209,33 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   schemas:
+    Iteration:
+      type: object
+      required: [id, project_id, type, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        parent_iteration_id: {type: string, format: uuid}
+        type: {type: string, enum: [idea, sketch, generation, selection, composition, prompt, manual_edit, final]}
+        title: {type: string, maxLength: 200}
+        description: {type: string, maxLength: 5000}
+        created_at: {type: string, format: date-time}
+    IterationInput:
+      type: object
+      required: [type]
+      additionalProperties: false
+      properties:
+        parent_iteration_id: {type: string, format: uuid}
+        type: {type: string, enum: [idea, sketch, generation, selection, composition, prompt, manual_edit, final]}
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 5000}
+    IterationList:
+      type: object
+      required: [iterations]
+      properties:
+        iterations:
+          type: array
+          items: {$ref: '#/components/schemas/Iteration'}
     Project:
       type: object
       required: [id, user_id, name, status, created_at, updated_at]
