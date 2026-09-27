@@ -29,7 +29,7 @@ func TestFactCheckSupportedContract(t *testing.T) {
 	if result["status"] != factStatusSupported {
 		t.Fatalf("unexpected status: %#v", result["status"])
 	}
-	if confidence != 0.85 {
+	if confidence < 0.849999 || confidence > 0.850001 {
 		t.Fatalf("unexpected confidence: %v", confidence)
 	}
 	if !strings.Contains(explanation, "does not invent evidence") {
