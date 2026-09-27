@@ -3,7 +3,7 @@ WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
+RUN go mod tidy && go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 FROM alpine:3.22
 RUN addgroup -S app && adduser -S -G app app
 WORKDIR /app

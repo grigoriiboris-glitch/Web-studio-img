@@ -22,9 +22,9 @@ type S3Config struct {
 }
 
 type S3Storage struct {
-	bucket  string
-	client  *s3.Client
-	presign *s3.PresignClient
+	bucket   string
+	client   *s3.Client
+	presign  *s3.PresignClient
 	uploader *manager.Uploader
 }
 
@@ -54,9 +54,9 @@ func NewS3Storage(ctx context.Context, cfg S3Config) (*S3Storage, error) {
 		}
 	})
 	return &S3Storage{
-		bucket:  cfg.Bucket,
-		client:  client,
-		presign: s3.NewPresignClient(client),
+		bucket:   cfg.Bucket,
+		client:   client,
+		presign:  s3.NewPresignClient(client),
 		uploader: manager.NewUploader(client),
 	}, nil
 }
