@@ -1090,6 +1090,385 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
 
+  /projects/{project_id}/materials/{item_id}:
+    parameters:
+      - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: item_id, in: path, required: true, schema: {type: string, format: uuid}}
+    patch:
+      operationId: updateMaterial
+      summary: Update a user-owned material
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/LibraryItemInput'}}
+      responses:
+        '200': {description: Material, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteMaterial
+      summary: Delete a user-owned material
+      responses:
+        '204': {description: Material deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/materials/{item_id}/select:
+    post:
+      operationId: selectMaterial
+      summary: Select a material and record the creative decision
+      responses:
+        '200': {description: Selected material}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/textures/{item_id}:
+    parameters:
+      - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: item_id, in: path, required: true, schema: {type: string, format: uuid}}
+    patch:
+      operationId: updateTexture
+      summary: Update a user-owned texture
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/LibraryItemInput'}}
+      responses:
+        '200': {description: Texture, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteTexture
+      summary: Delete a user-owned texture
+      responses:
+        '204': {description: Texture deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/textures/{item_id}/select:
+    post:
+      operationId: selectTexture
+      summary: Select a texture and record the creative decision
+      responses:
+        '200': {description: Selected texture}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /style-profiles:
+    get:
+      operationId: listStyleProfiles
+      summary: List the authenticated user's style profiles
+      responses:
+        '200': {description: Style profiles, content: {application/json: {schema: {$ref: '#/components/schemas/StyleProfileList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createStyleProfile
+      summary: Create a style profile
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/StyleProfileInput'}}
+      responses:
+        '201': {description: Style profile, content: {application/json: {schema: {$ref: '#/components/schemas/StyleProfile'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /style-profiles/{profile_id}:
+    patch:
+      operationId: updateStyleProfile
+      summary: Update and version a style profile
+      parameters:
+        - {name: profile_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/StyleProfileInput'}}
+      responses:
+        '200': {description: Style profile, content: {application/json: {schema: {$ref: '#/components/schemas/StyleProfile'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/style-profiles:
+    get:
+      operationId: listProjectStyleProfiles
+      summary: List style profiles for an owned project
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Style profiles, content: {application/json: {schema: {$ref: '#/components/schemas/StyleProfileList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/style-profiles/infer:
+    post:
+      operationId: inferStyleProfile
+      summary: Infer a descriptive style profile from recorded project choices
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '201': {description: Inferred style profile, content: {application/json: {schema: {$ref: '#/components/schemas/StyleProfile'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/style-profiles/{profile_id}/apply:
+    post:
+      operationId: suggestStyleProfilePrompt
+      summary: Return a style-derived prompt suggestion without automatic mutation
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: profile_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Prompt suggestion}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /projects/{project_id}/asset-dna:
+    get:
+      operationId: listAssetDNA
+      summary: List Asset DNA profiles
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Asset DNA, content: {application/json: {schema: {$ref: '#/components/schemas/AssetDNAProfileList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/asset-dna/analyze:
+    post:
+      operationId: analyzeAssetDNA
+      summary: Analyze recorded project choices into Asset DNA
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '201': {description: Asset DNA, content: {application/json: {schema: {$ref: '#/components/schemas/AssetDNAProfile'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/visual-language:
+    get:
+      operationId: listPersonalVisualLanguage
+      summary: List personal visual language profiles
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Visual language, content: {application/json: {schema: {$ref: '#/components/schemas/VisualLanguageProfileList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/visual-language/analyze:
+    post:
+      operationId: analyzePersonalVisualLanguage
+      summary: Analyze visual language from all owned project choices
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '201': {description: Visual language profile, content: {application/json: {schema: {$ref: '#/components/schemas/VisualLanguageProfile'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/visual-language/{profile_id}/apply:
+    post:
+      operationId: suggestVisualLanguagePrompt
+      summary: Return a visual-language prompt suggestion without automatic mutation
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: profile_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Prompt suggestion}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /projects/{project_id}/rights:
+    get:
+      operationId: listRights
+      summary: List rights registry records
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Rights, content: {application/json: {schema: {$ref: '#/components/schemas/RightsList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createRights
+      summary: Create or update rights metadata
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/RightsInput'}}
+      responses:
+        '201': {description: Rights record, content: {application/json: {schema: {$ref: '#/components/schemas/RightsItem'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/rights/{right_id}:
+    patch:
+      operationId: updateRights
+      summary: Update rights metadata
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: right_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/RightsInput'}}
+      responses:
+        '200': {description: Rights record, content: {application/json: {schema: {$ref: '#/components/schemas/RightsItem'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteRights
+      summary: Delete rights metadata
+      responses:
+        '204': {description: Rights record deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /constraints:
+    get:
+      operationId: listGlobalConstraints
+      summary: List global Do Not Use constraints
+      responses:
+        '200': {description: Constraints, content: {application/json: {schema: {$ref: '#/components/schemas/ConstraintList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createGlobalConstraint
+      summary: Create global Do Not Use constraint
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/ConstraintInput'}}
+      responses:
+        '201': {description: Constraint, content: {application/json: {schema: {$ref: '#/components/schemas/Constraint'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/constraints:
+    get:
+      operationId: listProjectConstraints
+      summary: List effective project Do Not Use constraints
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Constraints, content: {application/json: {schema: {$ref: '#/components/schemas/ConstraintList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createProjectConstraint
+      summary: Create a project Do Not Use constraint
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/ConstraintInput'}}
+      responses:
+        '201': {description: Constraint, content: {application/json: {schema: {$ref: '#/components/schemas/Constraint'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/constraints/{constraint_id}:
+    patch:
+      operationId: updateConstraint
+      summary: Update a Do Not Use constraint
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: constraint_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/ConstraintInput'}}
+      responses:
+        '200': {description: Constraint, content: {application/json: {schema: {$ref: '#/components/schemas/Constraint'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteConstraint
+      summary: Delete a Do Not Use constraint
+      responses:
+        '204': {description: Constraint deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/layers:
+    get:
+      operationId: listLayers
+      summary: List layered project state
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Layers, content: {application/json: {schema: {$ref: '#/components/schemas/LayerList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createLayer
+      summary: Create a project layer record
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/LayerInput'}}
+      responses:
+        '201': {description: Layer, content: {application/json: {schema: {$ref: '#/components/schemas/Layer'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/layers/{layer_id}:
+    patch:
+      operationId: updateLayer
+      summary: Update a project layer record
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: layer_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/LayerInput'}}
+      responses:
+        '200': {description: Layer, content: {application/json: {schema: {$ref: '#/components/schemas/Layer'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteLayer
+      summary: Delete a project layer record
+      responses:
+        '204': {description: Layer deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/manual-edits:
+    get:
+      operationId: listManualEdits
+      summary: List manual edit records
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Manual edits, content: {application/json: {schema: {$ref: '#/components/schemas/ManualEditList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createManualEdit
+      summary: Create an immutable manual edit record
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 200}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: '#/components/schemas/ManualEditInput'}}
+      responses:
+        '201': {description: Manual edit, content: {application/json: {schema: {$ref: '#/components/schemas/ManualEdit'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/manual-edits/{edit_id}/apply:
+    post:
+      operationId: applyManualEdit
+      summary: Approve a manual edit with a derived result asset
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: edit_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Manual edit, content: {application/json: {schema: {$ref: '#/components/schemas/ManualEdit'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /projects/{project_id}/manual-edits/{edit_id}/reject:
+    post:
+      operationId: rejectManualEdit
+      summary: Reject a manual edit
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: edit_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Manual edit, content: {application/json: {schema: {$ref: '#/components/schemas/ManualEdit'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
 components:
   responses:
     BadRequest:
@@ -1117,6 +1496,222 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   schemas:
+
+    StyleProfile:
+      type: object
+      required: [id, user_id, name, parameters, version, prompt_influence, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 5000}
+        parameters: {type: object, additionalProperties: true}
+        version: {type: integer, minimum: 1}
+        prompt_influence: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    StyleProfileInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 5000}
+        parameters: {type: object, additionalProperties: true}
+        prompt_influence: {type: boolean}
+    StyleProfileList:
+      type: object
+      required: [profiles]
+      properties:
+        profiles:
+          type: array
+          items: {$ref: '#/components/schemas/StyleProfile'}
+    AssetDNAProfile:
+      type: object
+      required: [id, user_id, project_id, name, features, source_iterations, source_assets, reusable, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        name: {type: string}
+        features: {type: object, additionalProperties: true}
+        source_iterations: {type: array, items: {type: string}}
+        source_assets: {type: array, items: {type: string}}
+        reusable: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AssetDNAProfileList:
+      type: object
+      required: [profiles]
+      properties:
+        profiles:
+          type: array
+          items: {$ref: '#/components/schemas/AssetDNAProfile'}
+    VisualLanguageProfile:
+      type: object
+      required: [id, user_id, name, signals, source_iterations, version, prompt_influence, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        name: {type: string}
+        signals: {type: object, additionalProperties: true}
+        source_iterations: {type: array, items: {type: string}}
+        version: {type: integer, minimum: 1}
+        prompt_influence: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    VisualLanguageProfileList:
+      type: object
+      required: [profiles]
+      properties:
+        profiles:
+          type: array
+          items: {$ref: '#/components/schemas/VisualLanguageProfile'}
+    RightsItem:
+      type: object
+      required: [id, user_id, project_id, target_type, target_id, ownership, license, verification_state, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        target_type: {type: string, enum: [asset, reference]}
+        target_id: {type: string, format: uuid}
+        ownership: {type: string, enum: [user_owned, third_party, public_domain, unknown]}
+        license: {type: string, minLength: 1, maxLength: 500}
+        license_source: {type: string}
+        verification_state: {type: string, enum: [verified, unverified, unknown, restricted]}
+        verification_date: {type: string, format: date-time}
+        notes: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RightsInput:
+      type: object
+      additionalProperties: false
+      required: [target_type, target_id, ownership, license]
+      properties:
+        target_type: {type: string, enum: [asset, reference]}
+        target_id: {type: string, format: uuid}
+        ownership: {type: string, enum: [user_owned, third_party, public_domain, unknown]}
+        license: {type: string, minLength: 1, maxLength: 500}
+        license_source: {type: string, maxLength: 5000}
+        verification_state: {type: string, enum: [verified, unverified, unknown, restricted]}
+        verification_date: {type: string, format: date-time}
+        notes: {type: string, maxLength: 10000}
+    RightsList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/RightsItem'}
+    Constraint:
+      type: object
+      required: [id, user_id, kind, value, active, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        kind: {type: string, enum: [artist, image, reference, motif, brand, composition, style]}
+        value: {type: string, minLength: 1, maxLength: 500}
+        active: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ConstraintInput:
+      type: object
+      additionalProperties: false
+      required: [kind, value]
+      properties:
+        kind: {type: string, enum: [artist, image, reference, motif, brand, composition, style]}
+        value: {type: string, minLength: 1, maxLength: 500}
+        active: {type: boolean}
+    ConstraintList:
+      type: object
+      required: [constraints]
+      properties:
+        constraints:
+          type: array
+          items: {$ref: '#/components/schemas/Constraint'}
+    Layer:
+      type: object
+      required: [id, project_id, user_id, name, layer_type, order_index, visible, opacity, blend_mode, source_kind, metadata, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        parent_layer_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 200}
+        layer_type: {type: string, enum: [base, mask, image, manual_edit, adjustment, group]}
+        order_index: {type: integer}
+        visible: {type: boolean}
+        opacity: {type: number, minimum: 0, maximum: 1}
+        blend_mode: {type: string}
+        source_kind: {type: string, enum: [human, ai, derived, imported]}
+        metadata: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    LayerInput:
+      type: object
+      additionalProperties: false
+      required: [name, layer_type]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        parent_layer_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 200}
+        layer_type: {type: string, enum: [base, mask, image, manual_edit, adjustment, group]}
+        order_index: {type: integer}
+        visible: {type: boolean}
+        opacity: {type: number, minimum: 0, maximum: 1}
+        blend_mode: {type: string}
+        source_kind: {type: string, enum: [human, ai, derived, imported]}
+        metadata: {type: object, additionalProperties: true}
+    LayerList:
+      type: object
+      required: [layers]
+      properties:
+        layers:
+          type: array
+          items: {$ref: '#/components/schemas/Layer'}
+    ManualEdit:
+      type: object
+      required: [id, project_id, user_id, source_asset_id, operation, parameters, status, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        source_asset_id: {type: string, format: uuid}
+        mask_asset_id: {type: string, format: uuid}
+        result_asset_id: {type: string, format: uuid}
+        operation: {type: string, enum: [paint, erase, mask, composite]}
+        prompt: {type: string, maxLength: 20000}
+        parameters: {type: object, additionalProperties: true}
+        status: {type: string, enum: [draft, applied, rejected]}
+        idempotency_key: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ManualEditInput:
+      type: object
+      additionalProperties: false
+      required: [source_asset_id, operation]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        source_asset_id: {type: string, format: uuid}
+        mask_asset_id: {type: string, format: uuid}
+        result_asset_id: {type: string, format: uuid}
+        operation: {type: string, enum: [paint, erase, mask, composite]}
+        prompt: {type: string, maxLength: 20000}
+        parameters: {type: object, additionalProperties: true}
+    ManualEditList:
+      type: object
+      required: [edits]
+      properties:
+        edits:
+          type: array
+          items: {$ref: '#/components/schemas/ManualEdit'}
 
     AssistantTool:
       type: object
