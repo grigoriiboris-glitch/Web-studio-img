@@ -561,13 +561,13 @@ onUnmounted(() => {
                 <div v-if="prompt.ai_suggestions?.length">
                   <strong>AI suggestions</strong>
                   <ul>
-  <li v-for="suggestion in prompt.ai_suggestions" :key="suggestion">
-    {{ suggestion }}
-    <el-button size="small" link type="success" @click="acceptSuggestion(prompt, suggestion)">Use</el-button>
-    <el-button size="small" link type="warning" @click="partiallyApplySuggestion(prompt, suggestion)">Insert</el-button>
-    <el-button size="small" link type="danger" @click="rejectSuggestion(prompt, suggestion)">Reject</el-button>
-  </li>
-</ul>
+                    <li v-for="suggestion in prompt.ai_suggestions" :key="suggestion">
+                      {{ suggestion }}
+                      <el-button size="small" link type="success" @click="acceptSuggestion(prompt, suggestion)">Use</el-button>
+                      <el-button size="small" link type="warning" @click="partiallyApplySuggestion(prompt, suggestion)">Insert</el-button>
+                      <el-button size="small" link type="danger" @click="rejectSuggestion(prompt, suggestion)">Reject</el-button>
+                    </li>
+                  </ul>
                 </div>
                 <div v-if="prompt.final_text">
                   <strong>Approved text</strong>
