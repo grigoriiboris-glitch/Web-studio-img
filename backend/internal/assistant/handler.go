@@ -61,10 +61,10 @@ type Config struct {
 }
 
 type ToolDescriptor struct {
-	Name string \`json:"name"\`
-	Description string \`json:"description"\`
-	Mutating bool \`json:"mutating"\`
-	Recommendation bool \`json:"recommendation"\`
+	Name string `json:"name"`
+	Description string `json:"description"`
+	Mutating bool `json:"mutating"`
+	Recommendation bool `json:"recommendation"`
 }
 
 var toolCatalog = []ToolDescriptor{
@@ -95,7 +95,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 func (h *Handler) tools(w http.ResponseWriter,r *http.Request){
 	p,ok:=auth.PrincipalFromContext(r.Context());if !ok{errJSON(w,401,"unauthorized","authentication required");return}
 	var exists bool
-	if err:=h.db.QueryRowContext(r.Context(),\`SELECT EXISTS(SELECT 1 FROM projects WHERE id=$1 AND user_id=$2 AND status <> 'deleted')\`,parsePathUUID(r,"project_id"),p.UserID).Scan(&exists);err!=nil||!exists{errJSON(w,404,"project_not_found","project not found");return}
+	if err:=h.db.QueryRowContext(r.Context(),`SELECT EXISTS(SELECT 1 FROM projects WHERE id=$1 AND user_id=$2 AND status <> 'deleted')`,parsePathUUID(r,"project_id"),p.UserID).Scan(&exists);err!=nil||!exists{errJSON(w,404,"project_not_found","project not found");return}
 	writeJSON(w,200,map[string]any{"tools":toolCatalog})
 }
 
@@ -141,7 +141,7 @@ func (h *Handler) decide(w http.ResponseWriter,r *http.Request){
 	pid,e:=uuid.Parse(r.PathValue("project_id"));if e!=nil{errJSON(w,400,"invalid_project_id","invalid project id");return}
 	aid,e:=uuid.Parse(r.PathValue("action_id"));if e!=nil{errJSON(w,400,"invalid_action_id","invalid action id");return}
 	if strings.TrimSpace(r.Header.Get("Idempotency-Key"))==""{errJSON(w,400,"missing_idempotency_key","Idempotency-Key header is required");return}
-	var in struct{Decision string \`json:"decision"\`;FinalText *string \`json:"final_text,omitempty"\`;Components map[string]string \`json:"components,omitempty"\`}
+	var in struct{Decision string `json:"decision"`;FinalText *string `json:"final_text,omitempty"`;Components map[string]string `json:"components,omitempty"`}
 	if e=decode(r,&in);e!=nil{errJSON(w,400,"invalid_request","invalid recommendation decision");return}
 	current,e:=h.actions.GetOwned(r.Context(),p.UserID,pid,aid);if errors.Is(e,sql.ErrNoRows){errJSON(w,404,"assistant_action_not_found","assistant action not found");return};if e!=nil{errJSON(w,500,"assistant_action_failed","could not load assistant action");return}
 	if current.Kind!=kindRecommendation||current.Decision!=nil{errJSON(w,409,"recommendation_already_decided","recommendation is already decided");return}
@@ -183,12 +183,12 @@ func (h *Handler) createIteration(ctx context.Context,userID,projectID uuid.UUID
 
 func (h *Handler) history(ctx context.Context,userID,projectID uuid.UUID)(map[string]any,string,float64,string,error){
 	var id uuid.UUID;var name,status string
-	if e:=h.db.QueryRowContext(ctx,\`SELECT id,name,status FROM projects WHERE id=$1 AND user_id=$2 AND status <> 'deleted'\`,projectID,userID).Scan(&id,&name,&status);e!=nil{return nil,"",0,"",e}
+	if e:=h.db.QueryRowContext(ctx,`SELECT id,name,status FROM projects WHERE id=$1 AND user_id=$2 AND status <> 'deleted'`,projectID,userID).Scan(&id,&name,&status);e!=nil{return nil,"",0,"",e}
 	it,e:=h.iterations.List(ctx,userID,projectID);if e!=nil{return nil,"",0,"",e}
 	out:=map[string]any{"project":map[string]any{"id":id,"name":name,"status":status},"iterations":it}
 	if h.prompts!=nil{if ps,pe:=h.prompts.List(ctx,userID,projectID);pe==nil{out["prompts"]=ps}}
 	var gens []map[string]any
-	rows,e:=h.db.QueryContext(ctx,\`SELECT id,iteration_id,prompt,status,provider,model,created_at FROM generations WHERE project_id=$1 AND user_id=$2 ORDER BY created_at ASC,id ASC\`,projectID,userID)
+	rows,e:=h.db.QueryContext(ctx,`SELECT id,iteration_id,prompt,status,provider,model,created_at FROM generations WHERE project_id=$1 AND user_id=$2 ORDER BY created_at ASC,id ASC`,projectID,userID)
 	if e==nil{defer rows.Close();for rows.Next(){var gid uuid.UUID;var iid *uuid.UUID;var prompt,st,provider,model string;var at time.Time;if rows.Scan(&gid,&iid,&prompt,&st,&provider,&model,&at)==nil{gens=append(gens,map[string]any{"id":gid,"iteration_id":iid,"prompt":prompt,"status":st,"provider":provider,"model":model,"created_at":at})}};out["generations"]=gens}
 	return out,"History is assembled from fixed ownership-checked domain queries.",0.97,"Absent optional records are not invented.",nil
 }
@@ -199,7 +199,7 @@ func (h *Handler) analyzeComposition(ctx context.Context,userID,projectID uuid.U
 	a,e:=h.assets.GetOwned(ctx,userID,projectID,aid);if e!=nil{return nil,"",0,"",e};obj,_,e:=h.storage.Get(ctx,a.StorageKey);if e!=nil{return nil,"",0,"",e};defer obj.Close()
 	data,e:=io.ReadAll(io.LimitReader(obj,assets.MaxAssetSize+1));if e!=nil{return nil,"",0,"",e};if int64(len(data))>assets.MaxAssetSize{return nil,"",0,"",errors.New("asset exceeds analysis limit")}
 	out,e:=similarity.AnalyzeComposition(data);if e!=nil{return nil,"",0,"",e};out["asset_id"]=aid
-	if s,_:=in["iteration_id"].(string);s!=""{if iid,pe:=uuid.Parse(s);pe==nil{out["iteration_id"]=iid.String()}}else{var latest uuid.UUID;if h.db.QueryRowContext(ctx,\`SELECT id FROM iterations WHERE project_id=$1 ORDER BY created_at DESC LIMIT 1\`,projectID).Scan(&latest)==nil{out["iteration_id"]=latest.String()}}
+	if s,_:=in["iteration_id"].(string);s!=""{if iid,pe:=uuid.Parse(s);pe==nil{out["iteration_id"]=iid.String()}}else{var latest uuid.UUID;if h.db.QueryRowContext(ctx,`SELECT id FROM iterations WHERE project_id=$1 ORDER BY created_at DESC LIMIT 1`,projectID).Scan(&latest)==nil{out["iteration_id"]=latest.String()}}
 	return out,"Composition analysis is deterministic and explicitly heuristic.",0.62,"No object detector, segmentation model, or learned vision model is used.",nil
 }
 
@@ -231,7 +231,7 @@ func (h *Handler) suggestPrompt(ctx context.Context,userID,projectID uuid.UUID,i
 func (h *Handler) suggestMaterials(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error){
 	kind,_:=in["kind"].(string);if kind==""{kind="material"};if kind!="material"&&kind!="texture"{return nil,"",0,"",errors.New("kind must be material or texture")}
 	q,_:=in["query"].(string);q=strings.TrimSpace(q)
-	query:=\`SELECT id,user_id,kind,category,name,description,tags,prompt_fragment,preview_key,created_at,updated_at FROM library_items WHERE kind=$1 AND (user_id IS NULL OR user_id=$2)\`;args:=[]any{kind,userID};if q!=""{query+=\` AND (name ILIKE $3 OR COALESCE(description,'') ILIKE $3 OR prompt_fragment ILIKE $3)\`;args=append(args,"%"+q+"%")};query+=" ORDER BY user_id NULLS FIRST,created_at DESC LIMIT 20"
+	query:=`SELECT id,user_id,kind,category,name,description,tags,prompt_fragment,preview_key,created_at,updated_at FROM library_items WHERE kind=$1 AND (user_id IS NULL OR user_id=$2)`;args:=[]any{kind,userID};if q!=""{query+=` AND (name ILIKE $3 OR COALESCE(description,'') ILIKE $3 OR prompt_fragment ILIKE $3)`;args=append(args,"%"+q+"%")};query+=" ORDER BY user_id NULLS FIRST,created_at DESC LIMIT 20"
 	rows,e:=h.db.QueryContext(ctx,query,args...);if e!=nil{return nil,"",0,"",e};defer rows.Close();var items []library.Item
 	for rows.Next(){var x library.Item;var tags []byte;if e:=rows.Scan(&x.ID,&x.UserID,&x.Kind,&x.Category,&x.Name,&x.Description,&tags,&x.PromptFragment,&x.PreviewKey,&x.CreatedAt,&x.UpdatedAt);e==nil{_ = json.Unmarshal(tags,&x.Tags);items=append(items,x)}}
 	return map[string]any{"scope":"project_visible_library","kind":kind,"items":items},"Suggestions come from the project-visible library.",0.90,"Ranking is search/recency based, not a learned preference model.",nil
@@ -268,9 +268,9 @@ func (h *Handler) applyPrompt(ctx context.Context,userID,projectID uuid.UUID,out
 
 func (h *Handler) applyComposition(ctx context.Context,userID,projectID uuid.UUID,out map[string]any)error{
 	s,_:=out["iteration_id"].(string);iid,e:=uuid.Parse(s);if e!=nil{return errors.New("iteration_id is required")}
-	var owned bool;if e=h.db.QueryRowContext(ctx,\`SELECT EXISTS(SELECT 1 FROM iterations i JOIN projects p ON p.id=i.project_id WHERE i.id=$1 AND i.project_id=$2 AND p.user_id=$3 AND p.status <> 'deleted')\`,iid,projectID,userID).Scan(&owned);e!=nil||!owned{return errors.New("iteration not found")}
+	var owned bool;if e=h.db.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM iterations i JOIN projects p ON p.id=i.project_id WHERE i.id=$1 AND i.project_id=$2 AND p.user_id=$3 AND p.status <> 'deleted')`,iid,projectID,userID).Scan(&owned);e!=nil||!owned{return errors.New("iteration not found")}
 	raw:=func(k string)[]byte{if v:=out[k];v!=nil{b,_:=json.Marshal(v);if len(b)>0&&string(b)!="null"{return b}};return []byte("{}")}
-	_,e=h.db.ExecContext(ctx,\`INSERT INTO composition_specs(project_id,iteration_id,user_id,focal_points,bounding_boxes,relative_positions,horizon,camera_elevation,perspective,hierarchy,negative_space,dominant_geometry,object_scale,light_direction) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(iteration_id) DO UPDATE SET focal_points=excluded.focal_points,bounding_boxes=excluded.bounding_boxes,relative_positions=excluded.relative_positions,horizon=excluded.horizon,camera_elevation=excluded.camera_elevation,perspective=excluded.perspective,hierarchy=excluded.hierarchy,negative_space=excluded.negative_space,dominant_geometry=excluded.dominant_geometry,object_scale=excluded.object_scale,light_direction=excluded.light_direction,updated_at=now()\`,projectID,iid,userID,raw("focal_points"),raw("bounding_boxes"),raw("relative_positions"),out["horizon"],out["camera_elevation"],stringValue(out["perspective"]),raw("hierarchy"),raw("negative_space"),raw("dominant_geometry"),raw("object_scale"),raw("light_direction"))
+	_,e=h.db.ExecContext(ctx,`INSERT INTO composition_specs(project_id,iteration_id,user_id,focal_points,bounding_boxes,relative_positions,horizon,camera_elevation,perspective,hierarchy,negative_space,dominant_geometry,object_scale,light_direction) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(iteration_id) DO UPDATE SET focal_points=excluded.focal_points,bounding_boxes=excluded.bounding_boxes,relative_positions=excluded.relative_positions,horizon=excluded.horizon,camera_elevation=excluded.camera_elevation,perspective=excluded.perspective,hierarchy=excluded.hierarchy,negative_space=excluded.negative_space,dominant_geometry=excluded.dominant_geometry,object_scale=excluded.object_scale,light_direction=excluded.light_direction,updated_at=now()`,projectID,iid,userID,raw("focal_points"),raw("bounding_boxes"),raw("relative_positions"),out["horizon"],out["camera_elevation"],stringValue(out["perspective"]),raw("hierarchy"),raw("negative_space"),raw("dominant_geometry"),raw("object_scale"),raw("light_direction"))
 	if e!=nil{return e};out["applied_iteration_id"]=iid
 	if h.provenance!=nil{_,_=h.provenance.Append(ctx,provenance.Event{UserID:userID,ProjectID:projectID,IterationID:&iid,EntityType:"composition",EntityID:iid,Action:"assistant.composition.applied",Payload:map[string]any{"source":"assistant"}})}
 	return nil
