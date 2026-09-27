@@ -23,6 +23,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/events", h.stream)
 }
 
+func parseLastEventID(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" { return 0, nil }
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || id < 0 { return 0, fmt.Errorf("invalid Last-Event-ID") }
+	return id, nil
+}
+
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok { http.Error(w, "unauthorized", http.StatusUnauthorized); return }
