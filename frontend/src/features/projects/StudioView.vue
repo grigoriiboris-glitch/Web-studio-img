@@ -437,6 +437,15 @@ async function saveComposition() {
   }
 }
 
+function setCompositionJSON(field: 'focal_points' | 'bounding_boxes', value: string) {
+  if (!compositionSpec.value) return
+  try {
+    compositionSpec.value[field] = JSON.parse(value || '[]') as never
+  } catch {
+    error.value = 'Composition JSON is invalid'
+  }
+}
+
 function updateCompositionText(field: 'perspective') {
   if (!compositionSpec.value) return
   compositionSpec.value[field] = compositionSpec.value[field]?.trim()
@@ -498,7 +507,8 @@ async function runSimilarityCheck() {
 async function createCreationReport() {
   exporting.value = true
   try {
-    creationExport.value = await exportsApi.create(projectId(), lastUploadedAsset.value || undefined, crypto.randomUUID())
+    const created = await exportsApi.create(projectId(), lastUploadedAsset.value || undefined, crypto.randomUUID())
+    creationExport.value = await exportsApi.get(created.id)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not create Creation Report'
   } finally {
@@ -973,8 +983,8 @@ onUnmounted(() => {
           <template #header>Composition Engine</template>
           <el-form label-position="top">
             <el-row :gutter="12">
-              <el-col :span="12"><el-form-item label="Focal points (JSON)"><el-input v-model="compositionSpec.focal_points as any" type="textarea" :model-value="JSON.stringify(compositionSpec.focal_points)" @change="compositionSpec.focal_points = JSON.parse(String($event))" /></el-form-item></el-col>
-              <el-col :span="12"><el-form-item label="Bounding boxes (JSON)"><el-input type="textarea" :model-value="JSON.stringify(compositionSpec.bounding_boxes)" @change="compositionSpec.bounding_boxes = JSON.parse(String($event))" /></el-form-item></el-col>
+              <el-col :span="12"><el-form-item label="Focal points (JSON)"><el-input type="textarea" :model-value="JSON.stringify(compositionSpec.focal_points)" @change="setCompositionJSON('focal_points', String($event))" /></el-form-item></el-col>
+              <el-col :span="12"><el-form-item label="Bounding boxes (JSON)"><el-input type="textarea" :model-value="JSON.stringify(compositionSpec.bounding_boxes)" @change="setCompositionJSON('bounding_boxes', String($event))" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="Horizon"><el-input-number v-model="compositionSpec.horizon" :min="0" :max="1" :step="0.01" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="Camera elevation"><el-input-number v-model="compositionSpec.camera_elevation" :step="0.1" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="Perspective"><el-input v-model="compositionSpec.perspective" @change="updateCompositionText('perspective')" /></el-form-item></el-col>
