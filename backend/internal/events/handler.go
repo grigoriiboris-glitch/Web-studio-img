@@ -2,6 +2,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,9 +14,14 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 )
 
-type Handler struct{ store *Store }
+type eventReader interface {
+	ProjectOwned(context.Context, uuid.UUID, uuid.UUID) (bool, error)
+	ListSince(context.Context, uuid.UUID, uuid.UUID, int64, int) ([]Event, error)
+}
 
-func NewHandler(store *Store) (*Handler, error) {
+type Handler struct{ store eventReader }
+
+func NewHandler(store eventReader) (*Handler, error) {
 	if store == nil { return nil, fmt.Errorf("events handler requires store") }
 	return &Handler{store: store}, nil
 }
