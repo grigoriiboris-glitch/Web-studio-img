@@ -132,8 +132,16 @@ func (h *Handler) suggest(w http.ResponseWriter, r *http.Request) {
 	pid, err := uuid.Parse(r.PathValue("project_id")); if err != nil { writeErr(w,400,"invalid_project_id","invalid project id"); return }
 	var in struct { CompositionSpecID *uuid.UUID `json:"composition_spec_id"`; SourceSimilarityCheckID *uuid.UUID `json:"source_similarity_check_id"`; CompositionSimilarity float64 `json:"composition_similarity"` }
 	if err := decode(r,&in); err != nil { writeErr(w,400,"invalid_request","invalid mutation payload"); return }
-	if in.CompositionSimilarity < 0 || in.CompositionSimilarity > 1 { writeErr(w,400,"invalid_score","composition_similarity must be between 0 and 1"); return }
-	if in.CompositionSimilarity < 0.8 { writeErr(w,400,"mutation_not_needed","composition similarity is below the suggestion threshold"); return }
+	if in.SourceSimilarityCheckID == nil { writeErr(w,400,"similarity_check_required","source_similarity_check_id is required"); return }
+	var verifiedScore float64
+	if err := h.db.QueryRowContext(r.Context(), `SELECT composition_score FROM similarity_checks WHERE id=$1 AND project_id=$2 AND user_id=$3`, *in.SourceSimilarityCheckID, pid, u.UserID).Scan(&verifiedScore); errors.Is(err,sql.ErrNoRows) { writeErr(w,404,"similarity_check_not_found","similarity check not found"); return } else if err != nil { writeErr(w,500,"similarity_check_load_failed","could not load similarity check"); return }
+	if in.CompositionSpecID != nil {
+		var specExists bool
+		if err := h.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM composition_specs WHERE id=$1 AND project_id=$2 AND user_id=$3)`, *in.CompositionSpecID, pid, u.UserID).Scan(&specExists); err != nil { writeErr(w,500,"composition_load_failed","could not verify composition spec"); return }
+		if !specExists { writeErr(w,404,"composition_not_found","composition spec not found"); return }
+	}
+	if verifiedScore < 0.8 { writeErr(w,400,"mutation_not_needed","composition similarity is below the suggestion threshold"); return }
+	in.CompositionSimilarity = verifiedScore
 	suggestions := []string{"change focal point","shift horizon","change camera elevation","alter perspective","change object scale","change object placement","add/remove foreground obstruction","change negative space","change visual hierarchy","change light direction or dominant geometry"}
 	raw,_ := json.Marshal(suggestions)
 	var m Mutation; var stored []byte
@@ -158,7 +166,7 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 	if err=tx.Commit();err!=nil{writeErr(w,500,"mutation_commit_failed","could not commit mutation");return}
 	var m Mutation
 	var stored []byte
-	payload:=map[string]any{"mutation_id":mid,"accepted_iteration_id":iterationID}
+	payload:=map[string]any{"mutation_id":mid,"accepted_iteration_id":iterationID,"status":"accepted"}
 	if h.events!=nil{_,_=h.events.Append(r.Context(),u.UserID,pid,"iteration.created","iteration",iterationID,payload)}
 	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u.UserID,ProjectID:pid,IterationID:&iterationID,EntityType:"composition_mutation",EntityID:mid,Action:"composition.mutation.accepted",Payload:payload})}
 	if h.actions!=nil{_,_=h.actions.Create(r.Context(),u.UserID,pid,humanactions.Request{IterationID:&iterationID,ActionType:"COMPOSITION_MUTATION_ACCEPTED",Payload:payload,OldState:map[string]any{"status":"proposed","mutation_id":mid},NewState:map[string]any{"status":"accepted","mutation_id":mid,"accepted_iteration_id":iterationID},AIInfluence:map[string]any{"accepted":true}})}
