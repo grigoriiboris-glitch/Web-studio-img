@@ -663,7 +663,7 @@ onUnmounted(() => {
         <el-card class="create-card">
           <template #header>Upload asset</template>
           <el-space wrap>
-            <input type="file" accept="image/jpeg,image/png" @change="uploadAsset" :disabled="assetUploading" />
+            <input type="file" accept="image/jpeg,image/png" :disabled="assetUploading" @change="uploadAsset">
             <el-button v-if="assetUploading" loading>Uploading…</el-button>
             <el-tag v-if="lastUploadedAsset" type="success">Asset {{ lastUploadedAsset }}</el-tag>
           </el-space>
