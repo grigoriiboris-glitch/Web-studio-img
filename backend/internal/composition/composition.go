@@ -157,6 +157,7 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 	if _,err=tx.ExecContext(r.Context(),`UPDATE composition_mutations SET status='accepted',accepted_iteration_id=$1 WHERE id=$2`,iterationID,mid);err!=nil{writeErr(w,500,"mutation_update_failed","could not update mutation");return}
 	if err=tx.Commit();err!=nil{writeErr(w,500,"mutation_commit_failed","could not commit mutation");return}
 	var m Mutation
+	var stored []byte
 	payload:=map[string]any{"mutation_id":mid,"accepted_iteration_id":iterationID}
 	if h.events!=nil{_,_=h.events.Append(r.Context(),u.UserID,pid,"iteration.created","iteration",iterationID,payload)}
 	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u.UserID,ProjectID:pid,IterationID:&iterationID,EntityType:"composition_mutation",EntityID:mid,Action:"composition.mutation.accepted",Payload:payload})}
