@@ -12,16 +12,17 @@ import (
 )
 
 type Handler struct {
-	events *events.Store
 	store Store
 }
 
 func NewHandlerWithEvents(store Store, eventStore *events.Store) (*Handler, error) {
-func NewHandler(store Store) (*Handler, error) {
+func NewHandler(store Store) (*Handler, error) { return NewHandlerWithEvents(store, nil) }
+
+func NewHandlerWithEvents(store Store, eventStore *events.Store) (*Handler, error) {
 	if store == nil {
 		return nil, errors.New("project handler requires store")
 	}
-	return &Handler{store: store}, nil
+	return &Handler{store: store, events: eventStore}, nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -66,6 +67,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_create_failed", "could not create project")
 		return
 	}
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, project.ID, "project_created", "project", project.ID, map[string]any{"name": project.Name}) }
 	writeProjectJSON(w, http.StatusCreated, project)
 }
 
@@ -89,6 +91,8 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_get_failed", "could not load project")
 		return
 	}
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, project.ID, "project_updated", "project", project.ID, map[string]any{"name": project.Name, "status": project.Status}) }
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, project.ID, "project_archived", "project", project.ID, map[string]any{"status": project.Status}) }
 	writeProjectJSON(w, http.StatusOK, project)
 }
 
