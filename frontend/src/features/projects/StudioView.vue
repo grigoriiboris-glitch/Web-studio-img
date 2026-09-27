@@ -3,6 +3,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
+  assetsApi,
   generationsApi,
   humanActionsApi,
   iterationsApi,
@@ -33,6 +34,8 @@ const creating = ref(false)
 const generating = ref(false)
 const savingPrompt = ref(false)
 const addingReference = ref(false)
+const assetUploading = ref(false)
+const lastUploadedAsset = ref('')
 const verifying = ref(false)
 const provenanceVerified = ref<boolean | null>(null)
 const provenanceMessage = ref('')
@@ -410,6 +413,24 @@ async function approveProject() {
   }
 }
 
+async function uploadAsset(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  assetUploading.value = true
+  error.value = null
+  try {
+    const asset = await assetsApi.uploadMultipart(projectId(), file)
+    lastUploadedAsset.value = asset.id
+    referenceForm.value.asset_id = asset.id
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not upload asset'
+  } finally {
+    assetUploading.value = false
+    input.value = ''
+  }
+}
+
 async function addReference() {
   addingReference.value = true
   error.value = null
@@ -640,6 +661,15 @@ onUnmounted(() => {
         </el-card>
 
         <el-card class="create-card">
+          <template #header>Upload asset</template>
+          <el-space wrap>
+            <input type="file" accept="image/jpeg,image/png" @change="uploadAsset" :disabled="assetUploading" />
+            <el-button v-if="assetUploading" loading>Uploading…</el-button>
+            <el-tag v-if="lastUploadedAsset" type="success">Asset {{ lastUploadedAsset }}</el-tag>
+          </el-space>
+        </el-card>
+
+        <el-card class="create-card">
           <template #header>References</template>
           <el-form label-position="top" @submit.prevent="addReference">
             <el-form-item label="Asset ID (for uploaded reference)">
@@ -670,15 +700,12 @@ onUnmounted(() => {
             <el-form-item label="Influence analysis target asset ID">
               <el-input v-model="referenceAnalysisTarget" placeholder="UUID of target asset" />
             </el-form-item>
-            <el-form-item label="Influence scores (calculated by analysis)">
-              <el-row :gutter="12" class="component-grid">
-                <el-col :span="8"><el-input-number v-model="referenceForm.influence.composition" :min="0" :max="1" :step="0.1" aria-label="composition" /></el-col>
-                <el-col :span="8"><el-input-number v-model="referenceForm.influence.semantic" :min="0" :max="1" :step="0.1" aria-label="semantic" /></el-col>
-                <el-col :span="8"><el-input-number v-model="referenceForm.influence.color" :min="0" :max="1" :step="0.1" aria-label="color" /></el-col>
-                <el-col :span="8"><el-input-number v-model="referenceForm.influence.style" :min="0" :max="1" :step="0.1" aria-label="style" /></el-col>
-                <el-col :span="8"><el-input-number v-model="referenceForm.influence.material" :min="0" :max="1" :step="0.1" aria-label="material" /></el-col>
-                <el-col :span="8"><el-input-number v-model="referenceForm.influence.geometry" :min="0" :max="1" :step="0.1" aria-label="geometry" /></el-col>
-              </el-row>
+            <el-form-item label="Reference influence analysis">
+              <el-alert
+                title="Scores are calculated by the server against a target asset."
+                type="info"
+                :closable="false"
+              />
             </el-form-item>
             <el-checkbox v-model="referenceForm.license_verified">License verified</el-checkbox>
             <el-checkbox v-model="referenceForm.user_owned">User owned</el-checkbox>
