@@ -82,14 +82,14 @@ func TestStreamReplaysFromLastEventID(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("SSE handler did not query event store")
 	}
-	body := rec.Body.String()
 	if store.after != 41 { t.Fatalf("store queried after=%d, want 41", store.after) }
-	if !strings.Contains(body, "id: 42\n") { t.Fatalf("missing SSE id: %s", body) }
-	if !strings.Contains(body, "event: generation.completed\n") { t.Fatalf("missing SSE event: %s", body) }
 	cancel()
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("SSE handler did not stop after context cancellation")
 	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "id: 42\n") { t.Fatalf("missing SSE id: %s", body) }
+	if !strings.Contains(body, "event: generation.completed\n") { t.Fatalf("missing SSE event: %s", body) }
 }
