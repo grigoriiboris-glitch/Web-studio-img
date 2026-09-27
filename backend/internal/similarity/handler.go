@@ -68,7 +68,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 func (h *Handler) createCheck(w http.ResponseWriter, r *http.Request) {
 	p, ok := auth.PrincipalFromContext(r.Context())
 	if !ok { errJSON(w, http.StatusUnauthorized, "unauthorized", "authentication required"); return }
-	if h.db == nil { errJSON(w, http.StatusServiceUnavailable, "similarity_unavailable", "similarity resource storage is not configured"); return }
+	if h.db == nil || h.storage == nil { errJSON(w, http.StatusServiceUnavailable, "similarity_unavailable", "similarity resource storage is not configured"); return }
+	if strings.TrimSpace(r.Header.Get("Idempotency-Key")) == "" { errJSON(w, http.StatusBadRequest, "missing_idempotency_key", "Idempotency-Key header is required"); return }
 	projectID, err := parseUUID(w, r, "project_id")
 	if err != nil { return }
 	var in struct {
