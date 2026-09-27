@@ -51,3 +51,15 @@ func TestRecommendationSemanticsAreExplicit(t *testing.T) {
 		t.Fatal("expected effect must be explicit")
 	}
 }
+
+
+func TestMaterialRecommendationApplyIsDecisionOnly(t *testing.T) {
+	result := withRecommendation("suggest_materials", map[string]any{
+		"kind": "material",
+		"items": []any{map[string]any{"name": "Stone"}},
+	}, "Project-visible material suggestions.", 0.90, "Ranking is search/recency based.")
+	recommendation := result["recommendation"].(map[string]any)
+	if recommendation["expected_effect"] != "Accept the suggested project-visible materials or textures for later manual selection; no project mutation occurs automatically." {
+		t.Fatalf("unexpected material expected effect: %#v", recommendation["expected_effect"])
+	}
+}
