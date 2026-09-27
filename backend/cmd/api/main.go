@@ -12,7 +12,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/oleg3190/Web-studio-img/backend/internal/config"
+	"github.com/oleg3190/Web-studio-img/backend/internal/config"\n\t"github.com/oleg3190/Web-studio-img/backend/internal/composition"\n\t"github.com/oleg3190/Web-studio-img/backend/internal/library"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
@@ -47,7 +47,7 @@ func main() {
 	var provenanceHandler *provenance.Handler
 	var assetHandler *assets.UploadHandler
 	var similarityHandler *similarity.Handler
-	var exportHandler *exports.Handler
+	var exportHandler *exports.Handler\n\tvar compositionHandler *composition.Handler\n\tvar libraryHandler *library.Handler
 	var projectDB *sql.DB
 
 	if cfg.DatabaseURL != "" {
@@ -125,12 +125,12 @@ func main() {
 			logger.Error("asset handler initialization failed", "error", err)
 			os.Exit(1)
 		}
-		similarityHandler, err = similarity.NewHandler(referenceStore, assetStore, objectStorage, eventStore, provenanceStore)
+		similarityHandler, err = similarity.NewHandlerWithDB(projectDB, referenceStore, assetStore, objectStorage, eventStore, provenanceStore)
 		if err != nil {
 			logger.Error("similarity handler initialization failed", "error", err)
 			os.Exit(1)
 		}
-		exportHandler, err = exports.NewHandler(assetStore, objectStorage, eventStore, provenanceStore, actionStore)
+		exportHandler, err = exports.NewHandlerWithDB(projectDB, assetStore, objectStorage, eventStore, provenanceStore, actionStore)
 		if err != nil {
 			logger.Error("export handler initialization failed", "error", err)
 			os.Exit(1)
@@ -157,7 +157,7 @@ func main() {
 	api := httpapi.NewServerWithStudio(
 		logger, cfg.CORSOrigins, limiter,
 		projectHandler, iterationHandler, generationHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
