@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
-\t"github.com/oleg3190/Web-studio-img/backend/internal/projects"
+	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
@@ -20,7 +20,7 @@ func NewServer(logger *slog.Logger, origins []string, limiter *security.RateLimi
 }
 
 func NewServerWithProjects(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler) *Server {
-	return newServer(logger, origins, limiter, projectHandler)
+	return newServer(logger, origins, limiter, projectHandler, nil)
 }
 
 func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler) *Server {
