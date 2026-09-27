@@ -3,7 +3,8 @@ package iterations
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"\n\t"strings"
+	"net/http/httptest"
+\t"strings"
 	"testing"
 
 	"github.com/google/uuid"
