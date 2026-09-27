@@ -5,6 +5,8 @@ ALTER TABLE human_actions DROP COLUMN IF EXISTS version;
 DROP SEQUENCE IF EXISTS human_action_version_seq;
 
 
+ALTER TABLE projects DROP COLUMN IF EXISTS provenance_head_hash, DROP COLUMN IF EXISTS provenance_head_sequence;
+
 DROP TABLE IF EXISTS project_events;
 DROP TABLE IF EXISTS provenance_events;
 DROP TABLE IF EXISTS human_actions;
