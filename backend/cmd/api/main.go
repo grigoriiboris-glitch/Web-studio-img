@@ -160,17 +160,6 @@ func main() {
 			logger.Error("library handler initialization failed", "error", err)
 			os.Exit(1)
 		}
-		assistantActionStore, err = assistant.NewStore(projectDB)
-		if err != nil { logger.Error("assistant action store initialization failed", "error", err); os.Exit(1) }
-		assistantHandler, err = assistant.NewHandler(assistant.Config{
-			DB: projectDB, Iterations: iterationStore, Prompts: promptStore, References: referenceStore,
-			Assets: assetStore, Storage: objectStorage, Events: eventStore, Provenance: provenanceStore,
-			Actions: assistantActionStore, Queue: generationQueue, Provider: generationProvider,
-		})
-		if err != nil { logger.Error("assistant handler initialization failed", "error", err); os.Exit(1) }
-		compositionAnalyzer, err = composition.NewAnalyzer(projectDB, assetStore, objectStorage, eventStore, provenanceStore)
-		if err != nil { logger.Error("composition analyzer initialization failed", "error", err); os.Exit(1) }
-
 		if cfg.RedisURL != "" && cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != "" {
 			redisCfg, redisErr := queue.ParseRedisURL(cfg.RedisURL)
 			if redisErr != nil { logger.Error("redis configuration failed", "error", redisErr); os.Exit(1) }
@@ -189,6 +178,17 @@ func main() {
 			generationHandler, err = generation.NewHandlerWithDependencies(generationStore, queueClient, provider, provenanceStore, eventStore)
 			if err != nil { logger.Error("generation handler initialization failed", "error", err); os.Exit(1) }
 		}
+
+		assistantActionStore, err = assistant.NewStore(projectDB)
+		if err != nil { logger.Error("assistant action store initialization failed", "error", err); os.Exit(1) }
+		assistantHandler, err = assistant.NewHandler(assistant.Config{
+			DB: projectDB, Iterations: iterationStore, Prompts: promptStore, References: referenceStore,
+			Assets: assetStore, Storage: objectStorage, Events: eventStore, Provenance: provenanceStore,
+			Actions: assistantActionStore, Queue: generationQueue, Provider: generationProvider,
+		})
+		if err != nil { logger.Error("assistant handler initialization failed", "error", err); os.Exit(1) }
+		compositionAnalyzer, err = composition.NewAnalyzer(projectDB, assetStore, objectStorage, eventStore, provenanceStore)
+		if err != nil { logger.Error("composition analyzer initialization failed", "error", err); os.Exit(1) }
 	}
 
 	api := httpapi.NewServerWithStudio(
