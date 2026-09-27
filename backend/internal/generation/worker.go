@@ -77,9 +77,15 @@ func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
 		return err
 	}
 	for _, image := range result.Images {
-		if _, err := w.Assets.Process(ctx, payload.UserID, item.ProjectID, item.ID, image.Data, image.ContentType); err != nil {
+		asset, err := w.Assets.Process(ctx, payload.UserID, item.ProjectID, item.ID, image.Data, image.ContentType)
+		if err != nil {
 			_ = w.Store.MarkFailed(ctx, payload.UserID, item.ID, "asset_error", err.Error(), time.Now())
+			if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.failed", "generation", item.ID, map[string]any{"code":"asset_error","message":err.Error()}) }
+			if w.Provenance != nil { _, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_failed", Payload: map[string]any{"code":"asset_error","message":err.Error()}, CreatedAt: time.Now()}) }
 			return nil
+		}
+		if w.Provenance != nil {
+			_, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "asset", EntityID: asset.ID, Action: "asset_created", Payload: map[string]any{"storage_key":asset.StorageKey,"preview_key":asset.PreviewKey,"thumbnail_key":asset.ThumbnailKey,"sha256":asset.Checksum,"mime_type":asset.MIMEType,"width":asset.Width,"height":asset.Height}, CreatedAt: time.Now()})
 		}
 	}
 	var version *string
