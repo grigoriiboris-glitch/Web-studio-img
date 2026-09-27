@@ -64,7 +64,7 @@ func TestRestoreCreatesNewNode(t *testing.T) {
 	if len(store.items) != 2 { t.Fatalf("items = %d, want 2", len(store.items)) }
 	if store.items[0].ID != source.ID { t.Fatal("source iteration was mutated") }
 	if store.items[1].ID == source.ID { t.Fatal("restore reused source id") }
-	if store.items[1].ParentIterationID == nil || *store.items[1].ParentIterationID != source.ID { t.Fatal("restore parent = %v, want source", store.items[1].ParentIterationID) }
+	if store.items[1].ParentIterationID == nil || *store.items[1].ParentIterationID != source.ID { t.Fatalf("restore parent = %v, want source", store.items[1].ParentIterationID) }
 }
 
 func TestCreateRejectsUnknownFields(t *testing.T) {
