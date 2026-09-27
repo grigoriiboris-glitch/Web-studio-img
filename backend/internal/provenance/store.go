@@ -41,22 +41,21 @@ func NewStore(db *sql.DB) (*Store,error) {
 	return &Store{db:db},nil
 }
 
-type canonicalEvent struct {
-	EntityType string `json:"entity_type"`
-	EntityID uuid.UUID `json:"entity_id"`
-	Action string `json:"action"`
-	Payload map[string]any `json:"payload"`
-	ParentHash string `json:"parent_hash,omitempty"`
-	CreatedAt string `json:"created_at"`
+func CanonicalPayload(payload map[string]any) ([]byte, error) {
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	return json.Marshal(payload)
 }
 
-func CanonicalBytes(event Event)([]byte,error){
-	payload:=event.Payload
-	if payload==nil{payload=map[string]any{}}
-	return json.Marshal(canonicalEvent{EntityType:event.EntityType,EntityID:event.EntityID,Action:event.Action,Payload:payload,ParentHash:event.ParentHash,CreatedAt:event.CreatedAt.UTC().Format(time.RFC3339Nano)})
-}
-func HashEvent(event Event)(string,error){
-	raw,err:=CanonicalBytes(event);if err!=nil{return "",err};sum:=sha256.Sum256(raw);return hex.EncodeToString(sum[:]),nil
+func HashEvent(event Event) (string, error) {
+	payload, err := CanonicalPayload(event.Payload)
+	if err != nil {
+		return "", err
+	}
+	raw := append(payload, []byte(event.ParentHash)...)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func (s *Store) Append(ctx context.Context,event Event)(Event,error){
