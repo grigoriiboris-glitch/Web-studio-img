@@ -204,7 +204,7 @@ func parseUUID(w http.ResponseWriter, r *http.Request, name string) (uuid.UUID, 
 func decodeJSON(r *http.Request,v any) error { d:=json.NewDecoder(io.LimitReader(r.Body,1<<20)); d.DisallowUnknownFields(); if err:=d.Decode(v);err!=nil{return err}; var extra any; if err:=d.Decode(&extra);err!=io.EOF{return errors.New("multiple JSON values")}; return nil }
 func readObject(ctx context.Context,s storage.StorageProvider,key string)([]byte,error){obj,_,err:=s.Get(ctx,key);if err!=nil{return nil,err};defer obj.Close();return io.ReadAll(io.LimitReader(obj,10<<20+1))}
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
-func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}
+func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}}
 
 func mustLoadCheck(db *sql.DB, ctx context.Context, userID, id uuid.UUID) Check {
 	var c Check
