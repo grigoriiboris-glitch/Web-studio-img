@@ -38,6 +38,9 @@ const generations = ref<Generation[]>([])
 const prompts = ref<Prompt[]>([])
 const references = ref<Reference[]>([])
 const humanActions = ref<HumanAction[]>([])
+const selectedGenerationId = ref<string | null>(null)
+const rejectedGenerationIds = ref<string[]>([])
+const selectedReferenceId = ref<string | null>(null)
 const error = ref<string | null>(null)
 const loading = ref(true)
 const creating = ref(false)
@@ -265,13 +268,16 @@ async function logHumanAction(input: Parameters<typeof humanActionsApi.create>[1
 }
 
 async function acceptSuggestion(prompt: Prompt, suggestion: string) {
-  promptForm.value.final_text = suggestion
+  const current = promptForm.value.final_text.trim()
+  const next = suggestion
+  promptForm.value.final_text = next
   error.value = null
   try {
     await logHumanAction({
       action_type: 'PROMPT_EDITED',
       payload: { prompt_id: prompt.id, decision: 'accepted', suggestion, version: prompt.version },
-      new_state: { final_text: suggestion, components: prompt.components ?? {} },
+      old_state: { final_text: current, components: prompt.components ?? {} },
+      new_state: { final_text: next, components: prompt.components ?? {} },
       ai_influence: { source: 'prompt_suggestion', accepted: true },
     })
   } catch (err) {
@@ -297,11 +303,13 @@ async function partiallyApplySuggestion(prompt: Prompt, suggestion: string) {
 }
 
 async function rejectSuggestion(prompt: Prompt, suggestion: string) {
+  const current = promptForm.value.final_text.trim()
   try {
     await logHumanAction({
       action_type: 'AI_RECOMMENDATION_REJECTED',
       payload: { prompt_id: prompt.id, decision: 'rejected', suggestion, version: prompt.version },
-      old_state: { ai_suggestion: suggestion },
+      old_state: { final_text: current, ai_suggestion: suggestion },
+      new_state: { final_text: current, ai_suggestion: suggestion, disposition: 'rejected' },
       ai_influence: { source: 'prompt_suggestion', rejected: true },
     })
   } catch (err) {
@@ -310,10 +318,14 @@ async function rejectSuggestion(prompt: Prompt, suggestion: string) {
 }
 
 async function selectVariant(item: Generation) {
+  const previous = selectedGenerationId.value
+  selectedGenerationId.value = item.id
+  rejectedGenerationIds.value = rejectedGenerationIds.value.filter(id => id !== item.id)
   try {
     await logHumanAction({
       action_type: 'VARIANT_SELECTED',
       payload: { generation_id: item.id, prompt: item.prompt, version: item.id },
+      old_state: { selected_generation_id: previous },
       new_state: { selected_generation_id: item.id },
       ai_influence: { source: 'generation' },
     })
@@ -323,11 +335,16 @@ async function selectVariant(item: Generation) {
 }
 
 async function rejectVariant(item: Generation) {
+  const wasRejected = rejectedGenerationIds.value.includes(item.id)
+  rejectedGenerationIds.value = wasRejected
+    ? rejectedGenerationIds.value.filter(id => id !== item.id)
+    : [...rejectedGenerationIds.value, item.id]
   try {
     await logHumanAction({
       action_type: 'VARIANT_REJECTED',
       payload: { generation_id: item.id, prompt: item.prompt, version: item.id },
-      new_state: { rejected_generation_id: item.id },
+      old_state: { rejected_generation_id: wasRejected ? item.id : null },
+      new_state: { rejected_generation_id: wasRejected ? null : item.id },
       ai_influence: { source: 'generation' },
     })
   } catch (err) {
@@ -476,19 +493,23 @@ async function loadLibraries() {
 }
 
 async function chooseMaterial(item: LibraryItem) {
+  const previous = selectedMaterial.value
   selectedMaterial.value = item.name
   await logHumanAction({
     action_type: 'MATERIAL_SELECTED',
     payload: { library_item_id: item.id, name: item.name, prompt_fragment: item.prompt_fragment },
+    old_state: { material: previous },
     new_state: { material: item.name, prompt_fragment: item.prompt_fragment },
   })
 }
 
 async function chooseTexture(item: LibraryItem) {
+  const previous = selectedTexture.value
   selectedTexture.value = item.name
   await logHumanAction({
     action_type: 'TEXTURE_SELECTED',
     payload: { library_item_id: item.id, name: item.name, prompt_fragment: item.prompt_fragment },
+    old_state: { texture: previous },
     new_state: { texture: item.name, prompt_fragment: item.prompt_fragment },
   })
 }
@@ -509,10 +530,13 @@ async function analyzeReference(reference: Reference) {
 }
 
 async function selectReference(reference: Reference) {
+  const previous = selectedReferenceId.value
+  selectedReferenceId.value = reference.id
   try {
     await logHumanAction({
       action_type: 'REFERENCE_SELECTED',
       payload: { reference_id: reference.id, source_type: reference.source_type },
+      old_state: { selected_reference_id: previous },
       new_state: { selected_reference_id: reference.id },
     })
   } catch (err) {
@@ -521,10 +545,12 @@ async function selectReference(reference: Reference) {
 }
 
 async function approveProject() {
+  const previous = Boolean(humanActions.value.find(action => action.action_type === 'APPROVED'))
   try {
     await logHumanAction({
       action_type: 'APPROVED',
       payload: { project_id: projectId(), version: iterations.value[iterations.value.length - 1]?.id },
+      old_state: { approved: previous },
       new_state: { approved: true },
     })
   } catch (err) {
