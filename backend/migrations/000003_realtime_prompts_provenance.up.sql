@@ -8,6 +8,7 @@ ALTER TABLE generations
   ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 
 UPDATE generations g SET user_id = p.user_id FROM projects p WHERE g.project_id = p.id AND g.user_id IS NULL;
+UPDATE generations SET status = 'succeeded' WHERE status = 'completed';
 ALTER TABLE generations ALTER COLUMN user_id SET NOT NULL;
 ALTER TABLE generations ALTER COLUMN iteration_id DROP NOT NULL;
 ALTER TABLE generations DROP CONSTRAINT IF EXISTS generations_status_check;
