@@ -59,7 +59,7 @@ func (s *Store) List(ctx context.Context,userID,projectID uuid.UUID)([]Prompt,er
 		FROM prompts pr JOIN projects p ON p.id=pr.project_id
 		WHERE pr.project_id=$1 AND p.user_id=$2 AND p.status <> 'deleted'
 		ORDER BY pr.version ASC
-	`,projectID,userID); if err!=nil{return nil,err}; defer rows.Close()
+	`,projectID,userID); if err!=nil{return nil,err}; defer func() { _ = rows.Close() }()
 	var out []Prompt
 	for rows.Next(){var p Prompt;var a,c []byte;if err:=rows.Scan(&p.ID,&p.ProjectID,&p.IterationID,&p.ParentPromptID,&p.Version,&p.OriginalText,&a,&p.FinalText,&c,&p.CreatedBy,&p.CreatedAt);err!=nil{return nil,err};_ = json.Unmarshal(a,&p.AISuggestions);_ = json.Unmarshal(c,&p.Components);out=append(out,p)}
 	return out,rows.Err()
