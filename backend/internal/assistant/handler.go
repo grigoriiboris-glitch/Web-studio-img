@@ -78,6 +78,7 @@ var toolCatalog = []ToolDescriptor{
 	{Name:"create_generation",Description:"Queue a generation through the configured provider.",Mutating:true},
 	{Name:"compare_iterations",Description:"Compare two owned immutable iterations using prompts plus deterministic visual and composition descriptors."},
 	{Name:"verify_provenance",Description:"Verify the project's persisted provenance hash chain."},
+	{Name:"fact_check",Description:"Classify a factual claim from user-supplied evidence without inventing facts."},
 }
 
 func NewHandler(cfg Config) (*Handler,error) {
@@ -128,6 +129,7 @@ func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 	case "create_generation":result,explanation,confidence,uncertainty,e=h.createGeneration(r.Context(),p.UserID,pid,input,key)
 	case "compare_iterations":result,explanation,confidence,uncertainty,e=h.compareIterations(r.Context(),p.UserID,pid,input)
 	case "verify_provenance":result,explanation,confidence,uncertainty,e=h.verifyProvenance(r.Context(),p.UserID,pid)
+	case "fact_check":result,explanation,confidence,uncertainty,e=factCheck(input)
 	default:e=errors.New("unsupported tool")
 	}
 	if e!=nil{errJSON(w,400,"assistant_tool_failed",e.Error());return}
