@@ -148,7 +148,8 @@ func (s *Store) ReserveUploadedAsset(ctx context.Context, userID, projectID uuid
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Asset{}, false, fmt.Errorf("reserve uploaded asset: %w", err)
 	}
-	return s.lookupByChecksum(ctx, userID, projectID, checksum)
+	item, err = s.lookupByChecksum(ctx, userID, projectID, checksum)
+	return item, false, err
 }
 
 func (s *Store) Finalize(ctx context.Context, userID, assetID uuid.UUID) error {
