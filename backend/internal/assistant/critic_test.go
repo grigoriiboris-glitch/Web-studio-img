@@ -1,6 +1,7 @@
 package assistant
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/similarity"
@@ -44,5 +45,33 @@ func TestBuildCriticObservationsIsStructured(t *testing.T) {
 	}
 	if observations[len(observations)-1]["dimension"]==nil {
 		t.Fatal("observation dimension must be populated")
+	}
+}
+
+func TestBuildCriticObservationsReportsHeuristicUncertainty(t *testing.T) {
+	result:=similarity.Result{Visual:0.2,Composition:0.4,Semantic:0.3,Style:0.2}
+	compA:=map[string]any{}
+	compB:=map[string]any{}
+	observations:=buildCriticObservations(result,compA,compB,"","")
+	foundSemanticProxy:=false
+	for _,item:=range observations {
+		if item["dimension"]=="semantic" {
+			foundSemanticProxy=true
+			if !strings.Contains(item["reason"].(string),"proxy") {
+				t.Fatalf("semantic observation must disclose proxy nature: %#v",item)
+			}
+		}
+		if confidence,ok:=item["confidence"].(float64); !ok || confidence < 0 || confidence > 1 {
+			t.Fatalf("confidence out of range: %#v",item["confidence"])
+		}
+	}
+	if !foundSemanticProxy { t.Fatal("semantic proxy observation missing") }
+}
+
+func TestFocalPointRejectsInvalidCoordinates(t *testing.T) {
+	if got:=focalPoint(map[string]any{
+		"focal_points":[]any{map[string]any{"x":1.4,"y":0.2}},
+	}); got != nil {
+		t.Fatalf("expected invalid focal point to be ignored, got %#v",got)
 	}
 }
