@@ -1,6 +1,6 @@
 <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline -->
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
   generationsApi,
@@ -62,6 +62,22 @@ const referenceForm = ref({
   user_owned: false,
   sha256: '',
   notes: '',
+  influence: {
+    composition: 0,
+    semantic: 0,
+    color: 0,
+    style: 0,
+    material: 0,
+    geometry: 0,
+  },
+})
+const materialDecision = ref('')
+const textureDecision = ref('')
+const builderText = computed(() => {
+  const ordered = promptComponents
+    .map(component => promptForm.value.components[component]?.trim())
+    .filter((value): value is string => Boolean(value))
+  return ordered.join(', ')
 })
 
 const projectId = () => String(route.params.projectId)
@@ -104,6 +120,27 @@ async function createIteration() {
       description: form.value.description.trim() || undefined,
     })
     iterations.value.push(created)
+    const actionType = created.type === 'idea'
+      ? 'IDEA_CREATED'
+      : created.type === 'composition'
+        ? 'COMPOSITION_CHANGED'
+        : created.type === 'manual_edit'
+          ? 'MANUAL_EDIT'
+          : ''
+    if (actionType) {
+      await humanActionsApi.create(projectId(), {
+        iteration_id: created.id,
+        action_type: actionType,
+        payload: {
+          iteration_type: created.type,
+          title: created.title,
+          description: created.description,
+          version: created.id,
+        },
+        new_state: { iteration_id: created.id, title: created.title, description: created.description },
+      })
+      await refreshActions()
+    }
     form.value = { type: 'idea', title: '', description: '' }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not create iteration'
@@ -150,10 +187,11 @@ async function savePrompt() {
       .split('\n')
       .map(value => value.trim())
       .filter(Boolean)
+    const generatedFinalText = promptForm.value.final_text.trim() || builderText.value.trim() || undefined
     const created = await promptsApi.create(projectId(), {
       original_text: promptForm.value.original_text.trim(),
       ai_suggestions: suggestions,
-      final_text: promptForm.value.final_text.trim() || undefined,
+      final_text: generatedFinalText,
       created_by: promptForm.value.created_by,
       components: { ...promptForm.value.components },
     })
@@ -188,6 +226,121 @@ async function approvePrompt(prompt: Prompt) {
   }
 }
 
+async function logHumanAction(input: Parameters<typeof humanActionsApi.create>[1]) {
+  await humanActionsApi.create(projectId(), input)
+  await refreshActions()
+}
+
+async function acceptSuggestion(prompt: Prompt, suggestion: string) {
+  promptForm.value.final_text = suggestion
+  error.value = null
+  try {
+    await logHumanAction({
+      action_type: 'PROMPT_EDITED',
+      payload: { prompt_id: prompt.id, decision: 'accepted', suggestion, version: prompt.version },
+      new_state: { final_text: suggestion, components: prompt.components ?? {} },
+      ai_influence: { source: 'prompt_suggestion', accepted: true },
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record prompt suggestion decision'
+  }
+}
+
+async function rejectSuggestion(prompt: Prompt, suggestion: string) {
+  try {
+    await logHumanAction({
+      action_type: 'AI_RECOMMENDATION_REJECTED',
+      payload: { prompt_id: prompt.id, decision: 'rejected', suggestion, version: prompt.version },
+      old_state: { ai_suggestion: suggestion },
+      ai_influence: { source: 'prompt_suggestion', rejected: true },
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record AI recommendation rejection'
+  }
+}
+
+async function selectVariant(item: Generation) {
+  try {
+    await logHumanAction({
+      action_type: 'VARIANT_SELECTED',
+      payload: { generation_id: item.id, prompt: item.prompt, version: item.id },
+      new_state: { selected_generation_id: item.id },
+      ai_influence: { source: 'generation' },
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record selected variant'
+  }
+}
+
+async function rejectVariant(item: Generation) {
+  try {
+    await logHumanAction({
+      action_type: 'VARIANT_REJECTED',
+      payload: { generation_id: item.id, prompt: item.prompt, version: item.id },
+      new_state: { rejected_generation_id: item.id },
+      ai_influence: { source: 'generation' },
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record rejected variant'
+  }
+}
+
+async function selectMaterial() {
+  const value = materialDecision.value.trim()
+  if (!value) return
+  try {
+    await logHumanAction({
+      action_type: 'MATERIAL_SELECTED',
+      payload: { material: value, version: iterations.value.at(-1)?.id },
+      old_state: { material: null },
+      new_state: { material: value },
+    })
+    materialDecision.value = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record material selection'
+  }
+}
+
+async function selectTexture() {
+  const value = textureDecision.value.trim()
+  if (!value) return
+  try {
+    await logHumanAction({
+      action_type: 'TEXTURE_SELECTED',
+      payload: { texture: value, version: iterations.value.at(-1)?.id },
+      old_state: { texture: null },
+      new_state: { texture: value },
+    })
+    textureDecision.value = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record texture selection'
+  }
+}
+
+async function selectReference(reference: Reference) {
+  try {
+    await logHumanAction({
+      action_type: 'REFERENCE_SELECTED',
+      payload: { reference_id: reference.id, source_type: reference.source_type },
+      new_state: { selected_reference_id: reference.id },
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record reference selection'
+  }
+}
+
+async function approveProject() {
+  try {
+    await logHumanAction({
+      action_type: 'APPROVED',
+      payload: { project_id: projectId(), version: iterations.value.at(-1)?.id },
+      new_state: { approved: true },
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record final approval'
+  }
+}
+
 async function addReference() {
   addingReference.value = true
   error.value = null
@@ -200,6 +353,7 @@ async function addReference() {
       user_owned: referenceForm.value.user_owned,
       sha256: referenceForm.value.sha256.trim() || undefined,
       notes: referenceForm.value.notes.trim() || undefined,
+      influence: { ...referenceForm.value.influence },
     })
     references.value = [created, ...references.value]
     referenceForm.value = {
@@ -210,6 +364,7 @@ async function addReference() {
       user_owned: false,
       sha256: '',
       notes: '',
+      influence: { composition: 0, semantic: 0, color: 0, style: 0, material: 0, geometry: 0 },
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not add reference'
@@ -358,6 +513,7 @@ onUnmounted(() => {
               <el-input v-model="promptForm.final_text" type="textarea" maxlength="20000" />
             </el-form-item>
             <el-form-item label="Structured prompt components">
+              <el-alert v-if="builderText" :title="'Builder output: ' + builderText" type="info" :closable="false" />
               <el-row :gutter="12" class="component-grid">
                 <el-col v-for="component in promptComponents" :key="component" :span="8">
                   <el-input v-model="promptForm.components[component]" :placeholder="component" :aria-label="component" />
@@ -385,7 +541,13 @@ onUnmounted(() => {
                 <p>{{ prompt.original_text }}</p>
                 <div v-if="prompt.ai_suggestions?.length">
                   <strong>AI suggestions</strong>
-                  <ul><li v-for="suggestion in prompt.ai_suggestions" :key="suggestion">{{ suggestion }}</li></ul>
+                  <ul>
+  <li v-for="suggestion in prompt.ai_suggestions" :key="suggestion">
+    {{ suggestion }}
+    <el-button size="small" link type="success" @click="acceptSuggestion(prompt, suggestion)">Use</el-button>
+    <el-button size="small" link type="danger" @click="rejectSuggestion(prompt, suggestion)">Reject</el-button>
+  </li>
+</ul>
                 </div>
                 <div v-if="prompt.final_text">
                   <strong>Approved text</strong>
@@ -428,6 +590,13 @@ onUnmounted(() => {
             <el-form-item label="Notes">
               <el-input v-model="referenceForm.notes" type="textarea" maxlength="10000" />
             </el-form-item>
+            <el-form-item label="Influence scores (0–1)">
+              <el-row :gutter="12" class="component-grid">
+                <el-col v-for="name in ['composition','semantic','color','style','material','geometry']" :key="name" :span="8">
+                  <el-input-number v-model="referenceForm.influence[name as keyof typeof referenceForm.influence]" :min="0" :max="1" :step="0.1" :aria-label="name" />
+                </el-col>
+              </el-row>
+            </el-form-item>
             <el-checkbox v-model="referenceForm.license_verified">License verified</el-checkbox>
             <el-checkbox v-model="referenceForm.user_owned">User owned</el-checkbox>
             <div class="form-actions">
@@ -450,6 +619,23 @@ onUnmounted(() => {
             <el-table-column label="Verified" width="110">
               <template #default="scope">{{ scope.row.license_verified ? 'Yes' : 'No' }}</template>
             </el-table-column>
+            <el-table-column label="Influence" min-width="260">
+              <template #default="scope">
+                <span v-if="scope.row.influence">
+                  C {{ scope.row.influence.composition.toFixed(1) }},
+                  S {{ scope.row.influence.semantic.toFixed(1) }},
+                  Co {{ scope.row.influence.color.toFixed(1) }},
+                  St {{ scope.row.influence.style.toFixed(1) }},
+                  M {{ scope.row.influence.material.toFixed(1) }},
+                  G {{ scope.row.influence.geometry.toFixed(1) }}
+                </span>
+                <span v-else>Not analysed</span>
+                <el-alert v-if="scope.row.influence?.warning" :title="scope.row.influence.warning" type="warning" :closable="false" />
+              </template>
+            </el-table-column>
+            <el-table-column label="Use" width="90">
+              <template #default="scope"><el-button link type="primary" @click="selectReference(scope.row)">Select</el-button></template>
+            </el-table-column>
             <el-table-column width="100">
               <template #default="scope"><el-button link type="danger" @click="removeReference(scope.row)">Remove</el-button></template>
             </el-table-column>
@@ -465,12 +651,25 @@ onUnmounted(() => {
                   <el-tag :type="item.status === 'succeeded' ? 'success' : item.status === 'failed' ? 'danger' : 'warning'">{{ item.status }}</el-tag>
                   <strong>{{ item.prompt }}</strong>
                   <el-button v-if="item.status === 'queued' || item.status === 'running'" size="small" @click="cancelGeneration(item)">Cancel</el-button>
+                  <el-button v-if="item.status === 'succeeded'" size="small" type="success" @click="selectVariant(item)">Select</el-button>
+                  <el-button v-if="item.status === 'succeeded'" size="small" type="danger" @click="rejectVariant(item)">Reject</el-button>
                 </div>
                 <small v-if="item.model_version">Model version: {{ item.model_version }}</small>
                 <el-alert v-if="item.error_message" :title="item.error_message" type="error" :closable="false" />
               </div>
             </el-timeline-item>
           </el-timeline>
+        </el-card>
+
+        <el-card class="create-card">
+          <template #header>Creative decisions</template>
+          <el-space wrap>
+            <el-input v-model="materialDecision" placeholder="Material selected" @keyup.enter="selectMaterial" />
+            <el-button type="primary" @click="selectMaterial">Record material</el-button>
+            <el-input v-model="textureDecision" placeholder="Texture selected" @keyup.enter="selectTexture" />
+            <el-button type="primary" @click="selectTexture">Record texture</el-button>
+            <el-button type="success" @click="approveProject">Approve final result</el-button>
+          </el-space>
         </el-card>
 
         <el-card class="timeline-card">
