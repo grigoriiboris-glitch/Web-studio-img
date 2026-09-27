@@ -54,7 +54,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, ErrIterationNotFound) { writeIterationError(w, http.StatusNotFound, "iteration_parent_or_project_not_found", "project or parent iteration not found"); return }
 	if err != nil { writeIterationError(w, http.StatusInternalServerError, "iteration_create_failed", "could not create iteration"); return }
 	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "iteration_created", "iteration", item.ID, map[string]any{"type": item.Type, "parent_iteration_id": item.ParentIterationID}) }
-	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "iteration_restored", "iteration", item.ID, map[string]any{"parent_iteration_id": item.ParentIterationID}) }
 	writeIterationJSON(w, http.StatusCreated, item)
 }
 
@@ -87,6 +86,7 @@ func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
 	if err != nil { writeIterationError(w, http.StatusInternalServerError, "iteration_get_failed", "could not load iteration"); return }
 	item, err := h.store.Restore(r.Context(), userID, iterationID)
 	if err != nil { writeIterationError(w, http.StatusInternalServerError, "iteration_restore_failed", "could not restore iteration"); return }
+	if h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "iteration_restored", "iteration", item.ID, map[string]any{"parent_iteration_id": iterationID}) }
 	writeIterationJSON(w, http.StatusCreated, item)
 }
 
