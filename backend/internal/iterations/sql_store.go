@@ -47,7 +47,7 @@ func (s *SQLStore) List(ctx context.Context, userID, projectID uuid.UUID) ([]Ite
 		ORDER BY i.created_at ASC, i.id ASC
 	`, projectID, userID)
 	if err != nil { return nil, fmt.Errorf("list iterations: %w", err) }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]Iteration, 0)
 	for rows.Next() {
 		item, err := scanIteration(rows)
