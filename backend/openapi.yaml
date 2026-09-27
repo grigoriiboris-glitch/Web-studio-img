@@ -1343,7 +1343,8 @@ components:
     CompositionMutationInput:
       type: object
       additionalProperties: false
-      required: [composition_similarity]
+      required: [source_similarity_check_id]
+      description: The backend derives the authoritative composition score from the persisted similarity check; composition_similarity is accepted only as a client hint.
       properties:
         composition_spec_id: {type: string, format: uuid}
         source_similarity_check_id: {type: string, format: uuid}
