@@ -27,6 +27,7 @@ type Asset struct {
 	ID           uuid.UUID       `json:"id"`
 	ProjectID    uuid.UUID       `json:"project_id"`
 	GenerationID uuid.UUID       `json:"generation_id"`
+	Type         string          `json:"type"`
 	UserID       uuid.UUID       `json:"user_id"`
 	StorageKey   string          `json:"storage_key"`
 	PreviewKey   *string         `json:"preview_key,omitempty"`
@@ -58,12 +59,12 @@ func (s *Store) Create(ctx context.Context, userID, projectID, generationID uuid
 	var storedRaw []byte
 	err = s.db.QueryRowContext(ctx, `
 		INSERT INTO assets
-			(user_id, project_id, generation_id, storage_key, preview_key, thumbnail_key, mime_type, size, width, height, checksum, exif)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			(user_id, project_id, generation_id, type, storage_key, preview_key, thumbnail_key, mime_type, size, width, height, sha256, checksum, exif)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,$13)
 		ON CONFLICT (user_id, checksum) DO NOTHING
-		RETURNING id, project_id, generation_id, user_id, storage_key, preview_key, thumbnail_key, mime_type, size, width, height, checksum, exif, created_at
-	`, userID, projectID, generationID, storageKey, previewKey, thumbnailKey, mime, size, width, height, checksum, raw).Scan(
-		&item.ID, &item.ProjectID, &item.GenerationID, &item.UserID, &item.StorageKey, &item.PreviewKey, &item.ThumbnailKey,
+		RETURNING id, project_id, generation_id, user_id, type, storage_key, preview_key, thumbnail_key, mime_type, size, width, height, checksum, exif, created_at
+	`, userID, projectID, generationID, "generated", storageKey, previewKey, thumbnailKey, mime, size, width, height, checksum, raw).Scan(
+		&item.ID, &item.ProjectID, &item.GenerationID, &item.UserID, &item.Type, &item.StorageKey, &item.PreviewKey, &item.ThumbnailKey,
 		&item.MIMEType, &item.Size, &item.Width, &item.Height, &item.Checksum, &storedRaw, &item.CreatedAt,
 	)
 	if err == nil {
@@ -74,10 +75,10 @@ func (s *Store) Create(ctx context.Context, userID, projectID, generationID uuid
 		return Asset{}, false, fmt.Errorf("create asset: %w", err)
 	}
 	err = s.db.QueryRowContext(ctx, `
-		SELECT id, project_id, generation_id, user_id, storage_key, preview_key, thumbnail_key, mime_type, size, width, height, checksum, exif, created_at
+		SELECT id, project_id, generation_id, user_id, type, storage_key, preview_key, thumbnail_key, mime_type, size, width, height, checksum, exif, created_at
 		FROM assets WHERE user_id=$1 AND checksum=$2
 	`, userID, checksum).Scan(
-		&item.ID, &item.ProjectID, &item.GenerationID, &item.UserID, &item.StorageKey, &item.PreviewKey, &item.ThumbnailKey,
+		&item.ID, &item.ProjectID, &item.GenerationID, &item.UserID, &item.Type, &item.StorageKey, &item.PreviewKey, &item.ThumbnailKey,
 		&item.MIMEType, &item.Size, &item.Width, &item.Height, &item.Checksum, &storedRaw, &item.CreatedAt,
 	)
 	if err != nil {
