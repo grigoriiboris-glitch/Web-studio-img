@@ -2,12 +2,20 @@ openapi: 3.0.3
 info:
   title: Web Studio IMG API
   version: 1.0.0
-  description: Foundation REST API contract.
+  description: |
+    Versioned REST contract for the Web Studio IMG modular monolith.
+    OpenAPI is the source contract shared by the Go backend and Vue frontend.
 servers:
   - url: /api/v1
+    description: API v1
+tags:
+  - name: Health
+    description: Service health and readiness endpoints
 paths:
   /health:
     get:
+      tags: [Health]
+      operationId: getApiHealth
       summary: API health check
       responses:
         '200':
@@ -15,27 +23,47 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [status, service]
-                properties:
-                  status: {type: string, example: ok}
-                  service: {type: string, example: web-studio-img-api}
-  /projects:
-    get:
-      summary: Projects endpoint placeholder
-      responses:
-        '501':
-          description: Project API is implemented in the projects phase.
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
+  responses:
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
-    Error:
+    HealthResponse:
       type: object
+      additionalProperties: false
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+          example: web-studio-img-api
+    ErrorResponse:
+      type: object
+      additionalProperties: false
       required: [error]
       properties:
         error:
-          type: object
-          required: [code, message, request_id]
-          properties:
-            code: {type: string}
-            message: {type: string}
-            request_id: {type: string}
+          $ref: '#/components/schemas/Error'
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+          example: internal_error
+        message:
+          type: string
+          example: internal server error
+        request_id:
+          type: string
+          example: 01JEXAMPLE0000000000000000
