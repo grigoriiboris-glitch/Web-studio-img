@@ -58,7 +58,9 @@ func TestRestoreCreatesNewNode(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/iterations/"+source.ID.String()+"/restore", nil)
 	req = req.WithContext(auth.WithPrincipal(req.Context(), auth.Principal{UserID: userID}))
 	rec := httptest.NewRecorder()
-	handler.restore(rec, req)
+	mux := http.NewServeMux()
+	handler.Register(mux)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated { t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated) }
 	if len(store.items) != 2 { t.Fatalf("items = %d, want 2", len(store.items)) }
