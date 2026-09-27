@@ -265,6 +265,7 @@ func (h *Handler) compareIterations(ctx context.Context,userID,projectID uuid.UU
 	assetB,e:=h.loadCriticAsset(ctx,userID,projectID,b)
 	if e!=nil{return nil,"",0,"",e}
 
+	promptScore,promptAvailable:=promptSimilarity(assetA.Prompt,assetB.Prompt)
 	comparedAt:=time.Now().UTC()
 	out:=map[string]any{
 		"a":ia,
