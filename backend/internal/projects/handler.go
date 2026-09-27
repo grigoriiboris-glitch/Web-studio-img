@@ -7,13 +7,16 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 )
 
 type Handler struct {
+	events *events.Store
 	store Store
 }
 
+func NewHandlerWithEvents(store Store, eventStore *events.Store) (*Handler, error) {
 func NewHandler(store Store) (*Handler, error) {
 	if store == nil {
 		return nil, errors.New("project handler requires store")
