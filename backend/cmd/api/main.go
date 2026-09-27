@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
 	"github.com/oleg3190/Web-studio-img/backend/internal/httpapi"
+	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 )
 
 func main() {
@@ -22,7 +23,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	api := httpapi.NewServer(logger, cfg.CORSOrigins)
+	providers, err := observability.Setup(context.Background(), observability.Config{ServiceName: "web-studio-img-api"})
+	if err != nil {
+		logger.Error("observability setup failed", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := providers.Shutdown(context.Background()); err != nil {
+			logger.Error("observability shutdown failed", "error", err)
+		}
+	}()
+
+	metrics, err := observability.NewAPIMetrics(providers.MeterProvider)
+	if err != nil {
+		logger.Error("api metrics setup failed", "error", err)
+		os.Exit(1)
+	}
+
+	api := httpapi.NewServer(logger, cfg.CORSOrigins, metrics)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
 	errCh := make(chan error, 1)

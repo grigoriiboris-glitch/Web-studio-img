@@ -5,17 +5,22 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 )
 
 type Server struct {
 	handler http.Handler
 }
 
-func NewServer(logger *slog.Logger, origins []string) *Server {
+func NewServer(logger *slog.Logger, origins []string, metrics observability.APIMetrics) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
 	mux.HandleFunc("GET /api/v1/health", apiHealthHandler)
+	mux.Handle("GET /metrics", promhttp.Handler())
 
 	var handler http.Handler = mux
 	handler = withCORS(origins, handler)
@@ -23,6 +28,7 @@ func NewServer(logger *slog.Logger, origins []string) *Server {
 	handler = withRequestID(handler)
 	handler = withLogging(logger, handler)
 	handler = http.MaxBytesHandler(handler, 10<<20)
+	handler = withObservability(metrics, handler)
 
 	return &Server{handler: handler}
 }
