@@ -143,6 +143,10 @@ async function loadStudio() {
   humanActions.value = loadedActions.actions
   assistantTools.value = loadedAssistantTools.tools
   assistantActions.value = loadedAssistantActions.actions
+  if (timeline.iterations.length >= 2 && !criticAIterationId.value && !criticBIterationId.value) {
+    criticAIterationId.value = timeline.iterations[timeline.iterations.length - 2].id
+    criticBIterationId.value = timeline.iterations[timeline.iterations.length - 1].id
+  }
 }
 
 async function refreshPrompts() {
@@ -175,6 +179,15 @@ function criticAlgorithm(): string {
   if (!comparison || typeof comparison !== 'object') return 'metadata-only'
   const value = (comparison as Record<string, unknown>).algorithm
   return typeof value === 'string' ? value : 'metadata-only'
+}
+
+function criticAssetAvailable(side: 'a' | 'b'): boolean | null {
+  const assets = criticResult.value?.assets
+  if (!assets || typeof assets !== 'object') return null
+  const value = (assets as Record<string, unknown>)[side]
+  if (!value || typeof value !== 'object') return null
+  const available = (value as Record<string, unknown>).available
+  return typeof available === 'boolean' ? available : null
 }
 
 function criticMetric(name: string): number | null {
@@ -1199,8 +1212,14 @@ onUnmounted(() => {
             :closable="false"
             style="margin-top: 12px"
           />
-          <template v-if="criticResult">
+          <div v-if="criticResult" aria-live="polite">
             <el-descriptions :column="2" border style="margin-top: 12px">
+              <el-descriptions-item label="Image A">
+                {{ criticAssetAvailable('a') === true ? 'available' : criticAssetAvailable('a') === false ? 'unavailable' : '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Image B">
+                {{ criticAssetAvailable('b') === true ? 'available' : criticAssetAvailable('b') === false ? 'unavailable' : '—' }}
+              </el-descriptions-item>
               <el-descriptions-item label="Visual similarity">
                 {{ criticMetric('visual_similarity')?.toFixed(2) ?? '—' }}
               </el-descriptions-item>
@@ -1221,18 +1240,28 @@ onUnmounted(() => {
               </el-descriptions-item>
             </el-descriptions>
 
+            <el-alert
+              v-if="criticResult?.uncertainty"
+              :title="String(criticResult.uncertainty)"
+              type="warning"
+              :closable="false"
+              style="margin-top: 12px"
+            />
             <el-timeline v-if="criticObservations().length" style="margin-top: 16px">
               <el-timeline-item
                 v-for="(item, index) in criticObservations()"
                 :key="`critic-observation-${index}`"
                 placement="top"
               >
-                <strong>{{ item.observation }}</strong>
+                <div class="iteration-head">
+                  <el-tag size="small">{{ item.dimension }}</el-tag>
+                  <strong>{{ item.observation }}</strong>
+                </div>
                 <p><strong>Reason:</strong> {{ item.reason }}</p>
                 <p><strong>Confidence:</strong> {{ typeof item.confidence === 'number' ? item.confidence.toFixed(2) : '—' }}</p>
               </el-timeline-item>
             </el-timeline>
-          </template>
+          </div>
         </el-card>
 
         <el-card class="create-card">
