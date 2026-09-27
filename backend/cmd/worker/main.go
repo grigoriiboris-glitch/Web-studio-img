@@ -113,6 +113,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	defer cleanupCancel()
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-cleanupCtx.Done():
+				return
+			case <-ticker.C:
+				if err := worker.Assets.CleanupExpired(cleanupCtx, 100); err != nil {
+					logger.Warn("asset lifecycle cleanup failed", "error", err)
+				}
+			}
+		}
+	}()
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("generation worker starting")
