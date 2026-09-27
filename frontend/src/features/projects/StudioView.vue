@@ -49,9 +49,6 @@ const lastUploadedAsset = ref('')
 const verifying = ref(false)
 const provenanceVerified = ref<boolean | null>(null)
 const provenanceMessage = ref('')
-const compositionDecision = ref('')
-const manualEditText = ref('')
-const manualEditPrevious = ref('')
 const referenceAnalysisTarget = ref('')
 const similarityTargetAsset = ref('')
 const similarityResult = ref<SimilarityCheck | null>(null)
@@ -103,8 +100,6 @@ const referenceForm = ref({
     geometry: 0,
   },
 })
-const materialDecision = ref('')
-const textureDecision = ref('')
 const builderText = computed(() => {
   const ordered = promptComponents
     .map(component => promptForm.value.components[component]?.trim())
@@ -159,6 +154,14 @@ async function createIteration() {
         : created.type === 'manual_edit'
           ? 'MANUAL_EDIT'
           : ''
+    if (created.type === 'composition') {
+      try {
+        compositionSpec.value = await compositionApi.update(projectId(), created.id, {})
+        compositionIterationId.value = created.id
+      } catch (err) {
+        error.value = err instanceof Error ? err.message : 'Could not initialize composition editor'
+      }
+    }
     if (actionType) {
       await humanActionsApi.create(projectId(), {
         iteration_id: created.id,
@@ -334,71 +337,6 @@ async function rejectVariant(item: Generation) {
   }
 }
 
-async function selectMaterial() {
-  const value = materialDecision.value.trim()
-  if (!value) return
-  try {
-    await logHumanAction({
-      action_type: 'MATERIAL_SELECTED',
-      payload: { material: value, version: iterations.value[iterations.value.length - 1]?.id },
-      old_state: { material: null },
-      new_state: { material: value },
-    })
-    materialDecision.value = ''
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not record material selection'
-  }
-}
-
-async function recordComposition() {
-  const value = compositionDecision.value.trim()
-  if (!value) return
-  try {
-    await logHumanAction({
-      action_type: 'COMPOSITION_CHANGED',
-      payload: { decision: value, version: iterations.value[iterations.value.length - 1]?.id },
-      old_state: { composition: null },
-      new_state: { composition: value },
-    })
-    compositionDecision.value = ''
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not record composition decision'
-  }
-}
-
-async function recordManualEdit() {
-  const value = manualEditText.value
-  if (!value.trim()) return
-  try {
-    await logHumanAction({
-      action_type: 'MANUAL_EDIT',
-      payload: { version: iterations.value[iterations.value.length - 1]?.id },
-      old_state: { text: manualEditPrevious.value },
-      new_state: { text: value },
-    })
-    manualEditPrevious.value = value
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not record manual edit'
-  }
-}
-
-async function selectTexture() {
-  const value = textureDecision.value.trim()
-  if (!value) return
-  try {
-    await logHumanAction({
-      action_type: 'TEXTURE_SELECTED',
-      payload: { texture: value, version: iterations.value[iterations.value.length - 1]?.id },
-      old_state: { texture: null },
-      new_state: { texture: value },
-    })
-    textureDecision.value = ''
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not record texture selection'
-  }
-}
-
-
 async function loadComposition(iterationId?: string) {
   const id = iterationId ?? compositionIterationId.value
   if (!id) return
@@ -527,7 +465,6 @@ async function loadLibraries() {
 
 async function chooseMaterial(item: LibraryItem) {
   selectedMaterial.value = item.name
-  materialDecision.value = item.prompt_fragment
   await logHumanAction({
     action_type: 'MATERIAL_SELECTED',
     payload: { library_item_id: item.id, name: item.name, prompt_fragment: item.prompt_fragment },
@@ -537,7 +474,6 @@ async function chooseMaterial(item: LibraryItem) {
 
 async function chooseTexture(item: LibraryItem) {
   selectedTexture.value = item.name
-  textureDecision.value = item.prompt_fragment
   await logHumanAction({
     action_type: 'TEXTURE_SELECTED',
     payload: { library_item_id: item.id, name: item.name, prompt_fragment: item.prompt_fragment },
@@ -949,17 +885,10 @@ onUnmounted(() => {
         </el-card>
 
         <el-card class="create-card">
-          <template #header>Creative decisions</template>
+          <template #header>Human creative actions</template>
           <el-space wrap>
-            <el-input v-model="compositionDecision" placeholder="Composition decision" @keyup.enter="recordComposition" />
-            <el-button type="primary" @click="recordComposition">Record composition</el-button>
-            <el-input v-model="manualEditText" placeholder="Manual edit state" @keyup.enter="recordManualEdit" />
-            <el-button type="primary" @click="recordManualEdit">Record manual edit</el-button>
-            <el-input v-model="materialDecision" placeholder="Material selected" @keyup.enter="selectMaterial" />
-            <el-button type="primary" @click="selectMaterial">Record material</el-button>
-            <el-input v-model="textureDecision" placeholder="Texture selected" @keyup.enter="selectTexture" />
-            <el-button type="primary" @click="selectTexture">Record texture</el-button>
             <el-button type="success" @click="approveProject">Approve final result</el-button>
+            <span>Create an <strong>idea</strong>, <strong>manual_edit</strong> or <strong>composition</strong> iteration below to create a provenance-backed human action.</span>
           </el-space>
         </el-card>
 
