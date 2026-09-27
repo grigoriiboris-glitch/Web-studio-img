@@ -88,4 +88,4 @@ func (h *Handler) applyLanguage(w http.ResponseWriter,r *http.Request){u,ok:=cur
 
 func(h *Handler) audit(r *http.Request,u,pid,id uuid.UUID,action string,payload map[string]any){if pid!=uuid.Nil&&h.actions!=nil{_,_=h.actions.Create(r.Context(),u,pid,humanactions.Request{ActionType:action,Payload:payload})};if pid!=uuid.Nil&&h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u,ProjectID:pid,EntityType:"creative_profile",EntityID:id,Action:strings.ToLower(action),Payload:payload})}}
 func writeJSON(w http.ResponseWriter,s int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(s);_=json.NewEncoder(w).Encode(v)}
-func errJSON(w http.ResponseWriter,s,c,m string){writeJSON(w,s,map[string]any{"error":map[string]string{"code":c,"message":m,"request_id":uuid.NewString()}})}
+func errJSON(w http.ResponseWriter,s int,c,m string){writeJSON(w,s,map[string]any{"error":map[string]string{"code":c,"message":m,"request_id":uuid.NewString()}})}
