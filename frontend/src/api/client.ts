@@ -180,6 +180,16 @@ export interface Prompt {
   created_at: string
 }
 
+export interface ReferenceInfluence {
+  composition: number
+  semantic: number
+  color: number
+  style: number
+  material: number
+  geometry: number
+  warning?: string
+}
+
 export interface Reference {
   id: string
   project_id: string
@@ -191,6 +201,7 @@ export interface Reference {
   user_owned: boolean
   sha256?: string
   notes?: string
+  influence?: ReferenceInfluence
   created_at: string
   updated_at: string
 }
@@ -224,39 +235,79 @@ export const projectEventsApi = {
     onEvent: ProjectEventHandler,
     signal?: AbortSignal,
   ) => {
-    const token = localStorage.getItem('web-studio-access-token')
-    const response = await fetch(API_BASE_URL + '/projects/' + projectId + '/events', {
-      headers: {
-        Accept: 'text/event-stream',
-        ...(token ? { Authorization: 'Bearer ' + token } : {}),
-      },
-      signal,
-    })
-    if (!response.ok) throw new Error('Event stream failed with status ' + response.status)
-    if (!response.body) throw new Error('Event stream is unavailable')
+    let lastEventId = 0
+    let backoffMs = 500
 
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let data = ''
-    const emit = () => {
-      if (!data) return
-      onEvent(JSON.parse(data) as ProjectEvent)
-      data = ''
-    }
-
-    while (true) {
-      const chunk = await reader.read()
-      if (chunk.done) break
-      buffer += decoder.decode(chunk.value, { stream: true })
-      const frames = buffer.split('\n\n')
-      buffer = frames.pop() ?? ''
-      for (const frame of frames) {
-        for (const line of frame.split('\n')) {
-          if (line.startsWith('data:')) data += line.slice(5).trim()
-        }
-        emit()
+    while (!signal?.aborted) {
+      let response: Response
+      try {
+        const token = localStorage.getItem('web-studio-access-token')
+        response = await fetch(API_BASE_URL + '/projects/' + projectId + '/events', {
+          headers: {
+            Accept: 'text/event-stream',
+            ...(lastEventId > 0 ? { 'Last-Event-ID': String(lastEventId) } : {}),
+            ...(token ? { Authorization: 'Bearer ' + token } : {}),
+          },
+          signal,
+        })
+      } catch (err) {
+        if (signal?.aborted) return
+        await new Promise(resolve => setTimeout(resolve, backoffMs))
+        backoffMs = Math.min(backoffMs * 2, 10_000)
+        continue
       }
+
+      if (!response.ok) {
+        if (response.status >= 400 && response.status < 500) {
+          throw new Error('Event stream failed with status ' + response.status)
+        }
+        await new Promise(resolve => setTimeout(resolve, backoffMs))
+        backoffMs = Math.min(backoffMs * 2, 10_000)
+        continue
+      }
+      if (!response.body) throw new Error('Event stream is unavailable')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let eventId = ''
+      let eventName = ''
+      let data = ''
+
+      const emit = () => {
+        if (!data) return
+        try {
+          const event = JSON.parse(data) as ProjectEvent
+          if (eventName) event.event_type = eventName
+          if (event.id > 0) lastEventId = event.id
+          else if (eventId) lastEventId = Number(eventId) || lastEventId
+          onEvent(event)
+        } finally {
+          eventId = ''
+          eventName = ''
+          data = ''
+        }
+      }
+
+      while (!signal?.aborted) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        buffer += decoder.decode(chunk.value, { stream: true })
+        const frames = buffer.split('\n\n')
+        buffer = frames.pop() ?? ''
+        for (const frame of frames) {
+          for (const line of frame.split('\n')) {
+            if (line.startsWith('id:')) eventId = line.slice(3).trim()
+            else if (line.startsWith('event:')) eventName = line.slice(6).trim()
+            else if (line.startsWith('data:')) data += line.slice(5).trim()
+          }
+          emit()
+        }
+      }
+      if (signal?.aborted) return
+
+      await new Promise(resolve => setTimeout(resolve, backoffMs))
+      backoffMs = Math.min(backoffMs * 2, 10_000)
     }
   },
 }
@@ -290,6 +341,7 @@ export const referencesApi = {
     user_owned?: boolean
     sha256?: string
     notes?: string
+    influence?: ReferenceInfluence
   }) => apiRequest<Reference>('/projects/' + projectId + '/references', { method: 'POST', body: JSON.stringify(input) }),
   update: (projectId: string, referenceId: string, input: {
     asset_id?: string
@@ -300,6 +352,7 @@ export const referencesApi = {
     user_owned?: boolean
     sha256?: string
     notes?: string
+    influence?: ReferenceInfluence
   }) => apiRequest<Reference>('/projects/' + projectId + '/references/' + referenceId, { method: 'PATCH', body: JSON.stringify(input) }),
   remove: (projectId: string, referenceId: string) =>
     apiRequest<void>('/projects/' + projectId + '/references/' + referenceId, { method: 'DELETE' }),
