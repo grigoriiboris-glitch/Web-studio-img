@@ -25,7 +25,7 @@ var (
 	ErrReferenceNotFound = errors.New("reference not found")
 )
 
-var sha256Pattern = regexp.MustCompile("^[0-9a-f]{64}$")
+var sha256Pattern = regexp.MustCompile("^[0-9a-fA-F]{64}$")
 
 type Influence struct {
 	Composition float64 `json:"composition"`
@@ -99,8 +99,6 @@ func (r Request) Validate() error {
 		for _, score := range []float64{r.Influence.Composition, r.Influence.Semantic, r.Influence.Color, r.Influence.Style, r.Influence.Material, r.Influence.Geometry} {
 			if score < 0 || score > 1 { return ErrInvalidReference }
 		}
-		r.Influence.Warning = ""
-		if r.Influence.Composition >= 0.8 { r.Influence.Warning = "High composition similarity; review before use." }
 	}
 	return nil
 }
