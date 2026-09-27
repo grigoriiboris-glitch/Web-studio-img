@@ -128,7 +128,8 @@ func (h *Handler) getSpec(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) suggest(w http.ResponseWriter, r *http.Request) {
-	u, ok := auth.PrincipalFromContext(r.Context()); if !ok { writeErr(w,401,"unauthorized","authentication required"); return }	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	u, ok := auth.PrincipalFromContext(r.Context()); if !ok { writeErr(w,401,"unauthorized","authentication required"); return }
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	if idempotencyKey == "" { writeErr(w,400,"missing_idempotency_key","Idempotency-Key header is required"); return }
 
 	pid, err := uuid.Parse(r.PathValue("project_id")); if err != nil { writeErr(w,400,"invalid_project_id","invalid project id"); return }
