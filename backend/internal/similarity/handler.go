@@ -43,7 +43,7 @@ type Check struct {
 	Sources            []string               `json:"sources"`
 	UnavailableSources []string               `json:"unavailable_sources"`
 	Algorithm          string                 `json:"algorithm"`
-	AlgorithmVersion   string                 `json:"algorithm_version"`
+	AlgorithmVersion   string                 `json:"algorithm_version"`\n\tIdempotencyKey     string                 `json:"-"`
 	Metadata           map[string]any         `json:"metadata"`
 	CreatedAt          time.Time              `json:"created_at"`
 }
@@ -131,13 +131,22 @@ func (h *Handler) createCheck(w http.ResponseWriter, r *http.Request) {
 	rawMetadata, _ := json.Marshal(metadata)
 	var c Check
 	var created time.Time
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	err = h.db.QueryRowContext(r.Context(), `
-		INSERT INTO similarity_checks(project_id,user_id,target_asset_id,visual_score,composition_score,semantic_score,style_score,search_scope,sources,unavailable_sources,algorithm,algorithm_version,metadata)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		INSERT INTO similarity_checks(project_id,user_id,target_asset_id,visual_score,composition_score,semantic_score,style_score,search_scope,sources,unavailable_sources,algorithm,algorithm_version,metadata,idempotency_key)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+		ON CONFLICT (user_id,idempotency_key) DO NOTHING
 		RETURNING id,project_id,user_id,target_asset_id,visual_score,composition_score,semantic_score,style_score,search_scope,sources,unavailable_sources,algorithm,algorithm_version,metadata,created_at
-	`, projectID,p.UserID,target.ID,maxVisual,maxComposition,maxSemantic,maxStyle,in.SearchScope,rawSources,rawUnavailable,"deterministic-image-descriptors",AlgorithmVersion,rawMetadata).Scan(
+	`, projectID,p.UserID,target.ID,maxVisual,maxComposition,maxSemantic,maxStyle,in.SearchScope,rawSources,rawUnavailable,"deterministic-image-descriptors",AlgorithmVersion,rawMetadata,idempotencyKey).Scan(
 		&c.ID,&c.ProjectID,&c.UserID,&c.TargetAssetID,&c.VisualScore,&c.CompositionScore,&c.SemanticScore,&c.StyleScore,&c.SearchScope,&rawSources,&rawUnavailable,&c.Algorithm,&c.AlgorithmVersion,&rawMetadata,&created,
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		var existingTarget uuid.UUID
+		err = h.db.QueryRowContext(r.Context(), `SELECT id,target_asset_id FROM similarity_checks WHERE user_id=$1 AND idempotency_key=$2`, p.UserID, idempotencyKey).Scan(&c.ID, &existingTarget)
+		if err != nil { errJSON(w, 500, "similarity_persist_failed", "could not load idempotent similarity check"); return }
+		if existingTarget != target.ID { errJSON(w, 409, "idempotency_conflict", "idempotency key was already used for another target asset"); return }
+		writeJSON(w, http.StatusOK, mustLoadCheck(h.db, r.Context(), p.UserID, c.ID)); return
+	}
 	if err != nil { errJSON(w, http.StatusInternalServerError, "similarity_persist_failed", "could not persist similarity check"); return }
 	c.CreatedAt = created
 	_ = json.Unmarshal(rawSources, &c.Sources); _ = json.Unmarshal(rawUnavailable, &c.UnavailableSources); _ = json.Unmarshal(rawMetadata, &c.Metadata)
@@ -195,3 +204,12 @@ func decodeJSON(r *http.Request,v any) error { d:=json.NewDecoder(io.LimitReader
 func readObject(ctx context.Context,s storage.StorageProvider,key string)([]byte,error){obj,_,err:=s.Get(ctx,key);if err!=nil{return nil,err};defer obj.Close();return io.ReadAll(io.LimitReader(obj,10<<20+1))}
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
 func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}
+
+func mustLoadCheck(db *sql.DB, ctx context.Context, userID, id uuid.UUID) Check {
+	var c Check
+	var sources, unavailable, metadata []byte
+	_ = db.QueryRowContext(ctx, `SELECT id,project_id,user_id,target_asset_id,visual_score,composition_score,semantic_score,style_score,search_scope,sources,unavailable_sources,algorithm,algorithm_version,metadata,created_at FROM similarity_checks WHERE id=$1 AND user_id=$2`, id, userID).
+		Scan(&c.ID,&c.ProjectID,&c.UserID,&c.TargetAssetID,&c.VisualScore,&c.CompositionScore,&c.SemanticScore,&c.StyleScore,&c.SearchScope,&sources,&unavailable,&c.Algorithm,&c.AlgorithmVersion,&metadata,&c.CreatedAt)
+	_ = json.Unmarshal(sources,&c.Sources); _ = json.Unmarshal(unavailable,&c.UnavailableSources); _ = json.Unmarshal(metadata,&c.Metadata)
+	return c
+}
