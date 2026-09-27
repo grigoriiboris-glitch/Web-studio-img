@@ -36,10 +36,20 @@ func TestBuildCriticObservationsIsStructured(t *testing.T) {
 	compA:=map[string]any{
 		"aspect_ratio":1.0,
 		"focal_points":[]any{map[string]any{"x":0.25,"y":0.25}},
+		"horizon":0.25,
+		"perspective":"portrait-aspect",
+		"negative_space":map[string]any{"edge_density":0.10},
+		"object_scale":map[string]any{"heuristic_box_area":0.20},
+		"bounding_boxes":[]any{map[string]any{"x_min":0.0,"y_min":0.0,"x_max":0.5,"y_max":0.5}},
 	}
 	compB:=map[string]any{
 		"aspect_ratio":1.6,
 		"focal_points":[]any{map[string]any{"x":0.7,"y":0.7}},
+		"horizon":0.7,
+		"perspective":"landscape-aspect",
+		"negative_space":map[string]any{"edge_density":0.30},
+		"object_scale":map[string]any{"heuristic_box_area":0.45},
+		"bounding_boxes":[]any{map[string]any{"x_min":0.5,"y_min":0.5,"x_max":1.0,"y_max":1.0}},
 	}
 	observations:=buildCriticObservations(result,compA,compB,"red glass","blue stone")
 	if len(observations)<6 {
