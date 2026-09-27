@@ -1185,7 +1185,7 @@ components:
         user_id: {type: string, format: uuid}
         tool:
           type: string
-          enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance]
+          enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance, fact_check]
         kind: {type: string, enum: [tool_execution, recommendation]}
         input: {type: object, additionalProperties: true}
         output: {type: object, additionalProperties: true, description: Recommendation tools include a nested recommendation object matching AssistantRecommendation.}
@@ -1207,7 +1207,7 @@ components:
       required: [action, result, explanation, confidence, uncertainty]
       properties:
         action: {$ref: '#/components/schemas/AssistantAction'}
-        result: {type: object, additionalProperties: true, description: compare_iterations returns iteration metadata, prompt comparison, optional image/composition features, scores, algorithm metadata, timestamp, and structured observations.}
+        result: {type: object, additionalProperties: true, description: Tool-specific result. fact_check returns claim, evidence, sources, confidence, status, checked_at, method, and source_verification.}
         explanation: {type: string}
         confidence: {type: number, minimum: 0, maximum: 1}
         uncertainty: {type: string}
