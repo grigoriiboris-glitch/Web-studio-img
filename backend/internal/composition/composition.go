@@ -162,7 +162,7 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 	u, ok := auth.PrincipalFromContext(r.Context()); if !ok { writeErr(w,401,"unauthorized","authentication required"); return }
 	pid, err := uuid.Parse(r.PathValue("project_id")); if err != nil { writeErr(w,400,"invalid_project_id","invalid project id"); return }
 	mid, err := uuid.Parse(r.PathValue("mutation_id")); if err != nil { writeErr(w,400,"invalid_mutation_id","invalid mutation id"); return }
-	tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeErr(w,500,"mutation_accept_failed","could not start transaction");return};defer tx.Rollback()
+	tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeErr(w,500,"mutation_accept_failed","could not start transaction");return};defer func() { _ = tx.Rollback() }()
 	var status string;var specID *uuid.UUID
 	if err=tx.QueryRowContext(r.Context(),`SELECT status,composition_spec_id FROM composition_mutations WHERE id=$1 AND project_id=$2 AND user_id=$3 FOR UPDATE`,mid,pid,u.UserID).Scan(&status,&specID);errors.Is(err,sql.ErrNoRows){writeErr(w,404,"mutation_not_found","mutation suggestion not found");return};if err!=nil{writeErr(w,500,"mutation_load_failed","could not load mutation");return};if status!="proposed"{writeErr(w,409,"mutation_already_decided","mutation suggestion is already decided");return}
 	var parentID uuid.UUID
