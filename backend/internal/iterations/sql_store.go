@@ -20,6 +20,7 @@ func (s *SQLStore) Create(ctx context.Context, userID, projectID uuid.UUID, pare
 	if err := ValidateType(iterationType); err != nil { return Iteration{}, err }
 	if err := ValidateTitle(title); err != nil { return Iteration{}, err }
 	if err := ValidateDescription(description); err != nil { return Iteration{}, err }
+	if err := ValidateManualEditDescription(iterationType, description); err != nil { return Iteration{}, err }
 	if parentID != nil {
 		parent, err := s.getOwned(ctx, userID, *parentID)
 		if err != nil { return Iteration{}, err }
