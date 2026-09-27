@@ -53,6 +53,4 @@ func(a *Analyzer) analyze(w http.ResponseWriter,r *http.Request){
 	if a.provenance!=nil{_,_=a.provenance.Append(r.Context(),provenance.Event{UserID:p.UserID,ProjectID:pid,IterationID:&iid,EntityType:"composition",EntityID:spec.ID,Action:"composition.analyzed",Payload:payload})}
 	writeJSON(w,200,map[string]any{"spec":spec,"analysis":desc,"uncertainty":"Deterministic image descriptors only; no learned object detection or segmentation."})
 }
-func stringValue(v any)string{if s,ok:=v.(string);ok{return s};return ""}
-func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
 func returnErr(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}
