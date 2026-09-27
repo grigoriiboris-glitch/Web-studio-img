@@ -66,6 +66,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	p, ok := auth.PrincipalFromContext(r.Context())
 	if !ok { errJSON(w,401,"unauthorized","authentication required"); return }
 	if h.db == nil || h.storage == nil { errJSON(w,503,"export_unavailable","export storage is not configured"); return }
+	if strings.TrimSpace(r.Header.Get("Idempotency-Key")) == "" { errJSON(w,400,"missing_idempotency_key","Idempotency-Key header is required"); return }
 	projectID, err := uuid.Parse(r.PathValue("project_id")); if err != nil { errJSON(w,400,"invalid_project_id","invalid project id"); return }
 	var in struct { FinalAssetID uuid.UUID `json:"final_asset_id"` }
 	if r.Body != nil && r.ContentLength != 0 {
