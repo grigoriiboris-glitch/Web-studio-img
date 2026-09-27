@@ -944,7 +944,12 @@ onUnmounted(() => {
     <el-header class="header">
       <RouterLink to="/projects"><el-button link>← Projects</el-button></RouterLink>
       <strong>{{ project?.name ?? 'Studio' }}</strong>
-      <el-tag v-if="project">{{ project.status }}</el-tag>
+      <el-space>
+        <RouterLink :to="`/projects/${projectId()}/resources`">
+          <el-button plain>Creative Resources</el-button>
+        </RouterLink>
+        <el-tag v-if="project">{{ project.status }}</el-tag>
+      </el-space>
     </el-header>
 
     <el-main>
