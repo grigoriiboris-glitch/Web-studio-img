@@ -15,6 +15,7 @@ import {
   similarityApi,
   exportsApi,
   compositionApi,
+  assistantApi,
   materialsApi,
   texturesApi,
   type Generation,
@@ -28,6 +29,8 @@ import {
   type CreationExport,
   type CompositionSpec,
   type CompositionMutation,
+  type AssistantAction,
+  type AssistantRecommendation,
   type LibraryItem,
 } from '../../api/client'
 
@@ -67,6 +70,12 @@ const materialSearch = ref('')
 const textureSearch = ref('')
 const selectedMaterial = ref('')
 const selectedTexture = ref('')
+const assistantTools = ref<{ name: string; description: string; mutating: boolean; recommendation: boolean }[]>([])
+const assistantActions = ref<AssistantAction[]>([])
+const assistantLoading = ref(false)
+const assistantDecisionLoading = ref('')
+const assistantEditAction = ref<AssistantAction | null>(null)
+const assistantEditText = ref('')
 let eventAbort: AbortController | undefined
 
 const types: IterationType[] = ['idea', 'sketch', 'generation', 'selection', 'composition', 'prompt', 'manual_edit', 'final']
@@ -114,18 +123,22 @@ const projectId = () => String(route.params.projectId)
 
 async function loadStudio() {
   const id = projectId()
-  const [loadedProject, timeline, loadedPrompts, loadedReferences, loadedActions] = await Promise.all([
+  const [loadedProject, timeline, loadedPrompts, loadedReferences, loadedActions, loadedAssistantTools, loadedAssistantActions] = await Promise.all([
     projectsApi.get(id),
     iterationsApi.list(id),
     promptsApi.list(id),
     referencesApi.list(id),
     humanActionsApi.list(id),
+    assistantApi.tools(id),
+    assistantApi.actions(id),
   ])
   project.value = loadedProject
   iterations.value = timeline.iterations
   prompts.value = loadedPrompts.prompts
   references.value = loadedReferences.references
   humanActions.value = loadedActions.actions
+  assistantTools.value = loadedAssistantTools.tools
+  assistantActions.value = loadedAssistantActions.actions
 }
 
 async function refreshPrompts() {
@@ -138,6 +151,87 @@ async function refreshReferences() {
 
 async function refreshActions() {
   humanActions.value = (await humanActionsApi.list(projectId())).actions
+}
+
+async function refreshAssistantActions() {
+  assistantActions.value = (await assistantApi.actions(projectId())).actions
+}
+
+async function runAssistantRecommendation(tool: string) {
+  assistantLoading.value = true
+  error.value = null
+  try {
+    const input: Record<string, unknown> = {}
+    if (tool === 'analyze_composition') {
+      const assetId = lastUploadedAsset.value.trim()
+      if (!assetId) {
+        error.value = 'Upload an asset before asking the Assistant for composition analysis'
+        return
+      }
+      input.asset_id = assetId
+      if (compositionIterationId.value) input.iteration_id = compositionIterationId.value
+    } else if (tool === 'suggest_materials') {
+      input.kind = 'material'
+      input.query = materialSearch.value.trim()
+    }
+    const response = await assistantApi.execute(projectId(), tool, input)
+    assistantActions.value.push(response.action)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not run Assistant recommendation'
+  } finally {
+    assistantLoading.value = false
+  }
+}
+
+function assistantRecommendation(action: AssistantAction): AssistantRecommendation | null {
+  const value = action.output?.recommendation
+  if (!value || typeof value !== 'object') return null
+  return value as unknown as AssistantRecommendation
+}
+
+function openAssistantEdit(action: AssistantAction) {
+  const recommendation = assistantRecommendation(action)
+  if (!recommendation) return
+  assistantEditAction.value = action
+  assistantEditText.value = recommendation.recommendation
+}
+
+async function decideAssistant(action: AssistantAction, decision: 'apply' | 'edit' | 'ignore') {
+  if (decision === 'edit') {
+    openAssistantEdit(action)
+    return
+  }
+  assistantDecisionLoading.value = action.id
+  error.value = null
+  try {
+    const updated = await assistantApi.decide(projectId(), action.id, decision, {}, crypto.randomUUID())
+    const index = assistantActions.value.findIndex(item => item.id === action.id)
+    if (index >= 0) assistantActions.value[index] = updated
+    else assistantActions.value.push(updated)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record Assistant decision'
+  } finally {
+    assistantDecisionLoading.value = ''
+  }
+}
+
+async function submitAssistantEdit() {
+  const action = assistantEditAction.value
+  const finalText = assistantEditText.value.trim()
+  if (!action || !finalText) return
+  assistantDecisionLoading.value = action.id
+  error.value = null
+  try {
+    const updated = await assistantApi.decide(projectId(), action.id, 'edit', { final_text: finalText }, crypto.randomUUID())
+    const index = assistantActions.value.findIndex(item => item.id === action.id)
+    if (index >= 0) assistantActions.value[index] = updated
+    assistantEditAction.value = null
+    assistantEditText.value = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not edit Assistant recommendation'
+  } finally {
+    assistantDecisionLoading.value = ''
+  }
 }
 
 async function createIteration() {
@@ -936,6 +1030,66 @@ onUnmounted(() => {
         </el-card>
 
         <el-card class="create-card">
+          <template #header>AI Creative Assistant</template>
+          <el-space wrap>
+            <el-button
+              v-if="assistantTools.some(tool => tool.name === 'suggest_prompt')"
+              type="primary"
+              :loading="assistantLoading"
+              @click="runAssistantRecommendation('suggest_prompt')"
+            >Suggest prompt</el-button>
+            <el-button
+              v-if="assistantTools.some(tool => tool.name === 'suggest_materials')"
+              :loading="assistantLoading"
+              @click="runAssistantRecommendation('suggest_materials')"
+            >Suggest materials</el-button>
+            <el-button
+              v-if="assistantTools.some(tool => tool.name === 'analyze_composition')"
+              :loading="assistantLoading"
+              :disabled="!lastUploadedAsset"
+              @click="runAssistantRecommendation('analyze_composition')"
+            >Analyze composition</el-button>
+          </el-space>
+          <el-alert
+            title="Recommendations are advisory. Nothing is applied until you choose Apply, Edit, or Ignore."
+            type="info"
+            :closable="false"
+            style="margin-top: 12px"
+          />
+          <el-empty v-if="assistantActions.filter(action => action.kind === 'recommendation').length === 0" description="No AI recommendations yet." />
+          <el-timeline v-else style="margin-top: 12px">
+            <el-timeline-item
+              v-for="action in assistantActions.filter(item => item.kind === 'recommendation')"
+              :key="action.id"
+              :timestamp="new Date(action.created_at).toLocaleString()"
+              placement="top"
+            >
+              <div v-if="assistantRecommendation(action)" class="assistant-recommendation">
+                <div class="iteration-head">
+                  <el-tag>{{ action.tool }}</el-tag>
+                  <el-tag v-if="action.decision" :type="action.decision === 'apply' ? 'success' : action.decision === 'ignore' ? 'info' : 'warning'">{{ action.decision }}</el-tag>
+                  <strong>{{ assistantRecommendation(action)?.recommendation }}</strong>
+                </div>
+                <p><strong>Reason:</strong> {{ assistantRecommendation(action)?.reason }}</p>
+                <p><strong>Affected:</strong> {{ JSON.stringify(assistantRecommendation(action)?.affected_entity) }}</p>
+                <p><strong>Expected effect:</strong> {{ assistantRecommendation(action)?.expected_effect }}</p>
+                <p><strong>Confidence:</strong> {{ (assistantRecommendation(action)?.confidence ?? action.confidence).toFixed(2) }}</p>
+                <el-alert :title="assistantRecommendation(action)?.uncertainty ?? action.uncertainty" type="warning" :closable="false" />
+                <details>
+                  <summary>Evidence</summary>
+                  <pre class="action-payload">{{ JSON.stringify(assistantRecommendation(action)?.evidence, null, 2) }}</pre>
+                </details>
+                <el-space v-if="!action.decision" wrap>
+                  <el-button size="small" type="success" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'apply')">Apply</el-button>
+                  <el-button size="small" type="warning" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'edit')">Edit</el-button>
+                  <el-button size="small" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'ignore')">Ignore</el-button>
+                </el-space>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+        </el-card>
+
+<el-card class="create-card">
           <template #header>Similarity Check</template>
           <el-space wrap>
             <el-input v-model="similarityTargetAsset" placeholder="Target asset ID (defaults to latest upload)" style="width: 360px" />
@@ -1004,7 +1158,15 @@ onUnmounted(() => {
           </el-descriptions>
         </el-card>
 
-        <el-card class="timeline-card">
+        <el-dialog v-model="assistantEditAction" title="Edit AI recommendation" width="560px">
+          <el-input v-model="assistantEditText" type="textarea" :rows="7" maxlength="20000" show-word-limit />
+          <template #footer>
+            <el-button @click="assistantEditAction = null">Cancel</el-button>
+            <el-button type="primary" :loading="assistantDecisionLoading === assistantEditAction?.id" :disabled="!assistantEditText.trim()" @click="submitAssistantEdit">Apply edit</el-button>
+          </template>
+        </el-dialog>
+
+<el-card class="timeline-card">
           <template #header>Human Contribution Map</template>
           <el-empty v-if="humanActions.length === 0" description="No explicit human actions recorded yet." />
           <el-timeline v-else>
