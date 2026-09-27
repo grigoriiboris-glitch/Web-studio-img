@@ -1,8 +1,10 @@
 package assets
 
 import (
+	"bytes"
 	"context"
 	"image"
+	"image/png"
 	"testing"
 
 	"github.com/google/uuid"
@@ -29,17 +31,18 @@ func TestStorageKeysMatchSpecification(t *testing.T) {
 	}
 }
 
-func TestNormalizeImageStripsMetadataByReencoding(t *testing.T) {
+func TestNormalizeImageByReencoding(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
-	data, err := encodeTestPNG(img)
+	var source bytes.Buffer
+	if err := png.Encode(&source, img); err != nil { t.Fatal(err) }
+	normalized, err := normalizeImage(source.Bytes(), "image/png")
 	if err != nil { t.Fatal(err) }
-	normalized, err := normalizeImage(data, "image/png")
-	if err != nil { t.Fatal(err) }
-	if _, _, err := image.DecodeConfig(bytesReader(normalized)); err != nil { t.Fatal(err) }
+	if _, _, err := image.DecodeConfig(bytes.NewReader(normalized)); err != nil { t.Fatal(err) }
 }
 
-func encodeTestPNG(img image.Image) ([]byte, error) {
-	var buf bytesBuffer
-	if err := pngEncode(&buf, img); err != nil { return nil, err }
-	return buf.Bytes(), nil
+func TestProcessorUsesInjectedScanner(t *testing.T) {
+	scanner := &fakeScanner{}
+	processor := Processor{Scanner: scanner}
+	if err := processor.scanner().Scan(context.Background(), []byte("data"), "image/png"); err != nil { t.Fatal(err) }
+	if !scanner.called { t.Fatal("expected injected scanner to be called") }
 }
