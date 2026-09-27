@@ -114,6 +114,43 @@ func (s *Store) Reserve(
 	return item, false, nil
 }
 
+
+func (s *Store) ReserveUploadedAsset(ctx context.Context, userID, projectID uuid.UUID, mime string, size int64, width, height int, checksum string, exifData map[string]any) (Asset, bool, error) {
+	if userID == uuid.Nil || projectID == uuid.Nil || size <= 0 || size > MaxAssetSize || width <= 0 || height <= 0 || checksum == "" {
+		return Asset{}, false, fmt.Errorf("invalid uploaded asset metadata")
+	}
+	raw, err := json.Marshal(exifData)
+	if err != nil {
+		return Asset{}, false, err
+	}
+	id := uuid.New()
+	original, preview, thumbnail := storageKeys(userID, projectID, id)
+	var item Asset
+	var generationID sql.NullString
+	var previewKey, thumbnailKey sql.NullString
+	var storedExif []byte
+	var expiresAt *time.Time
+	err = s.db.QueryRowContext(ctx, `
+		INSERT INTO assets(id,user_id,project_id,generation_id,type,storage_key,preview_key,thumbnail_key,mime_type,size,width,height,sha256,checksum,exif,lifecycle_status,expires_at)
+		VALUES($1,$2,$3,NULL,'uploaded',$4,$5,$6,$7,$8,$9,$10,$11,$11,$12,'pending',now()+interval '24 hours')
+		ON CONFLICT (user_id, checksum) DO NOTHING
+		RETURNING id,project_id,generation_id,type,user_id,storage_key,preview_key,thumbnail_key,mime_type,size,width,height,checksum,exif,lifecycle_status,expires_at,deleted_at,created_at
+	`, id,userID,projectID,original,preview,thumbnail,mime,size,width,height,checksum,raw,
+	).Scan(&item.ID,&item.ProjectID,&generationID,&item.Type,&item.UserID,&item.StorageKey,&previewKey,&thumbnailKey,&item.MIMEType,&item.Size,&item.Width,&item.Height,&item.Checksum,&storedExif,&item.LifecycleStatus,&expiresAt,&item.DeletedAt,&item.CreatedAt)
+	if err == nil {
+		item.ExpiresAt = expiresAt
+		if previewKey.Valid { v := previewKey.String; item.PreviewKey = &v }
+		if thumbnailKey.Valid { v := thumbnailKey.String; item.ThumbnailKey = &v }
+		if generationID.Valid { item.GenerationID,_ = uuid.Parse(generationID.String) }
+		_ = json.Unmarshal(storedExif, &item.EXIF)
+		return item, true, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Asset{}, false, fmt.Errorf("reserve uploaded asset: %w", err)
+	}
+	return s.lookupByChecksum(ctx, userID, projectID, checksum)
+}
+
 func (s *Store) Finalize(ctx context.Context, userID, assetID uuid.UUID) error {
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE assets
