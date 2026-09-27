@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -30,25 +31,27 @@ func (s *Store) Create(ctx context.Context, userID, projectID uuid.UUID, req Req
 		return Reference{}, ErrReferenceNotFound
 	} else if err != nil { return Reference{}, err }
 	var r Reference
+	influenceRaw, _ := json.Marshal(req.Influence)
 	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO "references"(project_id,asset_id,source_url,source_type,license,license_verified,user_owned,sha256,notes)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-		RETURNING id,project_id,asset_id,source_url,source_type,license,license_verified,user_owned,sha256,notes,created_at,updated_at
-	`, projectID, req.AssetID, req.SourceURL, req.SourceType, strings.TrimSpace(req.License), req.LicenseVerified, req.UserOwned, req.SHA256, req.Notes).Scan(
-		&r.ID,&r.ProjectID,&r.AssetID,&r.SourceURL,&r.SourceType,&r.License,&r.LicenseVerified,&r.UserOwned,&r.SHA256,&r.Notes,&r.CreatedAt,&r.UpdatedAt)
+		INSERT INTO "references"(project_id,asset_id,source_url,source_type,license,license_verified,user_owned,sha256,notes,influence)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		RETURNING id,project_id,asset_id,source_url,source_type,license,license_verified,user_owned,sha256,notes,influence,created_at,updated_at
+	`, projectID, req.AssetID, req.SourceURL, req.SourceType, strings.TrimSpace(req.License), req.LicenseVerified, req.UserOwned, req.SHA256, req.Notes, influenceRaw).Scan(
+		&r.ID,&r.ProjectID,&r.AssetID,&r.SourceURL,&r.SourceType,&r.License,&r.LicenseVerified,&r.UserOwned,&r.SHA256,&r.Notes,&influenceRaw,&r.CreatedAt,&r.UpdatedAt)
+	_ = json.Unmarshal(influenceRaw, &r.Influence)
 	if err != nil { return Reference{}, fmt.Errorf("create reference: %w", err) }
 	return r,nil
 }
 
 func (s *Store) List(ctx context.Context,userID,projectID uuid.UUID)([]Reference,error){
 	rows,err:=s.db.QueryContext(ctx,`
-		SELECT r.id,r.project_id,r.asset_id,r.source_url,r.source_type,r.license,r.license_verified,r.user_owned,r.sha256,r.notes,r.created_at,r.updated_at
+		SELECT r.id,r.project_id,r.asset_id,r.source_url,r.source_type,r.license,r.license_verified,r.user_owned,r.sha256,r.notes,r.influence,r.created_at,r.updated_at
 		FROM "references" r JOIN projects p ON p.id=r.project_id
 		WHERE r.project_id=$1 AND p.user_id=$2 AND p.status <> 'deleted'
 		ORDER BY r.created_at DESC
 	`,projectID,userID);if err!=nil{return nil,err};defer rows.Close()
 	var out []Reference
-	for rows.Next(){var r Reference;if err:=rows.Scan(&r.ID,&r.ProjectID,&r.AssetID,&r.SourceURL,&r.SourceType,&r.License,&r.LicenseVerified,&r.UserOwned,&r.SHA256,&r.Notes,&r.CreatedAt,&r.UpdatedAt);err!=nil{return nil,err};out=append(out,r)}
+	for rows.Next(){var r Reference;var influenceRaw []byte;if err:=rows.Scan(&r.ID,&r.ProjectID,&r.AssetID,&r.SourceURL,&r.SourceType,&r.License,&r.LicenseVerified,&r.UserOwned,&r.SHA256,&r.Notes,&influenceRaw,&r.CreatedAt,&r.UpdatedAt);err!=nil{return nil,err};_ = json.Unmarshal(influenceRaw,&r.Influence);out=append(out,r)}
 	return out,rows.Err()
 }
 
@@ -61,8 +64,9 @@ func (s *Store) Update(ctx context.Context,userID,projectID,referenceID uuid.UUI
 		WHERE id=$9 AND project_id=$10
 		  AND project_id IN (SELECT id FROM projects WHERE user_id=$11 AND status <> 'deleted')
 		RETURNING id,project_id,asset_id,source_url,source_type,license,license_verified,user_owned,sha256,notes,created_at,updated_at
-	`,req.AssetID,req.SourceURL,req.SourceType,strings.TrimSpace(req.License),req.LicenseVerified,req.UserOwned,req.SHA256,req.Notes,referenceID,projectID,userID).Scan(
-		&r.ID,&r.ProjectID,&r.AssetID,&r.SourceURL,&r.SourceType,&r.License,&r.LicenseVerified,&r.UserOwned,&r.SHA256,&r.Notes,&r.CreatedAt,&r.UpdatedAt)
+		`,req.AssetID,req.SourceURL,req.SourceType,strings.TrimSpace(req.License),req.LicenseVerified,req.UserOwned,req.SHA256,req.Notes,influenceRaw,referenceID,projectID,userID).Scan(
+		&r.ID,&r.ProjectID,&r.AssetID,&r.SourceURL,&r.SourceType,&r.License,&r.LicenseVerified,&r.UserOwned,&r.SHA256,&r.Notes,&influenceRaw,&r.CreatedAt,&r.UpdatedAt)
+	_ = json.Unmarshal(influenceRaw, &r.Influence)
 	if errors.Is(err,sql.ErrNoRows){return Reference{},ErrReferenceNotFound};if err!=nil{return Reference{},err};return r,nil
 }
 
@@ -70,4 +74,17 @@ func (s *Store) Delete(ctx context.Context,userID,projectID,referenceID uuid.UUI
 	res,err:=s.db.ExecContext(ctx,`DELETE FROM "references" WHERE id=$1 AND project_id=$2 AND project_id IN (SELECT id FROM projects WHERE user_id=$3)`,referenceID,projectID,userID)
 	if err!=nil{return err}
 	n,_:=res.RowsAffected();if n!=1{return ErrReferenceNotFound};return nil
+}
+
+
+func (s *Store) validateAssetForProject(ctx context.Context, userID, projectID uuid.UUID, assetID *uuid.UUID) error {
+	if assetID == nil { return nil }
+	var ok bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM assets a JOIN projects p ON p.id=a.project_id
+		WHERE a.id=$1 AND a.project_id=$2 AND p.user_id=$3 AND p.status <> 'deleted'
+	)`, *assetID, projectID, userID).Scan(&ok)
+	if err != nil { return err }
+	if !ok { return ErrReferenceNotFound }
+	return nil
 }
