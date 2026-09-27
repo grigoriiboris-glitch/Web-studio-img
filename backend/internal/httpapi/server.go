@@ -6,18 +6,51 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
+	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
+	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
+
+type Registrar interface { Register(*http.ServeMux) }
 
 type Server struct {
 	handler http.Handler
 }
 
 func NewServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter) *Server {
+	return newServer(logger, origins, limiter, nil, nil, nil)
+}
+
+func NewServerWithProjects(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler) *Server {
+	return newServer(logger, origins, limiter, projectHandler, nil, nil)
+}
+
+func NewServerWithProjectsAndIterations(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler) *Server {
+	return newServer(logger, origins, limiter, projectHandler, iterationHandler, nil)
+}
+
+func NewServerWithProjectsIterationsAndGeneration(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler, generationHandler *generation.Handler) *Server {
+	return newServer(logger, origins, limiter, projectHandler, iterationHandler, generationHandler)
+}
+
+func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler, generationHandler *generation.Handler, registrars ...Registrar) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
 	mux.HandleFunc("GET /api/v1/health", apiHealthHandler)
+	if projectHandler != nil {
+		projectHandler.Register(mux)
+	}
+	if iterationHandler != nil {
+		iterationHandler.Register(mux)
+	}
+	if generationHandler != nil {
+		generationHandler.Register(mux)
+	}
+	for _, registrar := range registrars {
+		if registrar != nil { registrar.Register(mux) }
+	}
 
 	var handler http.Handler = mux
 	handler = withCORS(origins, handler)
@@ -61,3 +94,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
+func NewServerWithStudio(logger *slog.Logger, origins []string, limiter *security.RateLimiter, registrars ...Registrar) *Server {
+	return newServer(logger, origins, limiter, nil, nil, nil, registrars...)
+}
+
