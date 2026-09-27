@@ -102,7 +102,7 @@ func (s *Store) DeleteUploadParts(ctx context.Context,assetID uuid.UUID)error{_,
 
 func (s *Store) FinalizePendingUpload(ctx context.Context,userID,projectID,assetID uuid.UUID,size int64,width,height int,checksum string,exifData map[string]any)(Asset,bool,error){
 	raw,err:=json.Marshal(exifData);if err!=nil{return Asset{},false,err}
-	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return Asset{},false,err};defer tx.Rollback()
+	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return Asset{},false,err};defer func() { _ = tx.Rollback() }()
 	var current Asset
 	var gen,preview,thumb sql.NullString
 	var existingChecksum sql.NullString
