@@ -115,6 +115,8 @@ func (h *Handler) putSpec(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) getSpec(w http.ResponseWriter, r *http.Request) {
 	u, ok := auth.PrincipalFromContext(r.Context()); if !ok { writeErr(w,401,"unauthorized","authentication required"); return }
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idempotencyKey == "" { writeErr(w,400,"missing_idempotency_key","Idempotency-Key header is required"); return }
 	pid, err := uuid.Parse(r.PathValue("project_id")); if err != nil { writeErr(w,400,"invalid_project_id","invalid project id"); return }
 	iid, err := uuid.Parse(r.PathValue("iteration_id")); if err != nil { writeErr(w,400,"invalid_iteration_id","invalid iteration id"); return }
 	var s Spec; var fp,bb,rp,hi,ns,dg,os,ld []byte
@@ -145,7 +147,12 @@ func (h *Handler) suggest(w http.ResponseWriter, r *http.Request) {
 	suggestions := []string{"change focal point","shift horizon","change camera elevation","alter perspective","change object scale","change object placement","add/remove foreground obstruction","change negative space","change visual hierarchy","change light direction or dominant geometry"}
 	raw,_ := json.Marshal(suggestions)
 	var m Mutation; var stored []byte
-	err=h.db.QueryRowContext(r.Context(),`INSERT INTO composition_mutations(project_id,user_id,composition_spec_id,source_similarity_check_id,suggestions,status) VALUES($1,$2,$3,$4,$5,'proposed') RETURNING id,project_id,user_id,composition_spec_id,source_similarity_check_id,suggestions,status,accepted_iteration_id,created_at`,pid,u.UserID,in.CompositionSpecID,in.SourceSimilarityCheckID,raw).Scan(&m.ID,&m.ProjectID,&m.UserID,&m.CompositionSpecID,&m.SourceSimilarityCheckID,&stored,&m.Status,&m.AcceptedIterationID,&m.CreatedAt)
+	err=h.db.QueryRowContext(r.Context(),`INSERT INTO composition_mutations(project_id,user_id,composition_spec_id,source_similarity_check_id,suggestions,status,idempotency_key) VALUES($1,$2,$3,$4,$5,'proposed',$6) ON CONFLICT(user_id,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING id,project_id,user_id,composition_spec_id,source_similarity_check_id,suggestions,status,accepted_iteration_id,created_at`,pid,u.UserID,in.CompositionSpecID,in.SourceSimilarityCheckID,raw,idempotencyKey).Scan(&m.ID,&m.ProjectID,&m.UserID,&m.CompositionSpecID,&m.SourceSimilarityCheckID,&stored,&m.Status,&m.AcceptedIterationID,&m.CreatedAt)
+	if errors.Is(err,sql.ErrNoRows) {
+		if qerr:=h.db.QueryRowContext(r.Context(),`SELECT id,project_id,user_id,composition_spec_id,source_similarity_check_id,suggestions,status,accepted_iteration_id,created_at FROM composition_mutations WHERE user_id=$1 AND idempotency_key=$2`,u.UserID,idempotencyKey).Scan(&m.ID,&m.ProjectID,&m.UserID,&m.CompositionSpecID,&m.SourceSimilarityCheckID,&stored,&m.Status,&m.AcceptedIterationID,&m.CreatedAt); qerr!=nil { writeErr(w,500,"mutation_persist_failed","could not load idempotent mutation"); return }
+		if m.ProjectID != pid { writeErr(w,409,"idempotency_conflict","idempotency key belongs to another project"); return }
+		_ = json.Unmarshal(stored,&m.Suggestions); writeJSON(w,200,m); return
+	}
 	if err != nil { writeErr(w,500,"mutation_persist_failed","could not persist composition suggestions"); return }
 	_ = json.Unmarshal(stored,&m.Suggestions); writeJSON(w,201,m)
 }

@@ -511,9 +511,19 @@ export const compositionApi = {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
-  suggest: (projectId: string, input: { composition_spec_id?: string; source_similarity_check_id?: string; composition_similarity: number }) =>
+  analyze: (projectId: string, iterationId: string, assetId: string) =>
+    apiRequest<{ spec: CompositionSpec; analysis: Record<string, unknown>; uncertainty: string }>(
+      '/projects/' + projectId + '/iterations/' + iterationId + '/composition/analyze',
+      { method: 'POST', body: JSON.stringify({ asset_id: assetId }) },
+    ),
+  suggest: (
+    projectId: string,
+    input: { composition_spec_id?: string; source_similarity_check_id?: string; composition_similarity: number },
+    idempotencyKey: string,
+  ) =>
     apiRequest<CompositionMutation>('/projects/' + projectId + '/composition-mutation-suggestions', {
       method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(input),
     }),
   accept: (projectId: string, mutationId: string) =>

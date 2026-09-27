@@ -434,7 +434,7 @@ async function requestCompositionMutation() {
       composition_spec_id: compositionSpec.value?.id,
       source_similarity_check_id: similarityResult.value?.id,
       composition_similarity: score,
-    })
+    }, crypto.randomUUID())
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not suggest composition mutations'
   }

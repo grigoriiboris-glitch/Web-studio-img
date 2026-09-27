@@ -809,10 +809,37 @@ paths:
         '200': {description: Composition spec, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionSpec'}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/iterations/{iteration_id}/composition/analyze:
+    post:
+      operationId: analyzeComposition
+      summary: Analyze an owned image and persist a composition specification
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: iteration_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id]
+              additionalProperties: false
+              properties:
+                asset_id: {type: string, format: uuid}
+      responses:
+        '200': {description: Composition analysis result, content: {application/json: {schema: {$ref: '#/components/schemas/CompositionAnalysisResponse'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {description: Composition analysis unavailable}
+
   /projects/{project_id}/composition-mutation-suggestions:
     post:
       operationId: suggestCompositionMutations
       summary: Suggest composition mutations at high similarity
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 200}}
       requestBody:
         required: true
         content:
@@ -1519,6 +1546,13 @@ components:
         composition_spec_id: {type: string, format: uuid}
         source_similarity_check_id: {type: string, format: uuid}
         composition_similarity: {type: number, minimum: 0.8, maximum: 1}
+    CompositionAnalysisResponse:
+      type: object
+      required: [spec, analysis, uncertainty]
+      properties:
+        spec: {$ref: '#/components/schemas/CompositionSpec'}
+        analysis: {type: object, additionalProperties: true}
+        uncertainty: {type: string}
     CompositionMutation:
       type: object
       required: [id, project_id, user_id, suggestions, status, created_at]
