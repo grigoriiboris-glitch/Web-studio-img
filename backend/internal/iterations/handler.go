@@ -8,23 +8,30 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
+	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
 )
 
 type Handler struct {
 	store Store
+	events *events.Store
+	provenance *provenance.Store
 }
 
-func NewHandler(store Store) (*Handler, error) {
-	if store == nil {
-		return nil, errors.New("iteration handler requires store")
-	}
-	return &Handler{store: store}, nil
-}
+func NewHandler(store Store) (*Handler, error) { return NewHandlerWithEvents(store, nil) }
 
+func NewHandlerWithEvents(store Store, eventStore *events.Store) (*Handler, error) {
+	return NewHandlerWithEventsAndProvenance(store,eventStore,nil)
+}
+func NewHandlerWithEventsAndProvenance(store Store,eventStore *events.Store,provenanceStore *provenance.Store)(*Handler,error){
+	if store==nil{return nil,errors.New("iteration handler requires store")}
+	return &Handler{store:store,events:eventStore,provenance:provenanceStore},nil
+}
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/iterations", h.list)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/iterations", h.create)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/iterations/{iteration_id}", h.get)
+	mux.HandleFunc("GET /api/v1/iterations/{iteration_id}", h.getGlobal)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/iterations/{iteration_id}/restore", h.restore)
 }
 
@@ -52,7 +59,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, ErrInvalidIteration) { writeIterationError(w, http.StatusBadRequest, "invalid_iteration", "iteration payload is invalid"); return }
 	if errors.Is(err, ErrIterationNotFound) { writeIterationError(w, http.StatusNotFound, "iteration_parent_or_project_not_found", "project or parent iteration not found"); return }
 	if err != nil { writeIterationError(w, http.StatusInternalServerError, "iteration_create_failed", "could not create iteration"); return }
+	h.recordMutation(r,userID,projectID,item.ID,"iteration.created",map[string]any{"type":item.Type,"parent_iteration_id":item.ParentIterationID})
 	writeIterationJSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) getGlobal(w http.ResponseWriter, r *http.Request) {
+	userID,ok:=currentUserID(r);if !ok{writeIterationError(w,401,"unauthorized","authentication required");return}
+	iterationID,err:=parseUUID(r.PathValue("iteration_id"));if err!=nil{writeIterationError(w,400,"invalid_iteration_id","invalid iteration id");return}
+	item,err:=h.store.Get(r.Context(),userID,iterationID);if errors.Is(err,ErrIterationNotFound){writeIterationError(w,404,"iteration_not_found","iteration not found");return};if err!=nil{writeIterationError(w,500,"iteration_get_failed","could not load iteration");return}
+	writeIterationJSON(w,200,item)
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -84,6 +99,7 @@ func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
 	if err != nil { writeIterationError(w, http.StatusInternalServerError, "iteration_get_failed", "could not load iteration"); return }
 	item, err := h.store.Restore(r.Context(), userID, iterationID)
 	if err != nil { writeIterationError(w, http.StatusInternalServerError, "iteration_restore_failed", "could not restore iteration"); return }
+	h.recordMutation(r,userID,projectID,item.ID,"iteration.restored",map[string]any{"parent_iteration_id":iterationID})
 	writeIterationJSON(w, http.StatusCreated, item)
 }
 
@@ -110,6 +126,12 @@ func currentUserID(r *http.Request) (uuid.UUID, bool) {
 }
 
 func parseUUID(value string) (uuid.UUID, error) { return uuid.Parse(value) }
+
+func (h *Handler) recordMutation(r *http.Request,userID,projectID,entityID uuid.UUID,action string,payload map[string]any){
+	if h.events!=nil{_,_=h.events.Append(r.Context(),userID,projectID,action,"iteration",entityID,payload)}
+	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:userID,ProjectID:projectID,IterationID:&entityID,EntityType:"iteration",EntityID:entityID,Action:action,Payload:payload})}
+	if h.events!=nil&&h.provenance!=nil{_,_=h.events.Append(r.Context(),userID,projectID,"provenance.updated","iteration",entityID,map[string]any{"action":action})}
+}
 
 func writeIterationJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")

@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
 	"github.com/oleg3190/Web-studio-img/backend/internal/providers/yandexart"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
@@ -34,6 +35,10 @@ func main() {
 	}
 	if cfg.S3Bucket == "" || cfg.S3AccessKey == "" || cfg.S3SecretKey == "" {
 		logger.Error("worker requires S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
+		os.Exit(1)
+	}
+	if cfg.Env == "production" && cfg.ClamAVAddress == "" {
+		logger.Error("production worker requires CLAMAV_ADDR for malware scanning")
 		os.Exit(1)
 	}
 
@@ -72,6 +77,13 @@ func main() {
 		logger.Error("asset store initialization failed", "error", err)
 		os.Exit(1)
 	}
+	securityScanner := assets.SecurityScanner(assets.ImageSecurityScanner{})
+	if cfg.ClamAVAddress != "" {
+		securityScanner = assets.CompositeScanner{
+			assets.ImageSecurityScanner{},
+			assets.ClamAVScanner{Address: cfg.ClamAVAddress, Timeout: 10 * time.Second},
+		}
+	}
 	objectStorage, err := storage.NewS3Storage(context.Background(), storage.S3Config{
 		Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, Bucket: cfg.S3Bucket,
 		AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, UsePathStyle: cfg.S3UsePathStyle,
@@ -81,12 +93,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	eventStore, err := events.NewStore(db)
+	if err != nil { logger.Error("event store initialization failed", "error", err); os.Exit(1) }
 	provenanceStore, err := provenance.NewStore(db)
 	if err != nil { logger.Error("provenance store initialization failed", "error", err); os.Exit(1) }
 	worker := &generation.Worker{
 		Store: store, Provider: provider,
-		Assets: &assets.Processor{Storage: objectStorage, Store: assetStore},
+		Assets: &assets.Processor{Storage: objectStorage, Store: assetStore, Scanner: securityScanner},
 		Provenance: provenanceStore,
+		Events: eventStore,
 	}
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(generation.TaskType, worker.Handle)
@@ -98,6 +113,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	defer cleanupCancel()
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-cleanupCtx.Done():
+				return
+			case <-ticker.C:
+				if err := worker.Assets.CleanupExpired(cleanupCtx, 100); err != nil {
+					logger.Warn("asset lifecycle cleanup failed", "error", err)
+				}
+			}
+		}
+	}()
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("generation worker starting")

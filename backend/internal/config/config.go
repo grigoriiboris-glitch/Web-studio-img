@@ -20,6 +20,7 @@ type Config struct {
 	S3AccessKey     string
 	S3SecretKey     string
 	S3UsePathStyle  bool
+	ClamAVAddress   string
 	JWTSecret       string
 	CORSOrigins     []string
 	RateLimit       int
@@ -47,6 +48,7 @@ func Load() (Config, error) {
 		S3AccessKey:     os.Getenv("S3_ACCESS_KEY"),
 		S3SecretKey:     os.Getenv("S3_SECRET_KEY"),
 		S3UsePathStyle:  boolEnv("S3_PATH_STYLE", false),
+		ClamAVAddress:   strings.TrimSpace(os.Getenv("CLAMAV_ADDR")),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
 		CORSOrigins:     splitCSV(getenv("CORS_ORIGINS", "http://localhost:5173")),
 		RateLimit:       intEnv("RATE_LIMIT_REQUESTS", 120),

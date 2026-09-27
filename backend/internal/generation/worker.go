@@ -12,6 +12,7 @@ import (
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 )
 
 const TaskType = "generation:execute"
@@ -34,9 +35,13 @@ type Worker struct {
 	Provider Provider
 	Assets   *assets.Processor
 	Provenance *provenance.Store
+	Events *events.Store
 }
 
 func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
+	if w.Assets != nil {
+		_ = w.Assets.CleanupExpired(ctx, 50)
+	}
 	var payload TaskPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("decode generation task: %w", err)
@@ -52,6 +57,10 @@ func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
 	if err := w.Store.MarkRunning(ctx, payload.UserID, item.ID, now); err != nil && !errors.Is(err, ErrGenerationNotFound) {
 		return err
 	}
+	if w.Events != nil {
+		_, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.started", "generation", item.ID, map[string]any{"status":"running"})
+		_, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.progress", "generation", item.ID, map[string]any{"status":"running","progress":0})
+	}
 	result, err := w.Provider.Generate(ctx, Request{
 		ProjectID: item.ProjectID, IterationID: item.IterationID, Prompt: item.Prompt,
 		NegativePrompt: item.NegativePrompt, Seed: item.Seed, AspectRatio: item.AspectRatio,
@@ -64,15 +73,35 @@ func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
 		}
 		if !isRetryable(err) {
 			_ = w.Store.MarkFailed(ctx, payload.UserID, item.ID, code, err.Error(), time.Now())
-			if w.Provenance != nil { _, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_failed", Payload: map[string]any{"code": code, "message": err.Error()}, CreatedAt: time.Now()}) }
+			if w.Events != nil {
+			_, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.progress", "generation", item.ID, map[string]any{"status":"failed","progress":100,"code":code})
+			_, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.failed", "generation", item.ID, map[string]any{"code":code,"message":err.Error()})
+		}
+			if w.Provenance != nil {
+				_, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_failed", Payload: map[string]any{"code": code, "message": err.Error()}, CreatedAt: time.Now()})
+				if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "provenance.updated", "generation", item.ID, map[string]any{"action":"generation_failed"}) }
+			}
 			return nil
 		}
 		return err
 	}
 	for _, image := range result.Images {
-		if _, err := w.Assets.Process(ctx, payload.UserID, item.ProjectID, item.ID, image.Data, image.ContentType); err != nil {
+		asset, err := w.Assets.Process(ctx, payload.UserID, item.ProjectID, item.ID, image.Data, image.ContentType)
+		if err != nil {
 			_ = w.Store.MarkFailed(ctx, payload.UserID, item.ID, "asset_error", err.Error(), time.Now())
+			if w.Events != nil {
+			_, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.progress", "generation", item.ID, map[string]any{"status":"failed","progress":100,"code":"asset_error"})
+			_, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.failed", "generation", item.ID, map[string]any{"code":"asset_error","message":err.Error()})
+		}
+			if w.Provenance != nil {
+				_, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_failed", Payload: map[string]any{"code":"asset_error","message":err.Error()}, CreatedAt: time.Now()})
+				if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "provenance.updated", "generation", item.ID, map[string]any{"action":"generation_failed"}) }
+			}
 			return nil
+		}
+		if w.Provenance != nil {
+			_, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "asset", EntityID: asset.ID, Action: "asset_created", Payload: map[string]any{"storage_key":asset.StorageKey,"preview_key":asset.PreviewKey,"thumbnail_key":asset.ThumbnailKey,"sha256":asset.Checksum,"mime_type":asset.MIMEType,"width":asset.Width,"height":asset.Height}, CreatedAt: time.Now()})
+			if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "provenance.updated", "asset", asset.ID, map[string]any{"action":"asset_created"}) }
 		}
 	}
 	var version *string
@@ -86,8 +115,13 @@ func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
 	if err := w.Store.MarkSucceeded(ctx, payload.UserID, item.ID, version, jobID, result.Cost, time.Now()); err != nil {
 		return err
 	}
+	if w.Events != nil {
+		_, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.progress", "generation", item.ID, map[string]any{"status":"completed","progress":100})
+		_, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "generation.completed", "generation", item.ID, map[string]any{"provider":item.Provider,"model":item.Model,"model_version":result.ModelVersion})
+	}
 	if w.Provenance != nil {
 		_, _ = w.Provenance.Append(ctx, provenance.Event{UserID: payload.UserID, ProjectID: item.ProjectID, IterationID: item.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_succeeded", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "model_version": result.ModelVersion, "provider_job_id": result.ProviderJobID, "cost": result.Cost}, CreatedAt: time.Now()})
+		if w.Events != nil { _, _ = w.Events.Append(ctx, payload.UserID, item.ProjectID, "provenance.updated", "generation", item.ID, map[string]any{"action":"generation_succeeded"}) }
 	}
 	return nil
 }

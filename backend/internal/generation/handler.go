@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 )
 
 type Enqueuer interface {
@@ -25,22 +26,29 @@ type Handler struct {
 	queue Enqueuer
 	provider Provider
 	provenance *provenance.Store
+	projectEvents *events.Store
 }
 
 func NewHandler(store Store, queue Enqueuer, provider Provider) (*Handler, error) {
-	return NewHandlerWithProvenance(store, queue, provider, nil)
+	return NewHandlerWithDependencies(store, queue, provider, nil, nil)
 }
 
 func NewHandlerWithProvenance(store Store, queue Enqueuer, provider Provider, provenanceStore *provenance.Store) (*Handler, error) {
+	return NewHandlerWithDependencies(store, queue, provider, provenanceStore, nil)
+}
+
+func NewHandlerWithDependencies(store Store, queue Enqueuer, provider Provider, provenanceStore *provenance.Store, eventStore *events.Store) (*Handler, error) {
 	if store == nil || queue == nil || provider == nil {
 		return nil, errors.New("generation handler requires store, queue and provider")
 	}
-	return &Handler{store: store, queue: queue, provider: provider, provenance: provenanceStore}, nil
+	return &Handler{store: store, queue: queue, provider: provider, provenance: provenanceStore, projectEvents: eventStore}, nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/generations", h.create)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/generations/{generation_id}", h.get)
+	mux.HandleFunc("GET /api/v1/generations/{generation_id}", h.getGlobal)
+	mux.HandleFunc("POST /api/v1/generations/{generation_id}/cancel", h.cancelGlobal)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/generations/{generation_id}/cancel", h.cancel)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/generations/{generation_id}/events", h.events)
 }
@@ -105,6 +113,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if created && h.projectEvents != nil { _, _ = h.projectEvents.Append(r.Context(), userID, projectID, "generation.queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
 	if created && h.provenance != nil {
 		_, _ = h.provenance.Append(r.Context(), provenance.Event{UserID: userID, ProjectID: projectID, IterationID: req.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_queued", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "prompt": item.Prompt, "negative_prompt": item.NegativePrompt, "seed": item.Seed, "aspect_ratio": item.AspectRatio, "parameters": item.Parameters}, CreatedAt: time.Now()})
 	}
@@ -113,6 +122,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusOK
 	}
 	writeJSON(w, status, item)
+}
+
+func (h *Handler) getGlobal(w http.ResponseWriter,r *http.Request){
+	userID,ok:=currentUserID(r);if !ok{writeError(w,401,"unauthorized","authentication required");return}
+	id,err:=uuid.Parse(r.PathValue("generation_id"));if err!=nil{writeError(w,400,"invalid_generation_id","invalid generation id");return}
+	item,err:=h.store.GetOwned(r.Context(),userID,id);if errors.Is(err,ErrGenerationNotFound){writeError(w,404,"generation_not_found","generation not found");return};if err!=nil{writeError(w,500,"generation_get_failed","could not load generation");return}
+	writeJSON(w,200,item)
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +152,16 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) cancelGlobal(w http.ResponseWriter,r *http.Request){
+	userID,ok:=currentUserID(r);if !ok{writeError(w,401,"unauthorized","authentication required");return}
+	id,err:=uuid.Parse(r.PathValue("generation_id"));if err!=nil{writeError(w,400,"invalid_generation_id","invalid generation id");return}
+	item,err:=h.store.GetOwned(r.Context(),userID,id);if errors.Is(err,ErrGenerationNotFound){writeError(w,404,"generation_not_found","generation not found");return};if err!=nil{writeError(w,500,"generation_get_failed","could not load generation");return}
+	if item.ProviderJobID!=nil{_ = h.provider.Cancel(r.Context(),*item.ProviderJobID)}
+	if err:=h.store.MarkCancelled(r.Context(),userID,id,time.Now());err!=nil{writeError(w,409,"generation_not_cancellable","generation cannot be cancelled");return}
+	if h.projectEvents!=nil{_,_=h.projectEvents.Append(r.Context(),userID,item.ProjectID,"generation.cancelled","generation",item.ID,nil)}
+	item.Status=StatusCancelled;writeJSON(w,200,item)
 }
 
 func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +191,7 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "generation_not_cancellable", "generation cannot be cancelled")
 		return
 	}
+	if h.projectEvents != nil { _, _ = h.projectEvents.Append(r.Context(), userID, item.ProjectID, "generation.cancelled", "generation", item.ID, nil) }
 	item.Status = StatusCancelled
 	writeJSON(w, http.StatusOK, item)
 }

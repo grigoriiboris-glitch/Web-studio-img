@@ -12,6 +12,8 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
+type Registrar interface { Register(*http.ServeMux) }
+
 type Server struct {
 	handler http.Handler
 }
@@ -32,7 +34,7 @@ func NewServerWithProjectsIterationsAndGeneration(logger *slog.Logger, origins [
 	return newServer(logger, origins, limiter, projectHandler, iterationHandler, generationHandler)
 }
 
-func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler, generationHandler *generation.Handler) *Server {
+func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler, generationHandler *generation.Handler, registrars ...Registrar) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
@@ -45,6 +47,9 @@ func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimi
 	}
 	if generationHandler != nil {
 		generationHandler.Register(mux)
+	}
+	for _, registrar := range registrars {
+		if registrar != nil { registrar.Register(mux) }
 	}
 
 	var handler http.Handler = mux
@@ -89,3 +94,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
+func NewServerWithStudio(logger *slog.Logger, origins []string, limiter *security.RateLimiter, registrars ...Registrar) *Server {
+	return newServer(logger, origins, limiter, nil, nil, nil, registrars...)
+}
+

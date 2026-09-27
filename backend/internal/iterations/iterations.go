@@ -65,3 +65,11 @@ func ValidateDescription(description *string) error {
 	if len([]rune(*description)) > 5000 { return ErrInvalidIteration }
 	return nil
 }
+
+func ValidateManualEditDescription(iterationType Type, description *string) error {
+	if iterationType != TypeManualEdit { return nil }
+	if description == nil || strings.TrimSpace(*description) == "" {
+		return ErrInvalidIteration
+	}
+	return ValidateDescription(description)
+}
