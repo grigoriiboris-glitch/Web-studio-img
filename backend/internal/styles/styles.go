@@ -97,7 +97,7 @@ func (h *Handler) createGlobal(w http.ResponseWriter,r *http.Request){
 	userID,ok:=currentUserID(r);if !ok{writeErr(w,401,"unauthorized","authentication required");return};var in input;if err:=decode(r,&in);err!=nil{writeErr(w,400,"invalid_request","invalid style profile payload");return}
 	if strings.TrimSpace(in.Name)==""||len([]rune(in.Name))>200{writeErr(w,400,"invalid_style_profile","name is required");return}
 	params:=in.Parameters;if params==nil{params=map[string]any{}};raw,_:=json.Marshal(params);var p Profile
-	err,scanErr:=h.db.QueryRowContext(r.Context(),`INSERT INTO style_profiles(user_id,name,description,parameters,prompt_influence) VALUES($1,$2,$3,$4,COALESCE($5,false)) RETURNING id,user_id,name,description,parameters,version,prompt_influence,created_at,updated_at`,userID,strings.TrimSpace(in.Name),in.Description,raw,in.PromptInfluence).Scan(&p.ID,&p.UserID,&p.Name,&p.Description,&raw,&p.Version,&p.PromptInfluence,&p.CreatedAt,&p.UpdatedAt)
+	scanErr:=h.db.QueryRowContext(r.Context(),`INSERT INTO style_profiles(user_id,name,description,parameters,prompt_influence) VALUES($1,$2,$3,$4,COALESCE($5,false)) RETURNING id,user_id,name,description,parameters,version,prompt_influence,created_at,updated_at`,userID,strings.TrimSpace(in.Name),in.Description,raw,in.PromptInfluence).Scan(&p.ID,&p.UserID,&p.Name,&p.Description,&raw,&p.Version,&p.PromptInfluence,&p.CreatedAt,&p.UpdatedAt)
 	if scanErr!=nil{writeErr(w,500,"style_profile_create_failed","could not create style profile");return};_ = json.Unmarshal(raw,&p.Parameters);writeJSON(w,201,p)
 }
 func (h *Handler) getGlobal(w http.ResponseWriter,r *http.Request){
