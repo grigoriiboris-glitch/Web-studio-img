@@ -43,7 +43,8 @@ type Check struct {
 	Sources            []string               `json:"sources"`
 	UnavailableSources []string               `json:"unavailable_sources"`
 	Algorithm          string                 `json:"algorithm"`
-	AlgorithmVersion   string                 `json:"algorithm_version"`\n\tIdempotencyKey     string                 `json:"-"`
+	AlgorithmVersion   string                 `json:"algorithm_version"`
+\tIdempotencyKey     string                 `json:"-"`
 	Metadata           map[string]any         `json:"metadata"`
 	CreatedAt          time.Time              `json:"created_at"`
 }
