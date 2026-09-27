@@ -50,7 +50,7 @@ func (s *Store) List(ctx context.Context,userID,projectID uuid.UUID)([]Reference
 		FROM "references" r JOIN projects p ON p.id=r.project_id
 		WHERE r.project_id=$1 AND p.user_id=$2 AND p.status <> 'deleted'
 		ORDER BY r.created_at DESC
-	`,projectID,userID);if err!=nil{return nil,err};defer rows.Close()
+	`,projectID,userID);if err!=nil{return nil,err};defer func() { _ = rows.Close() }()
 	var out []Reference
 	for rows.Next(){var r Reference;var influenceRaw []byte;if err:=rows.Scan(&r.ID,&r.ProjectID,&r.AssetID,&r.SourceURL,&r.SourceType,&r.License,&r.LicenseVerified,&r.UserOwned,&r.SHA256,&r.Notes,&influenceRaw,&r.CreatedAt,&r.UpdatedAt);err!=nil{return nil,err};_ = json.Unmarshal(influenceRaw,&r.Influence);out=append(out,r)}
 	return out,rows.Err()
