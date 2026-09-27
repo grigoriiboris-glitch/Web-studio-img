@@ -194,7 +194,7 @@ func (s *Store) ListExpired(ctx context.Context, limit int) ([]Asset, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Asset
 	for rows.Next() {
 		var item Asset
