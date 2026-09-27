@@ -575,6 +575,15 @@ export interface AssistantToolDescriptor {
   recommendation: boolean
 }
 
+export interface AssistantRecommendation {
+  recommendation: string
+  reason: string
+  evidence: Record<string, unknown>
+  confidence: number
+  affected_entity: Record<string, unknown>
+  expected_effect: string
+}
+
 export interface AssistantAction {
   id: string
   project_id: string
