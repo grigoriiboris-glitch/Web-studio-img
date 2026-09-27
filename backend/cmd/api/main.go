@@ -14,6 +14,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
+	"github.com/oleg3190/Web-studio-img/backend/internal/humanactions"
+	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
+	"github.com/oleg3190/Web-studio-img/backend/internal/references"
 	"github.com/oleg3190/Web-studio-img/backend/internal/providers/yandexart"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
 	"github.com/oleg3190/Web-studio-img/backend/internal/queue"
@@ -73,6 +77,23 @@ func main() {
 			logger.Error("iteration handler initialization failed", "error", err)
 			os.Exit(1)
 		}
+
+		eventStore, eventErr := events.NewStore(projectDB)
+		if eventErr != nil { logger.Error("event store initialization failed", "error", eventErr); os.Exit(1) }
+		provenanceStore, provenanceErr := provenance.NewStore(projectDB)
+		if provenanceErr != nil { logger.Error("provenance store initialization failed", "error", provenanceErr); os.Exit(1) }
+		actionStore, actionErr := humanactions.NewStore(projectDB)
+		if actionErr != nil { logger.Error("human actions store initialization failed", "error", actionErr); os.Exit(1) }
+		promptStore, promptErr := prompts.NewStore(projectDB)
+		if promptErr != nil { logger.Error("prompt store initialization failed", "error", promptErr); os.Exit(1) }
+		referenceStore, referenceErr := references.NewStore(projectDB)
+		if referenceErr != nil { logger.Error("reference store initialization failed", "error", referenceErr); os.Exit(1) }
+		if projectHandler, err = projects.NewHandlerWithEvents(store, eventStore); err != nil { logger.Error("project event handler initialization failed", "error", err); os.Exit(1) }
+		if iterationHandler, err = iterations.NewHandlerWithEvents(iterationStore, eventStore); err != nil { logger.Error("iteration event handler initialization failed", "error", err); os.Exit(1) }
+		generationStore, generationErr := generation.NewSQLStore(projectDB)
+		if generationErr != nil { logger.Error("generation store initialization failed", "error", generationErr); os.Exit(1) }
+		generationHandler, err = generation.NewHandlerWithDependencies(generationStore, nil, nil, provenanceStore, eventStore)
+		_ = generationHandler
 
 		if cfg.RedisURL != "" && cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != "" {
 			redisCfg, redisErr := queue.ParseRedisURL(cfg.RedisURL)
