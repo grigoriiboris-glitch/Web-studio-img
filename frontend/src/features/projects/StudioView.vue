@@ -143,6 +143,11 @@ async function refreshActions() {
 async function createIteration() {
   creating.value = true
   error.value = null
+  if (form.value.type === 'manual_edit' && !form.value.description.trim()) {
+    error.value = 'Describe the manual edit before recording it in the timeline'
+    creating.value = false
+    return
+  }
   try {
     const created = await iterationsApi.create(projectId(), {
       type: form.value.type,
@@ -1031,7 +1036,7 @@ onUnmounted(() => {
             <el-form-item label="Title">
               <el-input v-model="form.title" maxlength="200" show-word-limit />
             </el-form-item>
-            <el-form-item label="Description">
+            <el-form-item :label="form.type === 'manual_edit' ? 'Description (required)' : 'Description'">
               <el-input v-model="form.description" type="textarea" maxlength="5000" show-word-limit />
             </el-form-item>
             <el-button type="primary" :loading="creating" @click="createIteration">Create</el-button>
