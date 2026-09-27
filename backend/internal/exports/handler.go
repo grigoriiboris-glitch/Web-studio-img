@@ -164,7 +164,7 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 		WHERE r.project_id=$1 AND r.user_id=$2 AND a.lifecycle_status='active'
 		ORDER BY a.created_at ASC,a.id ASC`,projectID,userID)
 	if err!=nil{return fmt.Errorf("load source assets: %w",err)}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var sourceAssets []sourceAsset
 	for rows.Next(){var x sourceAsset;if err:=rows.Scan(&x.ID,&x.StorageKey,&x.MIMEType,&x.Checksum,&x.Size,&x.Width,&x.Height,&x.CreatedAt);err!=nil{return fmt.Errorf("scan source asset: %w",err)};sourceAssets=append(sourceAssets,x)}
 	if err:=rows.Err();err!=nil{return fmt.Errorf("load source assets: %w",err)}

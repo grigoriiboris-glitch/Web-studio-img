@@ -92,7 +92,7 @@ func (s *Store) ListUploadParts(ctx context.Context,userID,projectID,assetID uui
 	if err:=s.db.QueryRowContext(ctx,"SELECT EXISTS (SELECT 1 FROM assets WHERE id=$1 AND project_id=$2 AND user_id=$3 AND lifecycle_status='pending')",assetID,projectID,userID).Scan(&ok);err!=nil{return nil,err}
 	if !ok{return nil,ErrAssetNotFound}
 	rows,err:=s.db.QueryContext(ctx,"SELECT p.asset_id,p.part_number,p.storage_key,p.size,p.created_at FROM asset_upload_parts p JOIN assets a ON a.id=p.asset_id WHERE p.asset_id=$1 AND a.project_id=$2 AND a.user_id=$3 ORDER BY p.part_number",assetID,projectID,userID)
-	if err!=nil{return nil,err};defer rows.Close()
+	if err!=nil{return nil,err};defer func() { _ = rows.Close() }()
 	var out []UploadPart
 	for rows.Next(){var p UploadPart;if err:=rows.Scan(&p.AssetID,&p.PartNumber,&p.StorageKey,&p.Size,&p.CreatedAt);err!=nil{return nil,err};out=append(out,p)}
 	return out,rows.Err()

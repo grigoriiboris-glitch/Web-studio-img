@@ -80,7 +80,7 @@ func (s *Store) Decide(ctx context.Context,userID,projectID,actionID uuid.UUID,d
 
 func (s *Store) List(ctx context.Context,userID,projectID uuid.UUID)([]Action,error){
 	rows,e:=s.db.QueryContext(ctx,`SELECT a.id,a.project_id,a.user_id,a.tool,a.kind,a.input,a.output,a.explanation,a.confidence,a.uncertainty,a.decision,a.idempotency_key,a.decision_idempotency_key,a.created_at,a.decided_at FROM assistant_actions a JOIN projects p ON p.id=a.project_id WHERE a.project_id=$1 AND a.user_id=$2 AND p.user_id=$2 AND p.status <> 'deleted' ORDER BY a.created_at ASC,a.id ASC`,projectID,userID)
-	if e!=nil{return nil,e};defer rows.Close();var out []Action
+	if e!=nil{return nil,e};defer func() { _ = rows.Close() }();var out []Action
 	for rows.Next(){var a Action;var ib,ob []byte;if e:=rows.Scan(&a.ID,&a.ProjectID,&a.UserID,&a.Tool,&a.Kind,&ib,&ob,&a.Explanation,&a.Confidence,&a.Uncertainty,&a.Decision,&a.IdempotencyKey,&a.DecisionIdempotencyKey,&a.CreatedAt,&a.DecidedAt);e!=nil{return nil,e};_=json.Unmarshal(ib,&a.Input);_=json.Unmarshal(ob,&a.Output);out=append(out,a)}
 	return out,rows.Err()
 }
