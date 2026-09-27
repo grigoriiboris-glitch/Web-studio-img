@@ -12,6 +12,11 @@ import {
   promptsApi,
   provenanceApi,
   referencesApi,
+  similarityApi,
+  exportsApi,
+  compositionApi,
+  materialsApi,
+  texturesApi,
   type Generation,
   type HumanAction,
   type Iteration,
@@ -19,6 +24,11 @@ import {
   type Project,
   type Prompt,
   type Reference,
+  type SimilarityCheck,
+  type CreationExport,
+  type CompositionSpec,
+  type CompositionMutation,
+  type LibraryItem,
 } from '../../api/client'
 
 const route = useRoute()
@@ -43,6 +53,20 @@ const compositionDecision = ref('')
 const manualEditText = ref('')
 const manualEditPrevious = ref('')
 const referenceAnalysisTarget = ref('')
+const similarityTargetAsset = ref('')
+const similarityResult = ref<SimilarityCheck | null>(null)
+const creationExport = ref<CreationExport | null>(null)
+const exporting = ref(false)
+const compositionSpec = ref<CompositionSpec | null>(null)
+const compositionIterationId = ref('')
+const compositionSaving = ref(false)
+const compositionMutation = ref<CompositionMutation | null>(null)
+const materials = ref<LibraryItem[]>([])
+const textures = ref<LibraryItem[]>([])
+const materialSearch = ref('')
+const textureSearch = ref('')
+const selectedMaterial = ref('')
+const selectedTexture = ref('')
 let eventAbort: AbortController | undefined
 
 const types: IterationType[] = ['idea', 'sketch', 'generation', 'selection', 'composition', 'prompt', 'manual_edit', 'final']
@@ -374,6 +398,143 @@ async function selectTexture() {
   }
 }
 
+
+async function loadComposition(iterationId?: string) {
+  const id = iterationId ?? compositionIterationId.value
+  if (!id) return
+  try {
+    compositionSpec.value = await compositionApi.get(projectId(), id)
+    compositionIterationId.value = id
+  } catch {
+    compositionSpec.value = null
+  }
+}
+
+async function saveComposition() {
+  if (!compositionIterationId.value) {
+    error.value = 'Create a composition iteration first'
+    return
+  }
+  compositionSaving.value = true
+  try {
+    compositionSpec.value = await compositionApi.update(projectId(), compositionIterationId.value, {
+      focal_points: compositionSpec.value?.focal_points ?? [],
+      bounding_boxes: compositionSpec.value?.bounding_boxes ?? [],
+      relative_positions: compositionSpec.value?.relative_positions ?? {},
+      horizon: compositionSpec.value?.horizon,
+      camera_elevation: compositionSpec.value?.camera_elevation,
+      perspective: compositionSpec.value?.perspective,
+      hierarchy: compositionSpec.value?.hierarchy ?? [],
+      negative_space: compositionSpec.value?.negative_space ?? {},
+      dominant_geometry: compositionSpec.value?.dominant_geometry ?? {},
+      object_scale: compositionSpec.value?.object_scale ?? {},
+      light_direction: compositionSpec.value?.light_direction ?? {},
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not save composition'
+  } finally {
+    compositionSaving.value = false
+  }
+}
+
+function updateCompositionText(field: 'perspective') {
+  if (!compositionSpec.value) return
+  compositionSpec.value[field] = compositionSpec.value[field]?.trim()
+}
+
+async function requestCompositionMutation() {
+  const score = similarityResult.value?.composition_score ?? 0
+  if (score < 0.8) {
+    error.value = 'Composition mutation suggestions require a composition similarity score of at least 0.80'
+    return
+  }
+  try {
+    compositionMutation.value = await compositionApi.suggest(projectId(), {
+      composition_spec_id: compositionSpec.value?.id,
+      source_similarity_check_id: similarityResult.value?.id,
+      composition_similarity: score,
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not suggest composition mutations'
+  }
+}
+
+async function acceptCompositionMutation() {
+  if (!compositionMutation.value) return
+  try {
+    const result = await compositionApi.accept(projectId(), compositionMutation.value.id)
+    compositionMutation.value = result
+    if (result.accepted_iteration_id) {
+      iterations.value = (await iterationsApi.list(projectId())).iterations
+      await loadComposition(result.accepted_iteration_id)
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not accept composition mutation'
+  }
+}
+
+async function rejectCompositionMutation() {
+  if (!compositionMutation.value) return
+  try {
+    compositionMutation.value = await compositionApi.reject(projectId(), compositionMutation.value.id)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not reject composition mutation'
+  }
+}
+
+async function runSimilarityCheck() {
+  const target = similarityTargetAsset.value.trim() || lastUploadedAsset.value
+  if (!target) { error.value = 'Upload or select a target asset first'; return }
+  try {
+    similarityResult.value = await similarityApi.create(projectId(), { target_asset_id: target }, crypto.randomUUID())
+    similarityTargetAsset.value = target
+    const compositionIteration = iterations.value.find(item => item.type === 'composition') ?? iterations.value[0]
+    if (compositionIteration) await loadComposition(compositionIteration.id)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not run similarity check'
+  }
+}
+
+async function createCreationReport() {
+  exporting.value = true
+  try {
+    creationExport.value = await exportsApi.create(projectId(), lastUploadedAsset.value || undefined, crypto.randomUUID())
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not create Creation Report'
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function loadLibraries() {
+  try {
+    materials.value = (await materialsApi.list(projectId(), materialSearch.value)).items
+    textures.value = (await texturesApi.list(projectId(), textureSearch.value)).items
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not load libraries'
+  }
+}
+
+async function chooseMaterial(item: LibraryItem) {
+  selectedMaterial.value = item.name
+  materialDecision.value = item.prompt_fragment
+  await logHumanAction({
+    action_type: 'MATERIAL_SELECTED',
+    payload: { library_item_id: item.id, name: item.name, prompt_fragment: item.prompt_fragment },
+    new_state: { material: item.name, prompt_fragment: item.prompt_fragment },
+  })
+}
+
+async function chooseTexture(item: LibraryItem) {
+  selectedTexture.value = item.name
+  textureDecision.value = item.prompt_fragment
+  await logHumanAction({
+    action_type: 'TEXTURE_SELECTED',
+    payload: { library_item_id: item.id, name: item.name, prompt_fragment: item.prompt_fragment },
+    new_state: { texture: item.name, prompt_fragment: item.prompt_fragment },
+  })
+}
+
 async function analyzeReference(reference: Reference) {
   const target = referenceAnalysisTarget.value.trim()
   if (!target) {
@@ -544,6 +705,9 @@ async function restoreIteration(iteration: Iteration) {
 onMounted(async () => {
   try {
     await loadStudio()
+    await loadLibraries()
+    const compositionIteration = iterations.value.find(item => item.type === 'composition')
+    if (compositionIteration) await loadComposition(compositionIteration.id)
     void startProjectEvents()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not load studio'
@@ -787,6 +951,75 @@ onUnmounted(() => {
             <el-button type="primary" @click="selectTexture">Record texture</el-button>
             <el-button type="success" @click="approveProject">Approve final result</el-button>
           </el-space>
+        </el-card>
+
+        <el-card class="create-card">
+          <template #header>Similarity Check</template>
+          <el-space wrap>
+            <el-input v-model="similarityTargetAsset" placeholder="Target asset ID (defaults to latest upload)" style="width: 360px" />
+            <el-button type="primary" @click="runSimilarityCheck">Run similarity</el-button>
+            <el-button v-if="similarityResult && similarityResult.composition_score >= 0.8" @click="requestCompositionMutation">Suggest composition mutations</el-button>
+          </el-space>
+          <el-descriptions v-if="similarityResult" :column="4" border style="margin-top: 16px">
+            <el-descriptions-item label="Visual">{{ similarityResult.visual_score.toFixed(3) }}</el-descriptions-item>
+            <el-descriptions-item label="Composition">{{ similarityResult.composition_score.toFixed(3) }}</el-descriptions-item>
+            <el-descriptions-item label="Semantic">{{ similarityResult.semantic_score.toFixed(3) }}</el-descriptions-item>
+            <el-descriptions-item label="Style">{{ similarityResult.style_score.toFixed(3) }}</el-descriptions-item>
+          </el-descriptions>
+          <el-alert v-if="similarityResult" title="Similarity analysis is informational and does not establish that all internet sources were checked." type="warning" :closable="false" style="margin-top: 12px" />
+        </el-card>
+
+        <el-card v-if="compositionSpec" class="create-card">
+          <template #header>Composition Engine</template>
+          <el-form label-position="top">
+            <el-row :gutter="12">
+              <el-col :span="12"><el-form-item label="Focal points (JSON)"><el-input v-model="compositionSpec.focal_points as any" type="textarea" :model-value="JSON.stringify(compositionSpec.focal_points)" @change="compositionSpec.focal_points = JSON.parse(String($event))" /></el-form-item></el-col>
+              <el-col :span="12"><el-form-item label="Bounding boxes (JSON)"><el-input type="textarea" :model-value="JSON.stringify(compositionSpec.bounding_boxes)" @change="compositionSpec.bounding_boxes = JSON.parse(String($event))" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="Horizon"><el-input-number v-model="compositionSpec.horizon" :min="0" :max="1" :step="0.01" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="Camera elevation"><el-input-number v-model="compositionSpec.camera_elevation" :step="0.1" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="Perspective"><el-input v-model="compositionSpec.perspective" @change="updateCompositionText('perspective')" /></el-form-item></el-col>
+            </el-row>
+            <el-space><el-button type="primary" :loading="compositionSaving" @click="saveComposition">Save composition</el-button></el-space>
+          </el-form>
+          <el-alert v-if="compositionMutation" :title="compositionMutation.suggestions.join(' · ')" type="info" :closable="false" style="margin-top: 12px" />
+          <el-space v-if="compositionMutation" style="margin-top: 12px">
+            <el-button type="success" :disabled="compositionMutation.status !== 'proposed'" @click="acceptCompositionMutation">Accept → new iteration</el-button>
+            <el-button type="danger" :disabled="compositionMutation.status !== 'proposed'" @click="rejectCompositionMutation">Reject</el-button>
+          </el-space>
+        </el-card>
+
+        <el-card class="create-card">
+          <template #header>Material & Texture Libraries</template>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-input v-model="materialSearch" placeholder="Search materials" @keyup.enter="loadLibraries" />
+              <el-table :data="materials" size="small" @row-click="chooseMaterial">
+                <el-table-column prop="name" label="Material" />
+                <el-table-column prop="category" label="Category" />
+              </el-table>
+              <small v-if="selectedMaterial">Selected material: {{ selectedMaterial }}</small>
+            </el-col>
+            <el-col :span="12">
+              <el-input v-model="textureSearch" placeholder="Search textures" @keyup.enter="loadLibraries" />
+              <el-table :data="textures" size="small" @row-click="chooseTexture">
+                <el-table-column prop="name" label="Texture" />
+                <el-table-column prop="category" label="Category" />
+              </el-table>
+              <small v-if="selectedTexture">Selected texture: {{ selectedTexture }}</small>
+            </el-col>
+          </el-row>
+        </el-card>
+
+        <el-card class="create-card">
+          <template #header>Creation Report</template>
+          <el-button type="primary" :loading="exporting" :disabled="!lastUploadedAsset" @click="createCreationReport">Create Creation Report</el-button>
+          <el-descriptions v-if="creationExport" :column="1" border style="margin-top: 12px">
+            <el-descriptions-item label="Status">{{ creationExport.status }}</el-descriptions-item>
+            <el-descriptions-item label="Export ID">{{ creationExport.id }}</el-descriptions-item>
+            <el-descriptions-item label="Artifacts">
+              <div v-for="(url, name) in creationExport.artifacts" :key="name"><a :href="url" target="_blank" rel="noreferrer">{{ name }}</a></div>
+            </el-descriptions-item>
+          </el-descriptions>
         </el-card>
 
         <el-card class="timeline-card">
