@@ -1,6 +1,7 @@
 package iterations
 
-import (\n\t"context"
+import (
+	"context"
 	"errors"
 	"strings"
 	"time"
