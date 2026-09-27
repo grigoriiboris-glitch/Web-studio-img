@@ -1,6 +1,7 @@
 package assistant
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"unicode"
@@ -9,10 +10,10 @@ import (
 )
 
 type criticAsset struct {
-	ID        string
+	ID         string
 	StorageKey string
-	Prompt    string
-	HasAsset  bool
+	Prompt     string
+	HasAsset   bool
 }
 
 func criticObservation(dimension, observation, reason string, confidence float64) map[string]any {
@@ -27,41 +28,31 @@ func criticObservation(dimension, observation, reason string, confidence float64
 func buildCriticObservations(result similarity.Result, compA, compB map[string]any, promptA, promptB string) []map[string]any {
 	observations := make([]map[string]any, 0, 6)
 
-	addScoreObservation := func(dimension, label, reason string, a, b float64) {
-		delta := b - a
+	addSimilarityObservation := func(dimension, label, reason string, score float64) {
+		level := "low"
+		confidence := 0.74
 		switch {
-		case delta > 0.15:
-			observations = append(observations, criticObservation(
-				dimension,
-				label+" is materially higher in iteration B.",
-				reason,
-				0.86,
-			))
-		case delta < -0.15:
-			observations = append(observations, criticObservation(
-				dimension,
-				label+" is materially lower in iteration B.",
-				reason,
-				0.86,
-			))
-		default:
-			observations = append(observations, criticObservation(
-				dimension,
-				label+" is broadly similar between the iterations.",
-				reason,
-				0.78,
-			))
+		case score >= 0.8:
+			level, confidence = "high", 0.90
+		case score >= 0.5:
+			level, confidence = "moderate", 0.82
 		}
+		observations = append(observations, criticObservation(
+			dimension,
+			label+" is "+level+" between the iterations.",
+			reason,
+			confidence,
+		))
 	}
 
-	addScoreObservation("visual", "Visual similarity", "Perceptual hash and luminance histogram comparison.", result.Visual, result.Visual)
-	addScoreObservation("composition", "Composition similarity", "Heuristic focal-center, edge-density, and aspect-ratio comparison.", result.Composition, result.Composition)
-	addScoreObservation("semantic", "Semantic similarity proxy", "Image histogram/color embedding cosine similarity; this is a proxy, not a semantic model.", result.Semantic, result.Semantic)
-	addScoreObservation("style", "Style similarity", "Heuristic comparison of edge density, luminance variance, and histogram.", result.Style, result.Style)
+	addSimilarityObservation("visual", "Visual similarity", "Perceptual hash and luminance histogram comparison.", result.Visual)
+	addSimilarityObservation("composition", "Composition similarity", "Heuristic focal-center, edge-density, and aspect-ratio comparison.", result.Composition)
+	addSimilarityObservation("semantic", "Semantic similarity proxy", "Image histogram/color embedding cosine similarity; this is a proxy, not a semantic model.", result.Semantic)
+	addSimilarityObservation("style", "Style similarity", "Heuristic comparison of edge density, luminance variance, and histogram.", result.Style)
 
 	aspectA, aspectB := numberFrom(compA["aspect_ratio"]), numberFrom(compB["aspect_ratio"])
 	if aspectA > 0 && aspectB > 0 {
-		delta := absFloat(aspectB - aspectA)
+		delta := math.Abs(aspectB - aspectA)
 		observations = append(observations, criticObservation(
 			"composition",
 			formatCompositionAspectObservation(delta),
@@ -73,7 +64,7 @@ func buildCriticObservations(result similarity.Result, compA, compB map[string]a
 	focalA := focalPoint(compA)
 	focalB := focalPoint(compB)
 	if focalA != nil && focalB != nil {
-		distance := hypot(focalA[0]-focalB[0], focalA[1]-focalB[1])
+		distance := math.Hypot(focalA[0]-focalB[0], focalA[1]-focalB[1])
 		observations = append(observations, criticObservation(
 			"composition",
 			formatFocalObservation(distance),
@@ -204,44 +195,4 @@ func formatPromptObservation(score float64) string {
 	default:
 		return "Prompts share no normalized tokens."
 	}
-}
-
-func absFloat(v float64) float64 {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
-
-func hypot(x, y float64) float64 {
-	if x < 0 {
-		x = -x
-	}
-	if y < 0 {
-		y = -y
-	}
-	switch {
-	case x == 0:
-		return y
-	case y == 0:
-		return x
-	case x > y:
-		r := y / x
-		return x * sqrt1p(r*r)
-	default:
-		r := x / y
-		return y * sqrt1p(r*r)
-	}
-}
-
-func sqrt1p(v float64) float64 {
-	// Newton's method is deterministic and avoids introducing another math dependency surface.
-	x := 1.0
-	if v > 0 {
-		x = 1 + v/2
-	}
-	for i := 0; i < 8; i++ {
-		x = (x + (1+v)/x) / 2
-	}
-	return x
 }
