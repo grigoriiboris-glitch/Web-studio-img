@@ -20,6 +20,7 @@ func (s *Store) GetOwned(ctx context.Context, userID, projectID, referenceID uui
 }
 
 func (s *Store) UpdateInfluence(ctx context.Context,userID,projectID,referenceID uuid.UUID,influence *Influence)(Reference,error){
+	influence = NormalizeInfluence(influence)
 	raw,err:=json.Marshal(influence);if err!=nil{return Reference{},err}
 	var r Reference;var stored []byte
 	err=s.db.QueryRowContext(ctx,"UPDATE references SET influence=$1,updated_at=now() WHERE id=$2 AND project_id=$3 AND project_id IN (SELECT id FROM projects WHERE user_id=$4 AND status <> 'deleted') RETURNING id,project_id,asset_id,source_url,source_type,license,license_verified,user_owned,sha256,notes,influence,created_at,updated_at",raw,referenceID,projectID,userID).
