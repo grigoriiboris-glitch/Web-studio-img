@@ -13,8 +13,10 @@ CREATE TABLE similarity_checks (
   algorithm TEXT NOT NULL,
   algorithm_version TEXT NOT NULL,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  idempotency_key TEXT
 );
+CREATE UNIQUE INDEX similarity_checks_user_idempotency_uq ON similarity_checks(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX similarity_checks_project_created_idx ON similarity_checks(project_id, created_at DESC);
 CREATE INDEX similarity_checks_target_idx ON similarity_checks(target_asset_id);
 
@@ -29,8 +31,10 @@ CREATE TABLE export_records (
   error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_at TIMESTAMPTZ,
+  idempotency_key TEXT,
   CONSTRAINT export_records_status_check CHECK (status IN ('running','completed','failed'))
 );
+CREATE UNIQUE INDEX export_records_user_idempotency_uq ON export_records(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX export_records_project_created_idx ON export_records(project_id, created_at DESC);
 
 CREATE TABLE composition_specs (
