@@ -15,7 +15,7 @@ type Server struct {
 }
 
 func NewServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter) *Server {
-	return newServer(logger, origins, limiter, nil)
+	return newServer(logger, origins, limiter, nil, nil)
 }
 
 func NewServerWithProjects(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler) *Server {
