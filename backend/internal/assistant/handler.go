@@ -76,7 +76,7 @@ var toolCatalog = []ToolDescriptor{
 	{Name:"suggest_prompt",Description:"Suggest a prompt refinement from the latest prompt.",Recommendation:true},
 	{Name:"suggest_materials",Description:"Suggest project-visible material or texture library items.",Recommendation:true},
 	{Name:"create_generation",Description:"Queue a generation through the configured provider.",Mutating:true},
-	{Name:"compare_iterations",Description:"Compare two owned immutable iterations and their prompts."},
+	{Name:"compare_iterations",Description:"Compare two owned immutable iterations using prompts plus deterministic visual and composition descriptors."},
 	{Name:"verify_provenance",Description:"Verify the project's persisted provenance hash chain."},
 }
 
