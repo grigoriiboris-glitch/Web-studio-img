@@ -26,7 +26,7 @@ type Handler struct {
 	queue Enqueuer
 	provider Provider
 	provenance *provenance.Store
-	events *events.Store
+	projectEvents *events.Store
 }
 
 func NewHandler(store Store, queue Enqueuer, provider Provider) (*Handler, error) {
@@ -41,7 +41,7 @@ func NewHandlerWithDependencies(store Store, queue Enqueuer, provider Provider, 
 	if store == nil || queue == nil || provider == nil {
 		return nil, errors.New("generation handler requires store, queue and provider")
 	}
-	return &Handler{store: store, queue: queue, provider: provider, provenance: provenanceStore, events: eventStore}, nil
+	return &Handler{store: store, queue: queue, provider: provider, provenance: provenanceStore, projectEvents: eventStore}, nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -111,7 +111,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if created && h.events != nil { _, _ = h.events.Append(r.Context(), userID, projectID, "generation_queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
+	if created && h.events != nil { _, _ = h.projectEvents.Append(r.Context(), userID, projectID, "generation_queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
 	if created && h.provenance != nil {
 		_, _ = h.provenance.Append(r.Context(), provenance.Event{UserID: userID, ProjectID: projectID, IterationID: req.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_queued", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "prompt": item.Prompt, "negative_prompt": item.NegativePrompt, "seed": item.Seed, "aspect_ratio": item.AspectRatio, "parameters": item.Parameters}, CreatedAt: time.Now()})
 	}
