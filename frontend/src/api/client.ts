@@ -215,6 +215,7 @@ export interface ProvenanceVerification {
   reason?: string
 }
 
+// eslint-disable-next-line no-unused-vars
 type ProjectEventHandler = (...args: [ProjectEvent]) => void
 
 export const projectEventsApi = {
