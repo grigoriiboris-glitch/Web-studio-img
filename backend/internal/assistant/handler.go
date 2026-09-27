@@ -265,7 +265,6 @@ func (h *Handler) compareIterations(ctx context.Context,userID,projectID uuid.UU
 	assetB,e:=h.loadCriticAsset(ctx,userID,projectID,b)
 	if e!=nil{return nil,"",0,"",e}
 
-	promptScore,promptAvailable:=promptSimilarity(assetA.Prompt,assetB.Prompt)
 	comparedAt:=time.Now().UTC()
 	out:=map[string]any{
 		"a":ia,
@@ -288,9 +287,9 @@ func (h *Handler) compareIterations(ctx context.Context,userID,projectID uuid.UU
 	if valueOrString(ia.Title)!=valueOrString(ib.Title)||valueOrString(ia.Description)!=valueOrString(ib.Description)||ia.Type!=ib.Type{
 		observations=append(observations,criticObservation("iteration","Iteration metadata differs.","Stored iteration title, description, and type are compared directly.",0.99))
 	}
-	observations=append(observations,buildCriticPromptObservation(assetA.Prompt,assetB.Prompt))
 
 	if !assetA.HasAsset||!assetB.HasAsset||h.storage==nil{
+		observations=append(observations,buildCriticPromptObservation(assetA.Prompt,assetB.Prompt))
 		observations=append(observations,criticObservation("visual","Visual and composition comparison is unavailable.","Both iterations must have an active generated image and configured object storage.",0.99))
 		out["observations"]=observations
 		return out,"Comparison uses persisted iteration metadata and prompt text; visual/composition descriptors are included when both active images are available.",0.66,"Visual/composition observations are unavailable when an active generated image is missing; no visual similarity is inferred. Missing prompt text is reported as unavailable.",nil
