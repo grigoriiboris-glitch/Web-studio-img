@@ -42,6 +42,10 @@ The current authentication foundation does not yet issue cookie-based sessions. 
 
 HTTP request logs include request IDs. Domain-level security/audit events should be recorded separately from HTTP access logs when authentication and project authorization are implemented.
 
+## Observability integration
+
+Security middleware remains part of the API request chain when OpenTelemetry request metrics and tracing are enabled. The observability middleware wraps the secured handler rather than bypassing CORS, security headers, request IDs, rate limiting, logging, or upload size limits.
+
 ## Remaining acceptance checks
 
 The security baseline is designed to support tests for unauthorized resource access, invalid and oversized uploads, rate limiting, secret handling, path traversal, SQL injection prevention through parameterized repositories, and signed URL expiry. Resource ownership checks become enforceable when the corresponding domain endpoints are introduced.
