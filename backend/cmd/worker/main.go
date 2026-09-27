@@ -37,6 +37,10 @@ func main() {
 		logger.Error("worker requires S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
 		os.Exit(1)
 	}
+	if cfg.Env == "production" && cfg.ClamAVAddress == "" {
+		logger.Error("production worker requires CLAMAV_ADDR for malware scanning")
+		os.Exit(1)
+	}
 
 	db, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
