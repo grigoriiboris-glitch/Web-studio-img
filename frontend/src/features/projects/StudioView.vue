@@ -1228,7 +1228,9 @@ onUnmounted(() => {
                     type="warning"
                     :loading="assistantDecisionLoading === action.id"
                     @click="decideAssistant(action, 'edit')"
-                  >Edit</el-button>
+                  >
+                    Edit
+                  </el-button>
                   <el-button size="small" :loading="assistantDecisionLoading === action.id" @click="decideAssistant(action, 'ignore')">Ignore</el-button>
                 </el-space>
               </div>
@@ -1252,7 +1254,7 @@ onUnmounted(() => {
                 v-model="factEvidenceJson"
                 type="textarea"
                 :rows="8"
-                placeholder='[{"text":"Evidence text","source":"https://example.org/source","assessment":"supports","confidence":0.9}]'
+                placeholder="Evidence JSON: text, source, assessment (supports/contradicts/unknown), confidence (0..1)"
               />
             </el-form-item>
             <el-button
