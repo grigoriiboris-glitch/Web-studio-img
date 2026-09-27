@@ -115,3 +115,24 @@ CREATE TABLE idempotency_requests (
   PRIMARY KEY(user_id, method, request_path, idempotency_key)
 );
 CREATE INDEX idempotency_requests_created_idx ON idempotency_requests(created_at);
+
+INSERT INTO library_items (user_id, kind, category, name, description, tags, prompt_fragment)
+VALUES
+(NULL,'material','stone','marble','White and veined stone', '["stone","luxury"]'::jsonb,'white veined marble'),
+(NULL,'material','metal','brushed metal','Directional brushed metallic surface','["metal","industrial"]'::jsonb,'brushed metal'),
+(NULL,'material','wood','raw wood','Unfinished natural wood','["wood","natural"]'::jsonb,'raw wood'),
+(NULL,'material','glass','glass','Transparent reflective glass','["glass","transparent"]'::jsonb,'clear glass'),
+(NULL,'material','ceramic','ceramic','Smooth kiln-fired ceramic','["ceramic"]'::jsonb,'matte ceramic'),
+(NULL,'material','paper','paper','Natural paper stock','["paper"]'::jsonb,'textured paper'),
+(NULL,'material','textile','textile','Woven textile surface','["textile","fabric"]'::jsonb,'woven textile'),
+(NULL,'material','concrete','concrete','Mineral concrete surface','["concrete"]'::jsonb,'raw concrete'),
+(NULL,'material','liquid','liquid','Fluid glossy liquid','["liquid"]'::jsonb,'glossy liquid'),
+(NULL,'material','plastic','plastic','Smooth polymer surface','["plastic"]'::jsonb,'smooth plastic'),
+(NULL,'texture','natural','natural grain','Organic natural grain','["natural"]'::jsonb,'natural grain texture'),
+(NULL,'texture','geometric','geometric grid','Regular geometric grid','["geometric"]'::jsonb,'geometric grid texture'),
+(NULL,'texture','organic','organic noise','Irregular organic variation','["organic"]'::jsonb,'organic texture'),
+(NULL,'texture','fabric','fabric weave','Visible woven fibers','["fabric"]'::jsonb,'fabric weave texture'),
+(NULL,'texture','surface','fine surface','Subtle fine surface detail','["surface"]'::jsonb,'fine surface texture'),
+(NULL,'texture','abstract','abstract pattern','Non-representational abstract marks','["abstract"]'::jsonb,'abstract texture'),
+(NULL,'texture','custom','custom','User-definable custom texture','["custom"]'::jsonb,'custom texture')
+ON CONFLICT DO NOTHING;
