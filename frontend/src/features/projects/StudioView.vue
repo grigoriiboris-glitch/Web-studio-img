@@ -1158,7 +1158,7 @@ onUnmounted(() => {
           </el-descriptions>
         </el-card>
 
-        <el-dialog :model-value="assistantEditAction !== null" title="Edit AI recommendation" width="560px" @update:model-value="value => { if (!value) assistantEditAction = null }">
+        <el-dialog :model-value="assistantEditAction !== null" title="Edit AI recommendation" width="560px" @update:model-value="(value: boolean) => { if (!value) assistantEditAction = null }">
           <el-input v-model="assistantEditText" type="textarea" :rows="7" maxlength="20000" show-word-limit />
           <template #footer>
             <el-button @click="assistantEditAction = null">Cancel</el-button>
