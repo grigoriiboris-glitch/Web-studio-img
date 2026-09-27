@@ -36,15 +36,9 @@ func (h *Handler) update(w http.ResponseWriter,r *http.Request){u,ok:=userID(r);
 func (h *Handler) deleteGlobal(w http.ResponseWriter,r *http.Request) {
 	u,ok:=userID(r);if !ok{writeErr(w,401,"unauthorized","authentication required");return}
 	rid,err:=uuid.Parse(r.PathValue("reference_id"));if err!=nil{writeErr(w,400,"invalid_reference_id","invalid reference id");return}
-	var ref Reference
-	ref,err=h.store.GetOwned(r.Context(),u,uuid.Nil,rid)
-	if err==nil { /* project is already checked by GetOwned when project id is supplied; legacy lookup below */ }
-	if err!=nil {
-		// Resolve ownership without trusting a client-supplied project id.
-		// The store query is implemented through a direct, parameterized lookup in this package's DB owner path.
-		writeErr(w,404,"reference_not_found","reference not found");return
-	}
-	_ = ref
+	ref,err:=h.store.GetOwnedByID(r.Context(),u,rid);if err!=nil{writeErr(w,404,"reference_not_found","reference not found");return}
+	if err:=h.store.Delete(r.Context(),u,ref.ProjectID,rid);errors.Is(err,ErrReferenceNotFound){writeErr(w,404,"reference_not_found","reference not found");return}else if err!=nil{writeErr(w,500,"reference_delete_failed","could not delete reference");return}
+	h.record(r,ref.ProjectID,rid,"reference.deleted",nil);w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) delete(w http.ResponseWriter,r *http.Request){u,ok:=userID(r);if !ok{writeErr(w,401,"unauthorized","authentication required");return};pid,e1:=uuid.Parse(r.PathValue("project_id"));rid,e2:=uuid.Parse(r.PathValue("reference_id"));if e1!=nil||e2!=nil{writeErr(w,400,"invalid_reference_id","invalid reference id");return};if err:=h.store.Delete(r.Context(),u,pid,rid);errors.Is(err,ErrReferenceNotFound){writeErr(w,404,"reference_not_found","reference not found");return}else if err!=nil{writeErr(w,500,"reference_delete_failed","could not delete reference");return};h.record(r,pid,rid,"reference.deleted",nil);w.WriteHeader(http.StatusNoContent)}
