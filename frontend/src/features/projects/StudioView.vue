@@ -154,7 +154,9 @@ async function createIteration() {
       ? 'IDEA_CREATED'
       : created.type === 'composition'
         ? 'COMPOSITION_CHANGED'
-        : ''
+        : created.type === 'manual_edit'
+          ? 'MANUAL_EDIT'
+          : ''
     if (created.type === 'composition') {
       try {
         compositionSpec.value = await compositionApi.update(projectId(), created.id, {})
@@ -173,6 +175,7 @@ async function createIteration() {
           description: created.description,
           version: created.id,
         },
+        old_state: { iteration_id: null, title: null, description: null },
         new_state: { iteration_id: created.id, title: created.title, description: created.description },
       })
       await refreshActions()
@@ -383,6 +386,9 @@ async function saveComposition() {
     return
   }
   compositionSaving.value = true
+  const before = compositionSpec.value
+    ? JSON.parse(JSON.stringify(compositionSpec.value))
+    : null
   try {
     compositionSpec.value = await compositionApi.update(projectId(), compositionIterationId.value, {
       focal_points: compositionSpec.value?.focal_points ?? [],
@@ -396,6 +402,14 @@ async function saveComposition() {
       dominant_geometry: compositionSpec.value?.dominant_geometry ?? {},
       object_scale: compositionSpec.value?.object_scale ?? {},
       light_direction: compositionSpec.value?.light_direction ?? {},
+    })
+    await logHumanAction({
+      iteration_id: compositionIterationId.value,
+      action_type: 'COMPOSITION_CHANGED',
+      payload: { composition_spec_id: compositionSpec.value.id, iteration_id: compositionIterationId.value },
+      old_state: before ?? {},
+      new_state: compositionSpec.value,
+      ai_influence: { source: 'composition_editor', assisted: false },
     })
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not save composition'
