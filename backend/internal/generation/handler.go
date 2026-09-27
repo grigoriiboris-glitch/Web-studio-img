@@ -111,7 +111,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if created && h.events != nil { _, _ = h.projectEvents.Append(r.Context(), userID, projectID, "generation_queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
+	if created && h.projectEvents != nil { _, _ = h.projectEvents.Append(r.Context(), userID, projectID, "generation_queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
 	if created && h.provenance != nil {
 		_, _ = h.provenance.Append(r.Context(), provenance.Event{UserID: userID, ProjectID: projectID, IterationID: req.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_queued", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "prompt": item.Prompt, "negative_prompt": item.NegativePrompt, "seed": item.Seed, "aspect_ratio": item.AspectRatio, "parameters": item.Parameters}, CreatedAt: time.Now()})
 	}
