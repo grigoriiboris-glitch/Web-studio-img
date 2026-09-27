@@ -24,6 +24,27 @@ var componentNames = map[string]bool{
 	"detail":true,"constraints":true,"negative_constraints":true,
 }
 
+var componentOrder = []string{
+	"subject","composition","camera","lighting","material","texture","color",
+	"atmosphere","style","depth","detail","constraints","negative_constraints",
+}
+
+func BuildFinalText(components map[string]string) string {
+	parts := make([]string, 0, len(componentOrder))
+	for _, name := range componentOrder {
+		value := strings.TrimSpace(components[name])
+		if value == "" {
+			continue
+		}
+		if name == "negative_constraints" {
+			parts = append(parts, "negative constraints: "+value)
+			continue
+		}
+		parts = append(parts, value)
+	}
+	return strings.Join(parts, ", ")
+}
+
 type Prompt struct {
 	ID uuid.UUID `json:"id"`
 	ProjectID uuid.UUID `json:"project_id"`
