@@ -44,6 +44,7 @@ type Export struct {
 	Error        string             `json:"error,omitempty"`
 	CreatedAt    time.Time         `json:"created_at"`
 	CompletedAt  *time.Time        `json:"completed_at,omitempty"`
+	IdempotencyKey string `json:"-"`
 }
 
 func NewHandler(a *assets.Store, s storage.StorageProvider, e *events.Store, p *provenance.Store, h *humanactions.Store) (*Handler, error) {
@@ -79,9 +80,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	asset, err := h.assets.GetOwned(r.Context(),p.UserID,projectID,assetID); if err != nil { errJSON(w,404,"final_asset_not_found","final asset not found"); return }
 	var out Export
-	if err := h.db.QueryRowContext(r.Context(), `INSERT INTO export_records(project_id,user_id,final_asset_id,status) VALUES($1,$2,$3,'running') RETURNING id,project_id,user_id,final_asset_id,status,artifacts,manifest,error,created_at,completed_at`,projectID,p.UserID,asset.ID).Scan(&out.ID,&out.ProjectID,&out.UserID,&out.FinalAssetID,&out.Status,&[]byte{},&[]byte{},&out.Error,&out.CreatedAt,&out.CompletedAt); err != nil {
-		errJSON(w,500,"export_create_failed","could not create export record"); return
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	var artifactRaw, manifestRaw []byte
+	err = h.db.QueryRowContext(r.Context(), `INSERT INTO export_records(project_id,user_id,final_asset_id,status,idempotency_key) VALUES($1,$2,$3,'running',$4) ON CONFLICT (user_id,idempotency_key) DO NOTHING RETURNING id,project_id,user_id,final_asset_id,status,artifacts,manifest,error,created_at,completed_at`, projectID,p.UserID,asset.ID,idempotencyKey).Scan(&out.ID,&out.ProjectID,&out.UserID,&out.FinalAssetID,&out.Status,&artifactRaw,&manifestRaw,&out.Error,&out.CreatedAt,&out.CompletedAt)
+	if errors.Is(err,sql.ErrNoRows) {
+		var existingAsset uuid.UUID
+		if qerr:=h.db.QueryRowContext(r.Context(), `SELECT id,final_asset_id FROM export_records WHERE user_id=$1 AND idempotency_key=$2`,p.UserID,idempotencyKey).Scan(&out.ID,&existingAsset); qerr!=nil { errJSON(w,500,"export_create_failed","could not load idempotent export"); return }
+		if existingAsset != asset.ID { errJSON(w,409,"idempotency_conflict","idempotency key was already used for another final asset"); return }
+		loaded,qerr:=h.load(r.Context(),p.UserID,out.ID); if qerr!=nil { errJSON(w,500,"export_load_failed","could not load export"); return }
+		writeJSON(w,200,loaded); return
 	}
+	if err != nil { errJSON(w,500,"export_create_failed","could not create export record"); return }
 	if err := h.build(r.Context(), p.UserID, projectID, out.ID, asset); err != nil {
 		_,_ = h.db.ExecContext(r.Context(), `UPDATE export_records SET status='failed', error=$2 WHERE id=$1`,out.ID,err.Error())
 		errJSON(w,500,"export_failed","could not build creation report"); return
