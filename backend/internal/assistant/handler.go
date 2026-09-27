@@ -252,10 +252,102 @@ func (h *Handler) createGeneration(ctx context.Context,userID,projectID uuid.UUI
 }
 
 func (h *Handler) compareIterations(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error){
-	aID,_:=in["iteration_a_id"].(string);bID,_:=in["iteration_b_id"].(string);a,e:=uuid.Parse(aID);if e!=nil{return nil,"",0,"",errors.New("iteration_a_id is required")};b,e:=uuid.Parse(bID);if e!=nil{return nil,"",0,"",errors.New("iteration_b_id is required")}
-	ia,e:=h.iterations.Get(ctx,userID,a);if e!=nil||ia.ProjectID!=projectID{return nil,"",0,"",errors.New("iteration_a_id not found")};ib,e:=h.iterations.Get(ctx,userID,b);if e!=nil||ib.ProjectID!=projectID{return nil,"",0,"",errors.New("iteration_b_id not found")}
-	diff:=[]string{};if valueOrString(ia.Title)!=valueOrString(ib.Title){diff=append(diff,"title differs")};if valueOrString(ia.Description)!=valueOrString(ib.Description){diff=append(diff,"description differs")};if ia.Type!=ib.Type{diff=append(diff,"type differs")}
-	return map[string]any{"a":ia,"b":ib,"differences":diff},"Comparison is limited to persisted iteration metadata.",0.95,"No pixel-level visual diff is claimed.",nil
+	aID,_:=in["iteration_a_id"].(string)
+	bID,_:=in["iteration_b_id"].(string)
+	a,e:=uuid.Parse(aID);if e!=nil{return nil,"",0,"",errors.New("iteration_a_id is required")}
+	b,e:=uuid.Parse(bID);if e!=nil{return nil,"",0,"",errors.New("iteration_b_id is required")}
+	if a==b{return nil,"",0,"",errors.New("iterations must be different")}
+	ia,e:=h.iterations.Get(ctx,userID,a);if e!=nil||ia.ProjectID!=projectID{return nil,"",0,"",errors.New("iteration_a_id not found")}
+	ib,e:=h.iterations.Get(ctx,userID,b);if e!=nil||ib.ProjectID!=projectID{return nil,"",0,"",errors.New("iteration_b_id not found")}
+
+	assetA,e:=h.loadCriticAsset(ctx,userID,projectID,a)
+	if e!=nil{return nil,"",0,"",e}
+	assetB,e:=h.loadCriticAsset(ctx,userID,projectID,b)
+	if e!=nil{return nil,"",0,"",e}
+
+	out:=map[string]any{
+		"a":ia,
+		"b":ib,
+		"assets":map[string]any{
+			"a":map[string]any{"id":assetA.ID,"available":assetA.HasAsset},
+			"b":map[string]any{"id":assetB.ID,"available":assetB.HasAsset},
+		},
+		"prompts":map[string]any{
+			"a":assetA.Prompt,
+			"b":assetB.Prompt,
+			"similarity":promptJaccard(assetA.Prompt,assetB.Prompt),
+		},
+	}
+	observations:=[]map[string]any{}
+	if valueOrString(ia.Title)!=valueOrString(ib.Title)||valueOrString(ia.Description)!=valueOrString(ib.Description)||ia.Type!=ib.Type{
+		observations=append(observations,criticObservation("iteration","Iteration metadata differs.","Stored iteration title, description, and type are compared directly.",0.99))
+	}
+
+	if !assetA.HasAsset||!assetB.HasAsset||h.storage==nil{
+		observations=append(observations,criticObservation("visual","Visual and composition comparison is unavailable.","Both iterations must have an active generated image and configured object storage.",0.99))
+		out["observations"]=observations
+		return out,"Comparison uses persisted iteration metadata and deterministic analysis when both image assets are available.",0.99,"Visual/composition observations are unavailable when an active generated image is missing; no visual similarity is inferred.",nil
+	}
+
+	dataA,e:=h.readCriticObject(ctx,assetA.StorageKey);if e!=nil{return nil,"",0,"",e}
+	dataB,e:=h.readCriticObject(ctx,assetB.StorageKey);if e!=nil{return nil,"",0,"",e}
+	result,e:=similarity.Analyze(dataA,dataB);if e!=nil{return nil,"",0,"",e}
+	compA,e:=similarity.AnalyzeComposition(dataA);if e!=nil{return nil,"",0,"",e}
+	compB,e:=similarity.AnalyzeComposition(dataB);if e!=nil{return nil,"",0,"",e}
+
+	out["image_comparison"]=map[string]any{
+		"visual_similarity":result.Visual,
+		"composition_similarity":result.Composition,
+		"semantic_similarity_proxy":result.Semantic,
+		"style_similarity":result.Style,
+		"perceptual_hash_score":result.PHashScore,
+		"histogram_score":result.HistogramScore,
+		"embedding_score":result.EmbeddingScore,
+		"algorithm":"deterministic-image-descriptors",
+		"algorithm_version":similarity.AlgorithmVersion,
+	}
+	out["composition"]=map[string]any{"a":compA,"b":compB}
+	observations=append(observations,buildCriticObservations(result,compA,compB,assetA.Prompt,assetB.Prompt)...)
+	out["observations"]=observations
+	return out,"Critic comparison combines persisted iteration metadata, prompt overlap, and deterministic image/composition descriptors.",0.84,"This is a heuristic critic: it does not use an object detector, semantic vision model, or claim legal similarity/uniqueness.",nil
+}
+
+func (h *Handler) loadCriticAsset(ctx context.Context,userID,projectID,iterationID uuid.UUID)(criticAsset,error){
+	var result criticAsset
+	var prompt,original sql.NullString
+	_ = h.db.QueryRowContext(ctx,"SELECT final_text,original_text FROM prompts WHERE iteration_id=$1 AND project_id=$2 ORDER BY version DESC LIMIT 1",iterationID,projectID).Scan(&prompt,&original)
+	if prompt.Valid{result.Prompt=strings.TrimSpace(prompt.String)}else if original.Valid{result.Prompt=strings.TrimSpace(original.String)}
+	var generationPrompt,assetID,storageKey sql.NullString
+	err:=h.db.QueryRowContext(ctx,
+		"SELECT g.prompt,a.id,a.storage_key "+
+			"FROM generations g "+
+			"LEFT JOIN LATERAL ("+
+				"SELECT id,storage_key FROM assets "+
+				"WHERE generation_id=g.id AND lifecycle_status='active' "+
+				"ORDER BY created_at DESC,id DESC LIMIT 1"+
+			") a ON TRUE "+
+			"WHERE g.iteration_id=$1 AND g.project_id=$2 AND g.user_id=$3 "+
+			"ORDER BY g.created_at DESC,g.id DESC LIMIT 1",
+		iterationID,projectID,userID).Scan(&generationPrompt,&assetID,&storageKey)
+	if errors.Is(err,sql.ErrNoRows){return result,nil}
+	if err!=nil{return criticAsset{},err}
+	if result.Prompt==""&&generationPrompt.Valid{result.Prompt=strings.TrimSpace(generationPrompt.String)}
+	if assetID.Valid&&storageKey.Valid{
+		result.ID=assetID.String
+		result.StorageKey=storageKey.String
+		result.HasAsset=true
+	}
+	return result,nil
+}
+
+func (h *Handler) readCriticObject(ctx context.Context,key string)([]byte,error){
+	obj,_,err:=h.storage.Get(ctx,key)
+	if err!=nil{return nil,err}
+	defer func(){_=obj.Close()}()
+	data,err:=io.ReadAll(io.LimitReader(obj,assets.MaxAssetSize+1))
+	if err!=nil{return nil,err}
+	if int64(len(data))>assets.MaxAssetSize{return nil,errors.New("asset exceeds analysis limit")}
+	return data,nil
 }
 
 func (h *Handler) verifyProvenance(ctx context.Context,userID,projectID uuid.UUID)(map[string]any,string,float64,string,error){
