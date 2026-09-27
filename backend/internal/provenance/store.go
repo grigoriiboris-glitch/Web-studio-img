@@ -68,7 +68,8 @@ func (s *Store) Append(ctx context.Context,event Event)(Event,error){
 	if owner!=event.UserID{return Event{},errors.New("project not owned")}
 	_ = tx.QueryRowContext(ctx,"SELECT hash FROM provenance_events WHERE project_id=$1 ORDER BY sequence DESC LIMIT 1",event.ProjectID).Scan(&event.ParentHash)
 	event.ID=uuid.New();event.Hash,err=HashEvent(event);if err!=nil{return Event{},fmt.Errorf("hash provenance event: %w",err)}
-	_,err=tx.ExecContext(ctx,`INSERT INTO provenance_events(id,user_id,project_id,iteration_id,entity_type,entity_id,action,payload,parent_hash,hash,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,event.ID,event.UserID,event.ProjectID,event.IterationID,event.EntityType,event.EntityID,event.Action,event.Payload,nullableString(event.ParentHash),event.Hash,event.CreatedAt)
+	rawPayload,err:=json.Marshal(event.Payload);if err!=nil{return Event{},fmt.Errorf("marshal provenance payload: %w",err)}
+	_,err=tx.ExecContext(ctx,`INSERT INTO provenance_events(id,user_id,project_id,iteration_id,entity_type,entity_id,action,payload,parent_hash,hash,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,event.ID,event.UserID,event.ProjectID,event.IterationID,event.EntityType,event.EntityID,event.Action,rawPayload,nullableString(event.ParentHash),event.Hash,event.CreatedAt)
 	if err!=nil{return Event{},fmt.Errorf("append provenance event: %w",err)}
 	if err:=tx.Commit();err!=nil{return Event{},err};return event,nil
 }
