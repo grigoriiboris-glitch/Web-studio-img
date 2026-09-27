@@ -156,6 +156,7 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 	if err=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,parent_iteration_id,type,title,description) VALUES($1,$2,'composition',$3,$4) RETURNING id`,pid,parentID,"Composition mutation accepted","Accepted AI composition suggestion").Scan(&iterationID);err!=nil{writeErr(w,500,"iteration_create_failed","could not create accepted iteration");return}
 	if _,err=tx.ExecContext(r.Context(),`UPDATE composition_mutations SET status='accepted',accepted_iteration_id=$1 WHERE id=$2`,iterationID,mid);err!=nil{writeErr(w,500,"mutation_update_failed","could not update mutation");return}
 	if err=tx.Commit();err!=nil{writeErr(w,500,"mutation_commit_failed","could not commit mutation");return}
+	var m Mutation
 	payload:=map[string]any{"mutation_id":mid,"accepted_iteration_id":iterationID}
 	if h.events!=nil{_,_=h.events.Append(r.Context(),u.UserID,pid,"iteration.created","iteration",iterationID,payload)}
 	if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u.UserID,ProjectID:pid,IterationID:&iterationID,EntityType:"composition_mutation",EntityID:mid,Action:"composition.mutation.accepted",Payload:payload})}
