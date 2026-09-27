@@ -20,6 +20,7 @@ func NewStore(db *sql.DB) (*Store, error) {
 
 func (s *Store) Create(ctx context.Context, userID, projectID uuid.UUID, req Request) (Reference, error) {
 	if err := req.Validate(); err != nil { return Reference{}, err }
+	req.Influence = NormalizeInfluence(req.Influence)
 	if req.AssetID != nil {
 		var assetProject uuid.UUID
 		if err := s.db.QueryRowContext(ctx, "SELECT project_id FROM assets WHERE id=$1", *req.AssetID).Scan(&assetProject); errors.Is(err, sql.ErrNoRows) || assetProject != projectID {
@@ -57,6 +58,7 @@ func (s *Store) List(ctx context.Context,userID,projectID uuid.UUID)([]Reference
 
 func (s *Store) Update(ctx context.Context,userID,projectID,referenceID uuid.UUID,req Request)(Reference,error){
 	if err:=req.Validate();err!=nil{return Reference{},err}
+	req.Influence = NormalizeInfluence(req.Influence)
 	if err:=s.validateAssetForProject(ctx,userID,projectID,req.AssetID);err!=nil{return Reference{},err}
 	influenceRaw,err:=json.Marshal(req.Influence);if err!=nil{return Reference{},err}
 	var r Reference
