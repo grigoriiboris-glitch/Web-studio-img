@@ -152,12 +152,47 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 	if err:=h.storage.Put(ctx,sourceKey,strings.NewReader(string(source)),int64(len(source)),storage.PutOptions{ContentType:asset.MIMEType});err!=nil{return fmt.Errorf("write final source: %w",err)}
 	artifactKeys["source/final-image"]=sourceKey; hashes["source/final-image"]=sha256Hex(source)
 
-	manifest["artifacts"]=artifactKeys
-	manifest["hashes"]=hashes
+	type sourceAsset struct {
+		ID uuid.UUID
+		StorageKey, MIMEType, Checksum string
+		Size int64
+		Width, Height int
+		CreatedAt time.Time
+	}
+	rows,err:=h.db.QueryContext(ctx,`SELECT DISTINCT a.id,a.storage_key,a.mime_type,a.checksum,a.size,a.width,a.height,a.created_at
+		FROM assets a JOIN "references" r ON r.asset_id=a.id
+		WHERE r.project_id=$1 AND r.user_id=$2 AND a.lifecycle_status='active'
+		ORDER BY a.created_at ASC,a.id ASC`,projectID,userID)
+	if err!=nil{return fmt.Errorf("load source assets: %w",err)}
+	defer rows.Close()
+	var sourceAssets []sourceAsset
+	for rows.Next(){var x sourceAsset;if err:=rows.Scan(&x.ID,&x.StorageKey,&x.MIMEType,&x.Checksum,&x.Size,&x.Width,&x.Height,&x.CreatedAt);err!=nil{return fmt.Errorf("scan source asset: %w",err)};sourceAssets=append(sourceAssets,x)}
+	if err:=rows.Err();err!=nil{return fmt.Errorf("load source assets: %w",err)}
+
+	for _,src:=range sourceAssets {
+		obj,_,err:=h.storage.Get(ctx,src.StorageKey);if err!=nil{return fmt.Errorf("read source asset %s: %w",src.ID,err)}
+		data,readErr:=io.ReadAll(io.LimitReader(obj,assets.MaxAssetSize+1));_ = obj.Close();if readErr!=nil{return fmt.Errorf("read source asset %s: %w",src.ID,readErr)}
+		if int64(len(data))>assets.MaxAssetSize{return fmt.Errorf("source asset %s exceeds export limit",src.ID)}
+		key:=fmt.Sprintf("projects/%s/exports/%s/source/%s",projectID,exportID,src.ID)
+		if err:=h.storage.Put(ctx,key,strings.NewReader(string(data)),int64(len(data)),storage.PutOptions{ContentType:src.MIMEType});err!=nil{return fmt.Errorf("write source asset %s: %w",src.ID,err)}
+		name:="source/"+src.ID.String();artifactKeys[name]=key;hashes[name]=sha256Hex(data)
+	}
+
+	pdfBytes:=buildPDFReport(reportMeta, verification)
+	pdfKey:=fmt.Sprintf("projects/%s/exports/%s/creation-report.pdf",projectID,exportID)
+	if err:=h.storage.Put(ctx,pdfKey,strings.NewReader(string(pdfBytes)),int64(len(pdfBytes)),storage.PutOptions{ContentType:"application/pdf"});err!=nil{return err}
+	artifactKeys["creation-report.pdf"]=pdfKey;hashes["creation-report.pdf"]=sha256Hex(pdfBytes)
+
+	manifestArtifacts:=map[string]string{}
+	for k,v:=range artifactKeys{manifestArtifacts[k]=v}
+	manifestHashes:=map[string]string{}
+	for k,v:=range hashes{manifestHashes[k]=v}
+	manifest["artifacts"]=manifestArtifacts
+	manifest["hashes"]=manifestHashes
 	manifestBytes,_:=json.MarshalIndent(manifest,"","  ")
 	manifestKey:=fmt.Sprintf("projects/%s/exports/%s/manifest.json",projectID,exportID)
 	if err:=h.storage.Put(ctx,manifestKey,strings.NewReader(string(manifestBytes)),int64(len(manifestBytes)),storage.PutOptions{ContentType:"application/json"});err!=nil{return err}
-	artifactKeys["manifest.json"]=manifestKey; hashes["manifest.json"]=sha256Hex(manifestBytes)
+	artifactKeys["manifest.json"]=manifestKey;hashes["manifest.json"]=sha256Hex(manifestBytes)
 
 	keys:=make([]string,0,len(hashes));for k:=range hashes{keys=append(keys,k)};sort.Strings(keys)
 	var hashText strings.Builder
@@ -166,12 +201,6 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 	hashKey:=fmt.Sprintf("projects/%s/exports/%s/hashes.txt",projectID,exportID)
 	if err:=h.storage.Put(ctx,hashKey,strings.NewReader(hashText.String()),int64(len(hashBytes)),storage.PutOptions{ContentType:"text/plain"});err!=nil{return err}
 	artifactKeys["hashes.txt"]=hashKey
-
-	pdfBytes:=buildPDFReport(reportMeta, verification)
-	pdfKey:=fmt.Sprintf("projects/%s/exports/%s/creation-report.pdf",projectID,exportID)
-	if err:=h.storage.Put(ctx,pdfKey,strings.NewReader(string(pdfBytes)),int64(len(pdfBytes)),storage.PutOptions{ContentType:"application/pdf"});err!=nil{return err}
-	artifactKeys["creation-report.pdf"]=pdfKey
-	hashes["creation-report.pdf"]=sha256Hex(pdfBytes)
 
 	artifactsJSON,_:=json.Marshal(artifactKeys)
 	manifestJSON,_:=json.Marshal(manifest)

@@ -511,9 +511,19 @@ export const compositionApi = {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
-  suggest: (projectId: string, input: { composition_spec_id?: string; source_similarity_check_id?: string; composition_similarity: number }) =>
+  analyze: (projectId: string, iterationId: string, assetId: string) =>
+    apiRequest<{ spec: CompositionSpec; analysis: Record<string, unknown>; uncertainty: string }>(
+      '/projects/' + projectId + '/iterations/' + iterationId + '/composition/analyze',
+      { method: 'POST', body: JSON.stringify({ asset_id: assetId }) },
+    ),
+  suggest: (
+    projectId: string,
+    input: { composition_spec_id?: string; source_similarity_check_id?: string; composition_similarity: number },
+    idempotencyKey: string,
+  ) =>
     apiRequest<CompositionMutation>('/projects/' + projectId + '/composition-mutation-suggestions', {
       method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(input),
     }),
   accept: (projectId: string, mutationId: string) =>
@@ -555,4 +565,73 @@ export const texturesApi = {
     apiRequest<{ items: LibraryItem[] }>('/projects/' + projectId + '/textures' + queryString({ q, category })),
   create: (projectId: string, input: { category: string; name: string; description?: string; tags?: string[]; prompt_fragment: string; preview_key?: string }) =>
     apiRequest<LibraryItem>('/projects/' + projectId + '/textures', { method: 'POST', body: JSON.stringify(input) }),
+}
+
+
+export interface AssistantToolDescriptor {
+  name: string
+  description: string
+  mutating: boolean
+  recommendation: boolean
+}
+
+export interface AssistantRecommendation {
+  recommendation: string
+  reason: string
+  evidence: Record<string, unknown>
+  confidence: number
+  affected_entity: Record<string, unknown>
+  expected_effect: string
+}
+
+export interface AssistantAction {
+  id: string
+  project_id: string
+  user_id: string
+  tool: string
+  kind: 'tool_execution' | 'recommendation'
+  input: Record<string, unknown>
+  output: Record<string, unknown>
+  explanation: string
+  confidence: number
+  uncertainty: string
+  decision?: 'apply' | 'edit' | 'ignore'
+  created_at: string
+  decided_at?: string
+}
+
+export interface AssistantToolResponse<T = Record<string, unknown>> {
+  action: AssistantAction
+  result: T
+  explanation: string
+  confidence: number
+  uncertainty: string
+}
+
+export const assistantApi = {
+  tools: (projectId: string) =>
+    apiRequest<{ tools: AssistantToolDescriptor[] }>('/projects/' + projectId + '/assistant/tools'),
+  actions: (projectId: string) =>
+    apiRequest<{ actions: AssistantAction[] }>('/projects/' + projectId + '/assistant/actions'),
+  execute: <T = Record<string, unknown>>(
+    projectId: string,
+    tool: string,
+    input: Record<string, unknown> = {},
+    idempotencyKey?: string,
+  ) => apiRequest<AssistantToolResponse<T>>('/projects/' + projectId + '/assistant/tools/' + encodeURIComponent(tool), {
+    method: 'POST',
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    body: JSON.stringify(input),
+  }),
+  decide: (
+    projectId: string,
+    actionId: string,
+    decision: 'apply' | 'edit' | 'ignore',
+    input: { final_text?: string; components?: Record<string, string> } = {},
+    idempotencyKey: string,
+  ) => apiRequest<AssistantAction>('/projects/' + projectId + '/assistant/recommendations/' + actionId + '/decision', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ decision, ...input }),
+  }),
 }
