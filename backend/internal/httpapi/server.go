@@ -31,6 +31,9 @@ func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimi
 	if projectHandler != nil {
 		projectHandler.Register(mux)
 	}
+	if iterationHandler != nil {
+		iterationHandler.Register(mux)
+	}
 
 	var handler http.Handler = mux
 	handler = withCORS(origins, handler)
