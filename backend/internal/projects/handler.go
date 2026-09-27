@@ -7,16 +7,18 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
+	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 )
 
 type Handler struct {
-	store Store
+	store  Store
+	events *events.Store
 }
 
-func NewHandlerWithEvents(store Store, eventStore *events.Store) (*Handler, error) {
-func NewHandler(store Store) (*Handler, error) { return NewHandlerWithEvents(store, nil) }
+func NewHandler(store Store) (*Handler, error) {
+	return NewHandlerWithEvents(store, nil)
+}
 
 func NewHandlerWithEvents(store Store, eventStore *events.Store) (*Handler, error) {
 	if store == nil {
