@@ -161,7 +161,7 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 
 	keys:=make([]string,0,len(hashes));for k:=range hashes{keys=append(keys,k)};sort.Strings(keys)
 	var hashText strings.Builder
-	for _,k:=range keys{fmt.Fprintf(&hashText,"%s  %s\\n",hashes[k],k)}
+	for _,k:=range keys{fmt.Fprintf(&hashText,"%s  %s\n",hashes[k],k)}
 	hashBytes:=[]byte(hashText.String())
 	hashKey:=fmt.Sprintf("projects/%s/exports/%s/hashes.txt",projectID,exportID)
 	if err:=h.storage.Put(ctx,hashKey,strings.NewReader(hashText.String()),int64(len(hashBytes)),storage.PutOptions{ContentType:"text/plain"});err!=nil{return err}
