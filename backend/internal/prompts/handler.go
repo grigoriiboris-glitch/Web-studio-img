@@ -21,6 +21,7 @@ func (h *Handler) Register(mux *http.ServeMux){
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/prompts",h.create)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/prompts/{prompt_id}",h.get)
 	mux.HandleFunc("PATCH /api/v1/projects/{project_id}/prompts/{prompt_id}",h.patch)
+	mux.HandleFunc("PATCH /api/v1/prompts/{prompt_id}",h.patchGlobal)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/prompts/{prompt_id}/approve",h.approve)
 }
 func (h *Handler) create(w http.ResponseWriter,r *http.Request){
@@ -41,6 +42,26 @@ func (h *Handler) patch(w http.ResponseWriter,r *http.Request){
  original:=source.OriginalText;if in.OriginalText!=nil{original=*in.OriginalText};suggestions:=source.AISuggestions;if in.AISuggestions!=nil{suggestions=*in.AISuggestions};finalText:=source.FinalText;if in.FinalText!=nil{finalText=in.FinalText};components:=source.Components;if in.Components!=nil{components=*in.Components};createdBy:=CreatedByHuman;if in.CreatedBy!=nil{createdBy=*in.CreatedBy};parent:=source.ID
  p,err:=h.store.Create(r.Context(),u,pid,Request{IterationID:source.IterationID,ParentPromptID:&parent,OriginalText:original,AISuggestions:suggestions,FinalText:finalText,Components:components,CreatedBy:createdBy});if errors.Is(err,ErrInvalidPrompt){writeErr(w,400,"invalid_prompt","prompt payload is invalid");return};if err!=nil{writeErr(w,500,"prompt_patch_failed","could not create prompt version");return}
  h.record(r,pid,p.ID,p.IterationID,"prompt.created",map[string]any{"version":p.Version,"parent_prompt_id":source.ID,"created_by":p.CreatedBy});writeJSON(w,201,p)
+}
+
+func (h *Handler) patchGlobal(w http.ResponseWriter, r *http.Request) {
+	u,ok:=userID(r); if !ok { writeErr(w,401,"unauthorized","authentication required"); return }
+	sid,err:=uuid.Parse(r.PathValue("prompt_id")); if err!=nil { writeErr(w,400,"invalid_prompt_id","invalid prompt id"); return }
+	source,err:=h.store.Get(r.Context(),u,sid)
+	if errors.Is(err,ErrPromptNotFound) { writeErr(w,404,"prompt_not_found","prompt not found"); return }
+	if err!=nil { writeErr(w,500,"prompt_get_failed","could not load prompt"); return }
+	in:=struct{OriginalText *string `json:"original_text,omitempty"`; AISuggestions *[]string `json:"ai_suggestions,omitempty"`; FinalText *string `json:"final_text,omitempty"`; Components *map[string]string `json:"components,omitempty"`; CreatedBy *CreatedBy `json:"created_by,omitempty"`}{}
+	if err:=decode(r,&in);err!=nil { writeErr(w,400,"invalid_request","invalid prompt patch"); return }
+	original:=source.OriginalText; if in.OriginalText!=nil { original=*in.OriginalText }
+	suggestions:=source.AISuggestions; if in.AISuggestions!=nil { suggestions=*in.AISuggestions }
+	finalText:=source.FinalText; if in.FinalText!=nil { finalText=in.FinalText }
+	components:=source.Components; if in.Components!=nil { components=*in.Components }
+	createdBy:=CreatedByHuman; if in.CreatedBy!=nil { createdBy=*in.CreatedBy }
+	parent:=source.ID
+	p,err:=h.store.Create(r.Context(),u,source.ProjectID,Request{IterationID:source.IterationID,ParentPromptID:&parent,OriginalText:original,AISuggestions:suggestions,FinalText:finalText,Components:components,CreatedBy:createdBy})
+	if errors.Is(err,ErrInvalidPrompt){writeErr(w,400,"invalid_prompt","prompt payload is invalid");return}; if err!=nil{writeErr(w,500,"prompt_patch_failed","could not create prompt version");return}
+	h.record(r,source.ProjectID,p.ID,p.IterationID,"prompt.created",map[string]any{"version":p.Version,"parent_prompt_id":source.ID,"created_by":p.CreatedBy})
+	writeJSON(w,201,p)
 }
 
 func (h *Handler) approve(w http.ResponseWriter,r *http.Request){
