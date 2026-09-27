@@ -76,7 +76,7 @@ func main() {
 		if err != nil { logger.Error("event handler initialization failed", "error", err); os.Exit(1) }
 		promptHandler, err = prompts.NewHandler(promptStore, eventStore, provenanceStore, actionStore)
 		if err != nil { logger.Error("prompt handler initialization failed", "error", err); os.Exit(1) }
-		referenceHandler, err = references.NewHandler(referenceStore, eventStore, provenanceStore)
+		referenceHandler, err = references.NewHandler(referenceStore, eventStore, provenanceStore, actionStore)
 		if err != nil { logger.Error("reference handler initialization failed", "error", err); os.Exit(1) }
 		actionHandler, err = humanactions.NewHandler(actionStore, eventStore, provenanceStore)
 		if err != nil { logger.Error("human action handler initialization failed", "error", err); os.Exit(1) }
