@@ -1,5 +1,8 @@
 
-ALTER TABLE generations
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS provenance_head_sequence BIGINT,
+  ADD COLUMN IF NOT EXISTS provenance_head_hash TEXT;
+
   ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   ADD COLUMN IF NOT EXISTS idempotency_key TEXT,
   ADD COLUMN IF NOT EXISTS error_code TEXT,
@@ -105,6 +108,15 @@ CREATE TABLE provenance_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX provenance_project_sequence_idx ON provenance_events(project_id, sequence);
+UPDATE projects p
+SET provenance_head_sequence = x.sequence, provenance_head_hash = x.hash
+FROM (
+  SELECT DISTINCT ON (project_id) project_id, sequence, hash
+  FROM provenance_events
+  ORDER BY project_id, sequence DESC
+) x
+WHERE p.id = x.project_id;
+
 CREATE INDEX provenance_user_sequence_idx ON provenance_events(user_id, sequence);
 
 CREATE TABLE project_events (
