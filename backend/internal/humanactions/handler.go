@@ -63,7 +63,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	item, err := h.store.Create(r.Context(), u, pid, in)
 	if errors.Is(err, ErrInvalidAction) { writeErr(w, 400, "invalid_human_action", "human action is invalid"); return }
 	if err != nil { writeErr(w, 500, "human_action_create_failed", "could not create human action"); return }
-	if h.events != nil { _, _ = h.events.Append(r.Context(), u, pid, in.ActionType, "human_action", item.ID, in.Payload) }
+	if h.events != nil { _, _ = h.events.Append(r.Context(), u, pid, "human_action.created", "human_action", item.ID, map[string]any{"action_type":in.ActionType,"payload":in.Payload,"iteration_id":in.IterationID}) }
 	if h.provenance != nil { _, _ = h.provenance.Append(r.Context(), provenance.Event{UserID:u, ProjectID:pid, IterationID:in.IterationID, EntityType:"human_action", EntityID:item.ID, Action:in.ActionType, Payload:in.Payload, CreatedAt: item.CreatedAt}) }
 	writeJSON(w, 201, item)
 }
