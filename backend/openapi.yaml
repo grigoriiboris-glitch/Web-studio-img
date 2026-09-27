@@ -903,6 +903,111 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
 
+  /projects/{project_id}/assistant/tools:
+    get:
+      operationId: listAssistantTools
+      summary: List allowlisted AI assistant tools
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Tool catalog
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantToolList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/assistant/actions:
+    get:
+      operationId: listAssistantActions
+      summary: List recorded AI assistant actions for the project
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: AI assistant action log
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantActionList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/assistant/tools/{tool}:
+    post:
+      operationId: executeAssistantTool
+      summary: Execute one allowlisted AI assistant tool
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: tool
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance]
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Required for mutating assistant tools such as create_iteration and create_generation.
+          schema: {type: string, maxLength: 200}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssistantToolInput'}
+      responses:
+        '200':
+          description: Tool result plus logged AI action
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantToolResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /projects/{project_id}/assistant/recommendations/{action_id}/decision:
+    post:
+      operationId: decideAssistantRecommendation
+      summary: Apply, edit, or ignore an AI recommendation
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: action_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssistantDecisionInput'}
+      responses:
+        '200':
+          description: Updated recommendation action
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantAction'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
 components:
   responses:
     BadRequest:
@@ -930,6 +1035,71 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   schemas:
+
+    AssistantTool:
+      type: object
+      required: [name, description, mutating, recommendation]
+      properties:
+        name: {type: string}
+        description: {type: string}
+        mutating: {type: boolean}
+        recommendation: {type: boolean}
+    AssistantToolList:
+      type: object
+      required: [tools]
+      properties:
+        tools:
+          type: array
+          items: {$ref: '#/components/schemas/AssistantTool'}
+    AssistantToolInput:
+      type: object
+      additionalProperties: true
+    AssistantAction:
+      type: object
+      required: [id, project_id, user_id, tool, kind, input, output, explanation, confidence, uncertainty, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        tool:
+          type: string
+          enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance]
+        kind: {type: string, enum: [tool_execution, recommendation]}
+        input: {type: object, additionalProperties: true}
+        output: {type: object, additionalProperties: true}
+        explanation: {type: string}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        uncertainty: {type: string}
+        decision: {type: string, enum: [apply, edit, ignore]}
+        created_at: {type: string, format: date-time}
+        decided_at: {type: string, format: date-time}
+    AssistantActionList:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          items: {$ref: '#/components/schemas/AssistantAction'}
+    AssistantToolResponse:
+      type: object
+      required: [action, result, explanation, confidence, uncertainty]
+      properties:
+        action: {$ref: '#/components/schemas/AssistantAction'}
+        result: {type: object, additionalProperties: true}
+        explanation: {type: string}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        uncertainty: {type: string}
+    AssistantDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: {type: string, enum: [apply, edit, ignore]}
+        final_text: {type: string, maxLength: 20000}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+
     Iteration:
       type: object
       required: [id, project_id, type, created_at]
