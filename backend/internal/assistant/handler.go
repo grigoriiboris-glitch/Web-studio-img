@@ -194,7 +194,7 @@ func (h *Handler) history(ctx context.Context,userID,projectID uuid.UUID)(map[st
 	if h.prompts!=nil{if ps,pe:=h.prompts.List(ctx,userID,projectID);pe==nil{out["prompts"]=ps}}
 	var gens []map[string]any
 	rows,e:=h.db.QueryContext(ctx,`SELECT id,iteration_id,prompt,status,provider,model,created_at FROM generations WHERE project_id=$1 AND user_id=$2 ORDER BY created_at ASC,id ASC`,projectID,userID)
-	if e==nil{defer rows.Close();for rows.Next(){var gid uuid.UUID;var iid *uuid.UUID;var prompt,st,provider,model string;var at time.Time;if rows.Scan(&gid,&iid,&prompt,&st,&provider,&model,&at)==nil{gens=append(gens,map[string]any{"id":gid,"iteration_id":iid,"prompt":prompt,"status":st,"provider":provider,"model":model,"created_at":at})}};out["generations"]=gens}
+	if e==nil{defer func() { _ = rows.Close() }();for rows.Next(){var gid uuid.UUID;var iid *uuid.UUID;var prompt,st,provider,model string;var at time.Time;if rows.Scan(&gid,&iid,&prompt,&st,&provider,&model,&at)==nil{gens=append(gens,map[string]any{"id":gid,"iteration_id":iid,"prompt":prompt,"status":st,"provider":provider,"model":model,"created_at":at})}};out["generations"]=gens}
 	return out,"History is assembled from fixed ownership-checked domain queries.",0.97,"Absent optional records are not invented.",nil
 }
 
@@ -237,7 +237,7 @@ func (h *Handler) suggestMaterials(ctx context.Context,userID,projectID uuid.UUI
 	kind,_:=in["kind"].(string);if kind==""{kind="material"};if kind!="material"&&kind!="texture"{return nil,"",0,"",errors.New("kind must be material or texture")}
 	q,_:=in["query"].(string);q=strings.TrimSpace(q)
 	query:=`SELECT id,user_id,kind,category,name,description,tags,prompt_fragment,preview_key,created_at,updated_at FROM library_items WHERE kind=$1 AND (user_id IS NULL OR user_id=$2)`;args:=[]any{kind,userID};if q!=""{query+=` AND (name ILIKE $3 OR COALESCE(description,'') ILIKE $3 OR prompt_fragment ILIKE $3)`;args=append(args,"%"+q+"%")};query+=" ORDER BY user_id NULLS FIRST,created_at DESC LIMIT 20"
-	rows,e:=h.db.QueryContext(ctx,query,args...);if e!=nil{return nil,"",0,"",e};defer rows.Close();var items []library.Item
+	rows,e:=h.db.QueryContext(ctx,query,args...);if e!=nil{return nil,"",0,"",e};defer func() { _ = rows.Close() }();var items []library.Item
 	for rows.Next(){var x library.Item;var tags []byte;if e:=rows.Scan(&x.ID,&x.UserID,&x.Kind,&x.Category,&x.Name,&x.Description,&tags,&x.PromptFragment,&x.PreviewKey,&x.CreatedAt,&x.UpdatedAt);e==nil{_ = json.Unmarshal(tags,&x.Tags);items=append(items,x)}}
 	return map[string]any{"scope":"project_visible_library","kind":kind,"items":items},"Suggestions come from the project-visible library.",0.90,"Ranking is search/recency based, not a learned preference model.",nil
 }
