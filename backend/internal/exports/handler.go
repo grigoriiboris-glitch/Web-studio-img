@@ -183,8 +183,12 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 	if err:=h.storage.Put(ctx,pdfKey,strings.NewReader(string(pdfBytes)),int64(len(pdfBytes)),storage.PutOptions{ContentType:"application/pdf"});err!=nil{return err}
 	artifactKeys["creation-report.pdf"]=pdfKey;hashes["creation-report.pdf"]=sha256Hex(pdfBytes)
 
-	manifest["artifacts"]=artifactKeys
-	manifest["hashes"]=hashes
+	manifestArtifacts:=map[string]string{}
+	for k,v:=range artifactKeys{manifestArtifacts[k]=v}
+	manifestHashes:=map[string]string{}
+	for k,v:=range hashes{manifestHashes[k]=v}
+	manifest["artifacts"]=manifestArtifacts
+	manifest["hashes"]=manifestHashes
 	manifestBytes,_:=json.MarshalIndent(manifest,"","  ")
 	manifestKey:=fmt.Sprintf("projects/%s/exports/%s/manifest.json",projectID,exportID)
 	if err:=h.storage.Put(ctx,manifestKey,strings.NewReader(string(manifestBytes)),int64(len(manifestBytes)),storage.PutOptions{ContentType:"application/json"});err!=nil{return err}
