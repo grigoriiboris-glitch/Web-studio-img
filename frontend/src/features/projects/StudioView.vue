@@ -163,6 +163,20 @@ function criticObservations(): Array<Record<string, unknown>> {
   return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
 }
 
+function criticPromptSimilarity(): number | null {
+  const prompts = criticResult.value?.prompts
+  if (!prompts || typeof prompts !== 'object') return null
+  const value = (prompts as Record<string, unknown>).similarity
+  return typeof value === 'number' ? value : null
+}
+
+function criticAlgorithm(): string {
+  const comparison = criticResult.value?.image_comparison
+  if (!comparison || typeof comparison !== 'object') return 'metadata-only'
+  const value = (comparison as Record<string, unknown>).algorithm
+  return typeof value === 'string' ? value : 'metadata-only'
+}
+
 function criticMetric(name: string): number | null {
   const comparison = criticResult.value?.image_comparison
   if (!comparison || typeof comparison !== 'object') return null
@@ -1200,14 +1214,10 @@ onUnmounted(() => {
                 {{ criticMetric('style_similarity')?.toFixed(2) ?? '—' }}
               </el-descriptions-item>
               <el-descriptions-item label="Prompt similarity">
-                {{ typeof (criticResult.prompts as Record<string, unknown>)?.similarity === 'number'
-                  ? ((criticResult.prompts as Record<string, unknown>).similarity as number).toFixed(2)
-                  : '—' }}
+                {{ criticPromptSimilarity()?.toFixed(2) ?? '—' }}
               </el-descriptions-item>
               <el-descriptions-item label="Algorithm">
-                {{ typeof (criticResult.image_comparison as Record<string, unknown>)?.algorithm === 'string'
-                  ? (criticResult.image_comparison as Record<string, unknown>).algorithm
-                  : 'metadata-only' }}
+                {{ criticAlgorithm() }}
               </el-descriptions-item>
             </el-descriptions>
 
