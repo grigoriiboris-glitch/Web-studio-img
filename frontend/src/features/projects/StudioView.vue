@@ -151,9 +151,7 @@ async function createIteration() {
       ? 'IDEA_CREATED'
       : created.type === 'composition'
         ? 'COMPOSITION_CHANGED'
-        : created.type === 'manual_edit'
-          ? 'MANUAL_EDIT'
-          : ''
+        : ''
     if (created.type === 'composition') {
       try {
         compositionSpec.value = await compositionApi.update(projectId(), created.id, {})
@@ -334,6 +332,20 @@ async function rejectVariant(item: Generation) {
     })
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not record rejected variant'
+  }
+}
+
+async function recordManualEdit(iteration: Iteration) {
+  try {
+    await logHumanAction({
+      iteration_id: iteration.id,
+      action_type: 'MANUAL_EDIT',
+      payload: { iteration_id: iteration.id, declared_by_user: true },
+      old_state: { manual_edit_recorded: false },
+      new_state: { manual_edit_recorded: true },
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not record manual edit'
   }
 }
 
@@ -1012,6 +1024,7 @@ onUnmounted(() => {
                   <el-button size="small" @click="restoreIteration(item)">Restore as new iteration</el-button>
                 </div>
                 <p v-if="item.description">{{ item.description }}</p>
+                <el-button v-if="item.type === 'manual_edit'" size="small" @click="recordManualEdit(item)">Record manual edit</el-button>
                 <small v-if="item.parent_iteration_id">Parent: {{ item.parent_iteration_id }}</small>
               </div>
             </el-timeline-item>
