@@ -269,6 +269,206 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
 
+  /projects/{project_id}/events:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: streamProjectEvents
+      summary: Stream project events over SSE
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: {type: integer, format: int64}
+      responses:
+        '200':
+          description: Project event stream
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/prompts:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listPrompts
+      summary: List versioned prompts
+      responses:
+        '200':
+          description: Prompt versions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PromptList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createPrompt
+      summary: Create a new prompt version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PromptInput'}
+      responses:
+        '201':
+          description: Prompt created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Prompt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /projects/{project_id}/prompts/{prompt_id}/approve:
+    post:
+      operationId: approvePrompt
+      summary: Create an approved prompt version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [final_text]
+              additionalProperties: false
+              properties:
+                final_text: {type: string, minLength: 1, maxLength: 20000}
+                components: {type: object, additionalProperties: {type: string}}
+      responses:
+        '201':
+          description: Approved prompt
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Prompt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/prompts/{prompt_id}:
+    get:
+      operationId: getPrompt
+      summary: Get one prompt version
+      responses:
+        '200':
+          description: Prompt
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Prompt'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/references:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listReferences
+      summary: List project references
+      responses:
+        '200':
+          description: References
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReferenceList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createReference
+      summary: Add a reference with source and license metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReferenceInput'}
+      responses:
+        '201':
+          description: Reference created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Reference'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /projects/{project_id}/references/{reference_id}:
+    patch:
+      operationId: updateReference
+      summary: Update reference metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReferenceInput'}
+      responses:
+        '200':
+          description: Reference
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Reference'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteReference
+      summary: Delete a project reference
+      responses:
+        '204': {description: Reference deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /projects/{project_id}/human-actions:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listHumanActions
+      summary: List recorded human contribution actions
+      responses:
+        '200':
+          description: Human actions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HumanActionList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createHumanAction
+      summary: Record an explicit user action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HumanActionInput'}
+      responses:
+        '201':
+          description: Human action
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HumanAction'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /projects/{project_id}/provenance/verify:
+    get:
+      operationId: verifyProvenance
+      summary: Verify the project provenance hash chain
+      responses:
+        '200':
+          description: Provenance verification
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProvenanceVerification'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
 components:
   responses:
     BadRequest:
@@ -391,7 +591,65 @@ components:
         prompt: {type: string, minLength: 1, maxLength: 20000}
         negative_prompt: {type: string, maxLength: 10000}
         seed: {type: integer, format: int64}
-        aspect_ratio: {type: string, pattern: '^[0-9]+:[0-9]+      type: object
+        aspect_ratio: {type: string, pattern: '^[0-9]+:[0-9]+$'}
+        parameters: {type: object, additionalProperties: true}
+
+    Prompt:
+      type: object
+      required: [id, project_id, version, original_text, created_by, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        parent_prompt_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        original_text: {type: string}
+        ai_suggestions:
+          type: array
+          items: {type: string}
+        final_text: {type: string}
+        components:
+          type: object
+          additionalProperties: {type: string}
+        created_by: {type: string, enum: [human, ai, mixed]}
+        created_at: {type: string, format: date-time}
+    PromptInput:
+      type: object
+      additionalProperties: false
+      required: [original_text]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        parent_prompt_id: {type: string, format: uuid}
+        original_text: {type: string, minLength: 1, maxLength: 20000}
+        ai_suggestions:
+          type: array
+          maxItems: 20
+          items: {type: string, maxLength: 4000}
+        final_text: {type: string, maxLength: 20000}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+        created_by: {type: string, enum: [human, ai, mixed]}
+    PromptList:
+      type: object
+      required: [prompts]
+      properties:
+        prompts:
+          type: array
+          items: {$ref: '#/components/schemas/Prompt'}
+    Reference:
+      type: object
+      required: [id, project_id, source_type, license, license_verified, user_owned, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        source_url: {type: string, format: uri}
+        source_type: {type: string, enum: [inspiration, reference, direct_source, user_created, public_domain, unknown]}
+        license: {type: string}
+        license_verified: {type: boolean}
+        user_owned: {type: boolean}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}      type: object
       required: [error]
       properties:
         error:
@@ -402,7 +660,79 @@ components:
             message: {type: string}
             request_id: {type: string}
 }
-        parameters: {type: object, additionalProperties: true}
+        notes: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ReferenceInput:
+      type: object
+      additionalProperties: false
+      required: [source_type, license]
+      properties:
+        asset_id: {type: string, format: uuid}
+        source_url: {type: string, format: uri}
+        source_type: {type: string, enum: [inspiration, reference, direct_source, user_created, public_domain, unknown]}
+        license: {type: string, minLength: 1, maxLength: 500}
+        license_verified: {type: boolean}
+        user_owned: {type: boolean}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+}
+        notes: {type: string, maxLength: 10000}
+    ReferenceList:
+      type: object
+      required: [references]
+      properties:
+        references:
+          type: array
+          items: {$ref: '#/components/schemas/Reference'}
+    HumanAction:
+      type: object
+      required: [id, project_id, user_id, action_type, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        action_type: {type: string}
+        payload: {type: object, additionalProperties: true}
+        old_state: {type: object, additionalProperties: true}
+        new_state: {type: object, additionalProperties: true}
+        ai_influence: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    HumanActionInput:
+      type: object
+      additionalProperties: false
+      required: [action_type]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        action_type: {type: string}
+        payload: {type: object, additionalProperties: true}
+        old_state: {type: object, additionalProperties: true}
+        new_state: {type: object, additionalProperties: true}
+        ai_influence: {type: object, additionalProperties: true}
+    HumanActionList:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          items: {$ref: '#/components/schemas/HumanAction'}
+    ProvenanceVerification:
+      type: object
+      required: [verified, event_count]
+      properties:
+        verified: {type: boolean}
+        event_count: {type: integer}
+        first_invalid_event_id: {type: string, format: uuid}
+        reason: {type: string}
 
     Error:
       type: object
