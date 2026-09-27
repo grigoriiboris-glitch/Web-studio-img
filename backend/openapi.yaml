@@ -714,6 +714,11 @@ paths:
     post:
       operationId: createSimilarityCheck
       summary: Check similarity against available project reference sources
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
       requestBody:
         required: true
         content:
