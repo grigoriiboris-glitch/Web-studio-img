@@ -37,6 +37,10 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, err := config.Load()
 	if err != nil { logger.Error("configuration error", "error", err); os.Exit(1) }
+	if cfg.Env == "production" && cfg.ClamAVAddress == "" {
+		logger.Error("production API requires CLAMAV_ADDR for malware scanning")
+		os.Exit(1)
+	}
 
 	limiter := security.NewRateLimiter(cfg.RateLimit, cfg.RateWindow)
 	var projectHandler *projects.Handler
