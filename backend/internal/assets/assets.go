@@ -426,6 +426,7 @@ func (p *Processor) CleanupExpired(ctx context.Context, limit int) error {
 	}
 	for _, item := range items {
 		_ = deleteObjectIfPresent(ctx, p.Storage, item.StorageKey)
+		_ = deleteObjectIfPresent(ctx, p.Storage, stagingKey(item.StorageKey))
 		if item.PreviewKey != nil {
 			_ = deleteObjectIfPresent(ctx, p.Storage, *item.PreviewKey)
 		}
@@ -451,6 +452,10 @@ func deleteObjectIfPresent(ctx context.Context, provider storage.StorageProvider
 		return nil
 	}
 	return provider.Delete(ctx, key)
+}
+
+func stagingKey(storageKey string) string {
+	return storageKey + "/staging"
 }
 
 func storageKeys(userID, projectID, assetID uuid.UUID) (string, string, string) {
