@@ -325,7 +325,6 @@ onUnmounted(() => {
           <el-progress
             v-else
             :percentage="item.progress"
-            :status="item.status === 'uploading' ? undefined : 'exception'"
             :show-text="false"
           />
           <p v-if="item.error" class="sketch-import-item__error">{{ item.error }}</p>
