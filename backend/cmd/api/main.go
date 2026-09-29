@@ -39,6 +39,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 	"github.com/oleg3190/Web-studio-img/backend/internal/similarity"
 	"github.com/oleg3190/Web-studio-img/backend/internal/storage"
+	"github.com/oleg3190/Web-studio-img/backend/internal/variants"
 )
 
 func main() {
