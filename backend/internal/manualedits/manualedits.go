@@ -37,20 +37,20 @@ const (
 )
 
 type Edit struct {
-	ID uuid.UUID \`json:"id"\`
-	ProjectID uuid.UUID \`json:"project_id"\`
-	UserID uuid.UUID \`json:"user_id"\`
-	IterationID *uuid.UUID \`json:"iteration_id,omitempty"\`
-	SourceAssetID uuid.UUID \`json:"source_asset_id"\`
-	MaskAssetID *uuid.UUID \`json:"mask_asset_id,omitempty"\`
-	ResultAssetID *uuid.UUID \`json:"result_asset_id,omitempty"\`
-	Operation Operation \`json:"operation"\`
-	Prompt *string \`json:"prompt,omitempty"\`
-	Parameters map[string]any \`json:"parameters"\`
-	Status Status \`json:"status"\`
-	IdempotencyKey *string \`json:"idempotency_key,omitempty"\`
-	CreatedAt time.Time \`json:"created_at"\`
-	UpdatedAt time.Time \`json:"updated_at"\`
+	ID uuid.UUID `json:"id"`
+	ProjectID uuid.UUID `json:"project_id"`
+	UserID uuid.UUID `json:"user_id"`
+	IterationID *uuid.UUID `json:"iteration_id,omitempty"`
+	SourceAssetID uuid.UUID `json:"source_asset_id"`
+	MaskAssetID *uuid.UUID `json:"mask_asset_id,omitempty"`
+	ResultAssetID *uuid.UUID `json:"result_asset_id,omitempty"`
+	Operation Operation `json:"operation"`
+	Prompt *string `json:"prompt,omitempty"`
+	Parameters map[string]any `json:"parameters"`
+	Status Status `json:"status"`
+	IdempotencyKey *string `json:"idempotency_key,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Store struct { db *sql.DB }
@@ -138,10 +138,10 @@ func(h *Handler)Register(mux *http.ServeMux){
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/manual-edits/{edit_id}/apply",h.apply)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/manual-edits/{edit_id}/reject",h.reject)
 }
-func(h *Handler)create(w http.ResponseWriter,r *http.Request){u,ok:=user(r);if !ok{writeErr(w,401,"unauthorized");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{writeErr(w,400,"invalid_project_id");return};var in struct{SourceAssetID uuid.UUID \`json:"source_asset_id"\`;MaskAssetID *uuid.UUID \`json:"mask_asset_id,omitempty"\`;Operation Operation \`json:"operation"\`;Prompt *string \`json:"prompt,omitempty"\`;Parameters map[string]any \`json:"parameters,omitempty"\`};if err:=json.NewDecoder(r.Body).Decode(&in);err!=nil{writeErr(w,400,"invalid_request");return};key:=strings.TrimSpace(r.Header.Get("Idempotency-Key"));var kp *string;if key!=""{kp=&key};item,err:=h.store.Create(r.Context(),u,pid,in.IterationID,&in.SourceAssetID,in.MaskAssetID,in.Operation,in.Prompt,in.Parameters,kp);if errors.Is(err,ErrInvalid){writeErr(w,400,"invalid_manual_edit");return};if errors.Is(err,ErrNotFound){writeErr(w,404,"project_or_asset_not_found");return};if err!=nil{writeErr(w,500,"manual_edit_create_failed");return};h.emit(r,u,pid,item.ID,"manual_edit.created");writeJSON(w,201,item)}
+func(h *Handler)create(w http.ResponseWriter,r *http.Request){u,ok:=user(r);if !ok{writeErr(w,401,"unauthorized");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{writeErr(w,400,"invalid_project_id");return};var in struct{SourceAssetID uuid.UUID `json:"source_asset_id"`;MaskAssetID *uuid.UUID `json:"mask_asset_id,omitempty"`;Operation Operation `json:"operation"`;Prompt *string `json:"prompt,omitempty"`;Parameters map[string]any `json:"parameters,omitempty"`};if err:=json.NewDecoder(r.Body).Decode(&in);err!=nil{writeErr(w,400,"invalid_request");return};key:=strings.TrimSpace(r.Header.Get("Idempotency-Key"));var kp *string;if key!=""{kp=&key};item,err:=h.store.Create(r.Context(),u,pid,in.IterationID,&in.SourceAssetID,in.MaskAssetID,in.Operation,in.Prompt,in.Parameters,kp);if errors.Is(err,ErrInvalid){writeErr(w,400,"invalid_manual_edit");return};if errors.Is(err,ErrNotFound){writeErr(w,404,"project_or_asset_not_found");return};if err!=nil{writeErr(w,500,"manual_edit_create_failed");return};h.emit(r,u,pid,item.ID,"manual_edit.created");writeJSON(w,201,item)}
 func(h *Handler)list(w http.ResponseWriter,r *http.Request){u,ok:=user(r);if !ok{writeErr(w,401,"unauthorized");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{writeErr(w,400,"invalid_project_id");return};items,err:=h.store.List(r.Context(),u,pid);if err!=nil{writeErr(w,500,"manual_edit_list_failed");return};writeJSON(w,200,map[string]any{"manual_edits":items})}
 func(h *Handler)get(w http.ResponseWriter,r *http.Request){u,ok:=user(r);if !ok{writeErr(w,401,"unauthorized");return};id,err:=uuid.Parse(r.PathValue("edit_id"));if err!=nil{writeErr(w,400,"invalid_edit_id");return};item,err:=h.store.Get(r.Context(),u,id);if errors.Is(err,ErrNotFound){writeErr(w,404,"manual_edit_not_found");return};if err!=nil{writeErr(w,500,"manual_edit_get_failed");return};if item.ProjectID.String()!=r.PathValue("project_id"){writeErr(w,404,"manual_edit_not_found");return};writeJSON(w,200,item)}
-func(h *Handler)apply(w http.ResponseWriter,r *http.Request){u,ok:=user(r);if !ok{writeErr(w,401,"unauthorized");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{writeErr(w,400,"invalid_project_id");return};id,err:=uuid.Parse(r.PathValue("edit_id"));if err!=nil{writeErr(w,400,"invalid_edit_id");return};var in struct{ResultAssetID uuid.UUID \`json:"result_asset_id"\`;Title *string \`json:"title,omitempty"\`};if err:=json.NewDecoder(r.Body).Decode(&in);err!=nil||in.ResultAssetID==uuid.Nil{writeErr(w,400,"result_asset_id_required");return};item,err:=h.store.Apply(r.Context(),u,id,in.ResultAssetID,in.Title);if errors.Is(err,ErrNotFound){writeErr(w,404,"manual_edit_or_asset_not_found");return};if errors.Is(err,ErrImmutable){writeErr(w,409,"manual_edit_immutable");return};if err!=nil{writeErr(w,500,"manual_edit_apply_failed");return};if item.ProjectID!=pid{writeErr(w,404,"manual_edit_not_found");return};h.emit(r,u,pid,item.ID,"manual_edit.applied");writeJSON(w,200,item)}
+func(h *Handler)apply(w http.ResponseWriter,r *http.Request){u,ok:=user(r);if !ok{writeErr(w,401,"unauthorized");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{writeErr(w,400,"invalid_project_id");return};id,err:=uuid.Parse(r.PathValue("edit_id"));if err!=nil{writeErr(w,400,"invalid_edit_id");return};var in struct{ResultAssetID uuid.UUID `json:"result_asset_id"`;Title *string `json:"title,omitempty"`};if err:=json.NewDecoder(r.Body).Decode(&in);err!=nil||in.ResultAssetID==uuid.Nil{writeErr(w,400,"result_asset_id_required");return};item,err:=h.store.Apply(r.Context(),u,id,in.ResultAssetID,in.Title);if errors.Is(err,ErrNotFound){writeErr(w,404,"manual_edit_or_asset_not_found");return};if errors.Is(err,ErrImmutable){writeErr(w,409,"manual_edit_immutable");return};if err!=nil{writeErr(w,500,"manual_edit_apply_failed");return};if item.ProjectID!=pid{writeErr(w,404,"manual_edit_not_found");return};h.emit(r,u,pid,item.ID,"manual_edit.applied");writeJSON(w,200,item)}
 func(h *Handler)reject(w http.ResponseWriter,r *http.Request){u,ok:=user(r);if !ok{writeErr(w,401,"unauthorized");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{writeErr(w,400,"invalid_project_id");return};id,err:=uuid.Parse(r.PathValue("edit_id"));if err!=nil{writeErr(w,400,"invalid_edit_id");return};item,err:=h.store.Reject(r.Context(),u,id);if errors.Is(err,ErrImmutable){writeErr(w,409,"manual_edit_immutable");return};if err!=nil{writeErr(w,500,"manual_edit_reject_failed");return};if item.ProjectID!=pid{writeErr(w,404,"manual_edit_not_found");return};h.emit(r,u,pid,item.ID,"manual_edit.rejected");writeJSON(w,200,item)}
 func(h *Handler)emit(r *http.Request,u,pid,id uuid.UUID,action string){if h.events!=nil{_,_=h.events.Append(r.Context(),u,pid,action,"manual_edit",id,map[string]any{"immutable":true})};if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u,ProjectID:pid,EntityType:"manual_edit",EntityID:id,Action:action})}}
 func user(r *http.Request)(uuid.UUID,bool){p,ok:=auth.PrincipalFromContext(r.Context());if !ok{return uuid.Nil,false};return p.UserID,true}
