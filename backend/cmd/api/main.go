@@ -27,6 +27,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/rights"
 	"github.com/oleg3190/Web-studio-img/backend/internal/styles"
 	"github.com/oleg3190/Web-studio-img/backend/internal/layers"
+	"github.com/oleg3190/Web-studio-img/backend/internal/workflow"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
@@ -86,6 +87,7 @@ func main() {
 	var dnaHandler *dna.Handler
 	var rightsHandler *rights.Handler
 	var layersHandler *layers.Handler
+	var workflowHandler *workflow.Handler
 	var assistantHandler *assistant.Handler
 	var assistantActionStore *assistant.Store
 	var compositionAnalyzer *composition.Analyzer
@@ -300,7 +302,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservability(
 		logger, cfg.CORSOrigins, limiter, metrics,
 		projectHandler, iterationHandler, generationHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, workflowHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
