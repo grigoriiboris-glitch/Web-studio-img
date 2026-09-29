@@ -31,7 +31,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
-	"github.com/oleg3190/Web-studio-img/backend/internal/providers/yandexart"
+	"github.com/oleg3190/Web-studio-img/backend/internal/providers"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
 	"github.com/oleg3190/Web-studio-img/backend/internal/queue"
 	"github.com/oleg3190/Web-studio-img/backend/internal/references"
@@ -244,7 +244,7 @@ func main() {
 		if err != nil { logger.Error("rights handler initialization failed", "error", err); os.Exit(1) }
 		layersHandler, err = layers.NewHandler(projectDB, actionStore, provenanceStore)
 		if err != nil { logger.Error("layers handler initialization failed", "error", err); os.Exit(1) }
-		if cfg.RedisURL != "" && cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != "" {
+		if providers.ProviderReady(cfg, objectStorage) {
 			redisCfg, redisErr := queue.ParseRedisURL(cfg.RedisURL)
 			if redisErr != nil {
 				logger.Error("redis configuration failed", "error", redisErr)
@@ -256,12 +256,9 @@ func main() {
 				os.Exit(1)
 			}
 			defer func() { _ = queueClient.Close() }()
-			provider, providerErr := yandexart.New(yandexart.Config{
-				Endpoint: cfg.YandexARTEndpoint, OperationEndpoint: cfg.YandexARTOperationEndpoint,
-				APIKey: cfg.YandexARTAPIKey, FolderID: cfg.YandexARTFolderID, Model: cfg.YandexARTModel,
-			})
+			provider, providerErr := providers.NewImageProvider(cfg, objectStorage)
 			if providerErr != nil {
-				logger.Error("YandexART initialization failed", "error", providerErr)
+				logger.Error("image provider initialization failed", "provider", cfg.ImageProvider, "error", providerErr)
 				os.Exit(1)
 			}
 			generationStore, generationErr := generation.NewSQLStore(projectDB)
