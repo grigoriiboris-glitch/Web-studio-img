@@ -524,7 +524,7 @@ paths:
         schema: {type: string, format: uuid}
     post:
       operationId: uploadAssetMultipart
-      summary: Upload an image as multipart/form-data
+      summary: Upload an image as multipart/form-data (PNG, JPEG or WebP)
       requestBody:
         required: true
         content:
@@ -543,6 +543,35 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '413': {description: Asset too large}
+  /projects/{project_id}/assets/import-url:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: importAssetFromURL
+      summary: Import a public image URL as a project asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              additionalProperties: false
+              properties:
+                url: {type: string, format: uri, maxLength: 2048}
+      responses:
+        '201':
+          description: Asset imported
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asset'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '413': {description: Remote asset too large}
+        '502': {description: Remote image fetch failed}
   /projects/{project_id}/assets/uploads:
     post:
       operationId: initAssetUpload
@@ -2209,7 +2238,7 @@ components:
         iteration_id: {type: string, format: uuid}
         user_id: {type: string, format: uuid}
         version: {type: integer, format: int64, minimum: 1}
-        action_type: {type: string, enum: [IDEA_CREATED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SELECTED, VARIANT_REJECTED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, COMPOSITION_MUTATION_ACCEPTED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED, MATERIAL_CREATED, MATERIAL_UPDATED, MATERIAL_DELETED, TEXTURE_CREATED, TEXTURE_UPDATED, TEXTURE_DELETED, STYLE_PROFILE_CREATED, STYLE_PROFILE_UPDATED, STYLE_PROFILE_APPLIED, ASSET_DNA_CREATED, VISUAL_LANGUAGE_UPDATED, RIGHTS_UPDATED, DO_NOT_USE_UPDATED, LAYER_CREATED, LAYER_UPDATED, LAYER_DELETED, MASK_CREATED, MANUAL_EDIT_CREATED, MANUAL_EDIT_APPLIED, MANUAL_EDIT_REJECTED]}
+        action_type: {type: string, enum: [IDEA_CREATED, SKETCH_IMPORTED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SELECTED, VARIANT_REJECTED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, COMPOSITION_MUTATION_ACCEPTED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED, MATERIAL_CREATED, MATERIAL_UPDATED, MATERIAL_DELETED, TEXTURE_CREATED, TEXTURE_UPDATED, TEXTURE_DELETED, STYLE_PROFILE_CREATED, STYLE_PROFILE_UPDATED, STYLE_PROFILE_APPLIED, ASSET_DNA_CREATED, VISUAL_LANGUAGE_UPDATED, RIGHTS_UPDATED, DO_NOT_USE_UPDATED, LAYER_CREATED, LAYER_UPDATED, LAYER_DELETED, MASK_CREATED, MANUAL_EDIT_CREATED, MANUAL_EDIT_APPLIED, MANUAL_EDIT_REJECTED]}
         payload: {type: object, additionalProperties: true}
         old_state: {type: object, additionalProperties: true}
         new_state: {type: object, additionalProperties: true}
@@ -2284,7 +2313,7 @@ components:
       type: object
       required: [mime_type, size]
       properties:
-        mime_type: {type: string, enum: [image/jpeg, image/png]}
+        mime_type: {type: string, enum: [image/jpeg, image/png, image/webp]}
         size: {type: integer, format: int64, minimum: 1, maximum: 10485760}
     AssetUpload:
       type: object

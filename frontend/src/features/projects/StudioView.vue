@@ -2,9 +2,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { extractImageFiles, extractImageFilesFromItems, isEditableEventTarget } from '../../composables/imageImport'
+import SketchImportZone from '../../components/SketchImportZone.vue'
 import {
-  assetsApi,
   generationsApi,
   humanActionsApi,
   iterationsApi,
@@ -19,6 +18,7 @@ import {
   assistantApi,
   materialsApi,
   texturesApi,
+  type Asset,
   type Generation,
   type HumanAction,
   type Iteration,
@@ -51,10 +51,7 @@ const creating = ref(false)
 const generating = ref(false)
 const savingPrompt = ref(false)
 const addingReference = ref(false)
-const assetUploading = ref(false)
 const lastUploadedAsset = ref('')
-const assetDragActive = ref(false)
-let assetDragDepth = 0
 const verifying = ref(false)
 const provenanceVerified = ref<boolean | null>(null)
 const provenanceMessage = ref('')
@@ -795,67 +792,46 @@ async function approveProject() {
   }
 }
 
-async function uploadAssetFile(file: File) {
-  if (assetUploading.value) return
-  if (!extractImageFiles([file]).length) {
-    error.value = 'Only JPEG and PNG sketches are supported'
-    return
-  }
-  assetUploading.value = true
+async function handleSketchImported(payload: {
+  asset: Asset
+  name: string
+  source: 'file' | 'clipboard' | 'url'
+}) {
+  lastUploadedAsset.value = payload.asset.id
+  referenceForm.value.asset_id = payload.asset.id
   error.value = null
   try {
-    const asset = await assetsApi.uploadMultipart(projectId(), file)
-    lastUploadedAsset.value = asset.id
-    referenceForm.value.asset_id = asset.id
+    const sourceLabel = payload.source === 'clipboard'
+      ? 'clipboard'
+      : payload.source === 'url'
+        ? 'browser URL'
+        : 'file'
+    const title = payload.name.trim() || 'Imported sketch'
+    const description = `Imported sketch from ${sourceLabel}: asset ${payload.asset.id} (${payload.asset.mime_type}, ${payload.asset.width}×${payload.asset.height})`
+    const iteration = await iterationsApi.create(projectId(), {
+      type: 'sketch',
+      title,
+      description,
+    })
+    iterations.value.push(iteration)
+    await logHumanAction({
+      iteration_id: iteration.id,
+      action_type: 'SKETCH_IMPORTED',
+      payload: {
+        asset_id: payload.asset.id,
+        source: payload.source,
+        name: payload.name,
+        mime_type: payload.asset.mime_type,
+        width: payload.asset.width,
+        height: payload.asset.height,
+        checksum: payload.asset.checksum,
+      },
+      old_state: { asset_id: null, iteration_id: null },
+      new_state: { asset_id: payload.asset.id, iteration_id: iteration.id },
+    })
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not upload asset'
-  } finally {
-    assetUploading.value = false
+    error.value = err instanceof Error ? err.message : 'Sketch was imported but timeline update failed'
   }
-}
-
-async function uploadAsset(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (file) await uploadAssetFile(file)
-  input.value = ''
-}
-
-function handleAssetDragOver(event: DragEvent) {
-  event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-}
-
-function handleAssetDragEnter(event: DragEvent) {
-  event.preventDefault()
-  assetDragDepth += 1
-  assetDragActive.value = true
-}
-
-function handleAssetDragLeave(event: DragEvent) {
-  event.preventDefault()
-  assetDragDepth = Math.max(0, assetDragDepth - 1)
-  if (assetDragDepth === 0) assetDragActive.value = false
-}
-
-function handleAssetDrop(event: DragEvent) {
-  event.preventDefault()
-  assetDragDepth = 0
-  assetDragActive.value = false
-  const files = extractImageFiles(event.dataTransfer?.files ?? [])
-  if (files.length > 0) {
-    void uploadAssetFile(files[0])
-  } else if ((event.dataTransfer?.files.length ?? 0) > 0) {
-    error.value = 'Only JPEG and PNG sketches are supported'
-  }
-}
-
-function handleAssetPaste(event: ClipboardEvent) {
-  if (assetUploading.value || isEditableEventTarget(event.target)) return
-  const files = event.clipboardData ? extractImageFilesFromItems(event.clipboardData.items) : []
-  if (files.length === 0) return
-  event.preventDefault()
-  void uploadAssetFile(files[0])
 }
 
 async function addReference() {
@@ -969,7 +945,6 @@ async function restoreIteration(iteration: Iteration) {
 }
 
 onMounted(async () => {
-  document.addEventListener('paste', handleAssetPaste)
   try {
     await loadStudio()
     await loadLibraries()
@@ -984,9 +959,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  document.removeEventListener('paste', handleAssetPaste)
-  assetDragDepth = 0
-  assetDragActive.value = false
   eventAbort?.abort()
 })
 </script>
@@ -1100,25 +1072,14 @@ onUnmounted(() => {
         </el-card>
 
         <el-card class="create-card">
-          <template #header>Upload sketch</template>
-          <div
-            class="asset-dropzone"
-            :class="{ 'asset-dropzone--active': assetDragActive, 'asset-dropzone--disabled': assetUploading }"
-            @dragenter="handleAssetDragEnter"
-            @dragover="handleAssetDragOver"
-            @dragleave="handleAssetDragLeave"
-            @drop="handleAssetDrop"
-          >
-            <div class="asset-dropzone__title">
-              {{ assetDragActive ? 'Drop sketch here' : 'Drag a sketch here or paste it with Ctrl+V / ⌘V' }}
-            </div>
-            <div class="asset-dropzone__hint">JPEG or PNG. You can also choose a file manually.</div>
-            <label class="asset-dropzone__button">
-              <input type="file" accept="image/jpeg,image/png" :disabled="assetUploading" @change="uploadAsset">
-              <el-button :loading="assetUploading">Choose sketch</el-button>
-            </label>
-            <el-tag v-if="lastUploadedAsset" type="success">Asset {{ lastUploadedAsset }}</el-tag>
-          </div>
+          <template #header>Sketch import</template>
+          <SketchImportZone
+            :project-id="projectId()"
+            @imported="handleSketchImported"
+          />
+          <el-tag v-if="lastUploadedAsset" type="success" class="last-asset-tag">
+            Last asset: {{ lastUploadedAsset }}
+          </el-tag>
         </el-card>
 
         <el-card class="create-card">
@@ -1627,47 +1588,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.asset-dropzone {
-  border: 1px dashed var(--el-border-color);
-  border-radius: 10px;
-  padding: 24px;
-  text-align: center;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.asset-dropzone--active {
-  border-color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-}
-
-.asset-dropzone--disabled {
-  opacity: 0.65;
-  pointer-events: none;
-}
-
-.asset-dropzone__title {
-  font-weight: 600;
-}
-
-.asset-dropzone__hint {
-  margin-top: 6px;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-}
-
-.asset-dropzone__button {
-  display: inline-block;
-  margin-top: 14px;
-}
-
-.asset-dropzone__button input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-}
-
 .studio { min-height: 100vh; }
 .header { display: flex; align-items: center; justify-content: space-between; }
 .create-card, .timeline-card { margin-bottom: 16px; }

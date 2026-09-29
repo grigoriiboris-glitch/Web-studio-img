@@ -31,7 +31,7 @@ func (s *Store) CreatePendingUpload(ctx context.Context, userID, projectID uuid.
 	if userID == uuid.Nil || projectID == uuid.Nil || size <= 0 || size > MaxAssetSize {
 		return Asset{}, fmt.Errorf("invalid upload metadata")
 	}
-	if mime != "image/jpeg" && mime != "image/png" {
+	if mime != "image/jpeg" && mime != "image/png" && mime != "image/webp" {
 		return Asset{}, fmt.Errorf("unsupported upload MIME type %q", mime)
 	}
 	var ok bool
@@ -127,11 +127,11 @@ func (s *Store) FinalizePendingUpload(ctx context.Context,userID,projectID,asset
 
 func (p *Processor) ProcessUpload(ctx context.Context,userID,projectID uuid.UUID,data []byte,mime string)(Asset,error){
 	if len(data)==0||int64(len(data))>MaxAssetSize{return Asset{},fmt.Errorf("asset exceeds %d bytes",MaxAssetSize)}
-	detected:=http.DetectContentType(data);if detected!="image/jpeg"&&detected!="image/png"{return Asset{},fmt.Errorf("unsupported upload MIME type %q",detected)}
-	if mime!=""&&mime!=detected{return Asset{},fmt.Errorf("MIME mismatch: declared=%q detected=%q",mime,detected)}
+	detected:=http.DetectContentType(data);if detected!="image/jpeg"&&detected!="image/png"&&detected!="image/webp"{return Asset{},fmt.Errorf("unsupported upload MIME type %q",detected)}
+	if mime!=""&&mime!="application/octet-stream"&&mime!=detected{return Asset{},fmt.Errorf("MIME mismatch: declared=%q detected=%q",mime,detected)}
 	if err:=p.scanner().Scan(ctx,data,detected);err!=nil{return Asset{},fmt.Errorf("security scan failed: %w",err)}
 	cfg,format,err:=image.DecodeConfig(bytes.NewReader(data));if err!=nil{return Asset{},fmt.Errorf("decode image config: %w",err)}
-	if cfg.Width<=0||cfg.Height<=0||cfg.Width>MaxImageDimension||cfg.Height>MaxImageDimension||(format!="jpeg"&&format!="png"){return Asset{},fmt.Errorf("invalid image dimensions or format")}
+	if cfg.Width<=0||cfg.Height<=0||cfg.Width>MaxImageDimension||cfg.Height>MaxImageDimension||(format!="jpeg"&&format!="png"&&format!="webp"){return Asset{},fmt.Errorf("invalid image dimensions or format")}
 	exifData:=readEXIF(data)
 	normalized,err:=normalizeImage(data,detected);if err!=nil{return Asset{},fmt.Errorf("normalize image: %w",err)}
 	sum:=sha256.Sum256(normalized);checksum:=hex.EncodeToString(sum[:])
