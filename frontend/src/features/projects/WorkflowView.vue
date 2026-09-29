@@ -71,7 +71,10 @@ onMounted(load)
 
 <template>
   <main>
-    <h1>Project workflow</h1>
+    <div class="workflow-header">
+      <h1>Project workflow</h1>
+      <a class="variant-link" :href="'/projects/' + projectId + '/variants'">Variant Board</a>
+    </div>
     <p v-if="error">
       {{ error }}
     </p>
