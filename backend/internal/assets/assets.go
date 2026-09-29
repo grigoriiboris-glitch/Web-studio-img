@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rwcarlsen/goexif/exif"
 	"golang.org/x/image/draw"
+  _ "golang.org/x/image/webp"
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/storage"
 )
@@ -325,10 +326,10 @@ func (p *Processor) Process(ctx context.Context, userID, projectID, generationID
 		return Asset{}, fmt.Errorf("asset exceeds %d bytes", MaxAssetSize)
 	}
 	detected := http.DetectContentType(imageData)
-	if detected != "image/jpeg" && detected != "image/png" {
+	if detected != "image/jpeg" && detected != "image/png" && detected != "image/webp" {
 		return Asset{}, fmt.Errorf("unsupported image MIME type %q", detected)
 	}
-	if mime != "" && mime != detected {
+	if mime != "" && mime != "application/octet-stream" && mime != detected {
 		return Asset{}, fmt.Errorf("MIME mismatch: declared=%q detected=%q", mime, detected)
 	}
 	mime = detected
@@ -343,7 +344,7 @@ func (p *Processor) Process(ctx context.Context, userID, projectID, generationID
 	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > MaxImageDimension || cfg.Height > MaxImageDimension {
 		return Asset{}, fmt.Errorf("invalid image dimensions")
 	}
-	if format != "jpeg" && format != "png" {
+	if format != "jpeg" && format != "png" && format != "webp" {
 		return Asset{}, fmt.Errorf("unsupported image format %q", format)
 	}
 
@@ -484,6 +485,8 @@ func normalizeImage(data []byte, mime string) ([]byte, error) {
 		if err := png.Encode(&out, src); err != nil {
 			return nil, err
 		}
+	case "image/webp":
+		return data, nil
 	default:
 		return nil, fmt.Errorf("unsupported image MIME type %q", mime)
 	}
