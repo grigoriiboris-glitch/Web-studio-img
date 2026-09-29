@@ -10,7 +10,7 @@ import {
   isEditableEventTarget,
   isImageLikeDataTransfer,
   MAX_SKETCH_FILE_SIZE,
-} from './imageImport'
+} from '../composables/imageImport'
 
 type QueueStatus = 'queued' | 'uploading' | 'uploaded' | 'error'
 
