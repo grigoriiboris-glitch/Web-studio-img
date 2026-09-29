@@ -72,7 +72,9 @@ onMounted(load)
 <template>
   <main>
     <h1>Project workflow</h1>
-    <p v-if="error">{{ error }}</p>
+    <p v-if="error">
+      {{ error }}
+    </p>
 
     <section>
       <h2>Mode</h2>
@@ -91,9 +93,21 @@ onMounted(load)
 
     <section>
       <h2>Lifecycle</h2>
-      <p>Status: {{ lifecycle?.status }}</p>
-      <button type="button" @click="lifecycleAction('archive')">Archive</button>
-      <button type="button" @click="lifecycleAction('delete')">Delete</button>
+      <p>
+        Status: {{ lifecycle?.status }}
+      </p>
+      <button
+        type="button"
+        @click="lifecycleAction('archive')"
+      >
+        Archive
+      </button>
+      <button
+        type="button"
+        @click="lifecycleAction('delete')"
+      >
+        Delete
+      </button>
       <button
         v-if="lifecycle?.status === 'deleted'"
         type="button"
@@ -113,11 +127,20 @@ onMounted(load)
     <section>
       <h2>Search</h2>
       <form @submit.prevent="search">
-        <input v-model="query" minlength="2" placeholder="Search creative content">
-        <button type="submit">Search</button>
+        <input
+          v-model="query"
+          minlength="2"
+          placeholder="Search creative content"
+        >
+        <button type="submit">
+          Search
+        </button>
       </form>
       <ul>
-        <li v-for="item in results" :key="item.type + item.id">
+        <li
+          v-for="item in results"
+          :key="item.type + item.id"
+        >
           {{ item.type }} — {{ item.title }}
         </li>
       </ul>
