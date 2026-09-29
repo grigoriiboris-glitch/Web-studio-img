@@ -90,6 +90,8 @@ export const creativeBriefApi = {
     apiRequest<CreativeBrief>('/projects/' + projectId + '/brief'),
   versions: (projectId: string) =>
     apiRequest<{ briefs: CreativeBrief[] }>('/projects/' + projectId + '/brief/versions'),
+  approved: (projectId: string) =>
+    apiRequest<CreativeBrief>('/projects/' + projectId + '/brief/approved'),
   create: (projectId: string, input: CreativeBriefInput) =>
     apiRequest<CreativeBrief>('/projects/' + projectId + '/brief', {
       method: 'POST',
