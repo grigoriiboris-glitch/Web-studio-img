@@ -524,7 +524,7 @@ paths:
         schema: {type: string, format: uuid}
     post:
       operationId: uploadAssetMultipart
-      summary: Upload an image as multipart/form-data
+      summary: Upload an image as multipart/form-data (PNG, JPEG or WebP)
       requestBody:
         required: true
         content:
@@ -543,6 +543,35 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '413': {description: Asset too large}
+  /projects/{project_id}/assets/import-url:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: importAssetFromURL
+      summary: Import a public image URL as a project asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              additionalProperties: false
+              properties:
+                url: {type: string, format: uri, maxLength: 2048}
+      responses:
+        '201':
+          description: Asset imported
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asset'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '413': {description: Remote asset too large}
+        '502': {description: Remote image fetch failed}
   /projects/{project_id}/assets/uploads:
     post:
       operationId: initAssetUpload
@@ -2284,7 +2313,7 @@ components:
       type: object
       required: [mime_type, size]
       properties:
-        mime_type: {type: string, enum: [image/jpeg, image/png]}
+        mime_type: {type: string, enum: [image/jpeg, image/png, image/webp]}
         size: {type: integer, format: int64, minimum: 1, maximum: 10485760}
     AssetUpload:
       type: object
