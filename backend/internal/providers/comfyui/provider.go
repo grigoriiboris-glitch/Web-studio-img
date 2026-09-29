@@ -57,7 +57,7 @@ func (p *Provider) Generate(ctx context.Context, req generation.Request) (genera
 	if sourceKey:=stringValue(params,"source_storage_key",""); sourceKey!="" {
 		key,err:=p.assetKey(ctx,sourceKey);if err!=nil{return generation.ProviderResult{},err}
 		data,info,err:=p.cfg.Storage.Get(ctx,key);if err!=nil{return generation.ProviderResult{},fmt.Errorf("load source asset: %w",err)}
-		defer data.Close()
+		defer func(){_ = data.Close()}()
 		bytes,err:=readLimited(data,20<<20);if err!=nil{return generation.ProviderResult{},err}
 		upload,err:=p.client.upload(ctx,"source-"+safeName(sourceKey)+"."+extension(info.ContentType),info.ContentType,bytes);if err!=nil{return generation.ProviderResult{},err}
 		inputImage=upload.Name
