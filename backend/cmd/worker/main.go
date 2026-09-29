@@ -16,7 +16,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
 	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
-	"github.com/oleg3190/Web-studio-img/backend/internal/providers/yandexart"
+	"github.com/oleg3190/Web-studio-img/backend/internal/providers"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
 	"github.com/oleg3190/Web-studio-img/backend/internal/queue"
 	"github.com/oleg3190/Web-studio-img/backend/internal/storage"
@@ -29,8 +29,8 @@ func main() {
 		logger.Error("configuration error", "error", err)
 		os.Exit(1)
 	}
-	if cfg.DatabaseURL == "" || cfg.RedisURL == "" || cfg.YandexARTAPIKey == "" || cfg.YandexARTFolderID == "" {
-		logger.Error("worker requires DATABASE_URL, REDIS_URL, YANDEXART_API_KEY and YANDEXART_FOLDER_ID")
+	if cfg.DatabaseURL == "" || cfg.RedisURL == "" {
+		logger.Error("worker requires DATABASE_URL and REDIS_URL")
 		os.Exit(1)
 	}
 	if cfg.S3Bucket == "" || cfg.S3AccessKey == "" || cfg.S3SecretKey == "" {
@@ -62,11 +62,6 @@ func main() {
 		logger.Error("redis configuration failed", "error", err)
 		os.Exit(1)
 	}
-	provider, err := yandexart.New(yandexart.Config{Endpoint: cfg.YandexARTEndpoint, OperationEndpoint: cfg.YandexARTOperationEndpoint, APIKey: cfg.YandexARTAPIKey, FolderID: cfg.YandexARTFolderID, Model: cfg.YandexARTModel})
-	if err != nil {
-		logger.Error("YandexART initialization failed", "error", err)
-		os.Exit(1)
-	}
 	store, err := generation.NewSQLStore(db)
 	if err != nil {
 		logger.Error("generation store initialization failed", "error", err)
@@ -90,6 +85,12 @@ func main() {
 	})
 	if err != nil {
 		logger.Error("object storage initialization failed", "error", err)
+		os.Exit(1)
+	}
+
+	provider, err := providers.NewImageProvider(cfg, objectStorage)
+	if err != nil {
+		logger.Error("image provider initialization failed", "provider", cfg.ImageProvider, "error", err)
 		os.Exit(1)
 	}
 
