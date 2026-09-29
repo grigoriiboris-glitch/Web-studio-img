@@ -81,7 +81,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	req := Request{
 		ProjectID: projectID, IterationID: input.IterationID, Prompt: input.Prompt,
 		NegativePrompt: input.NegativePrompt, Seed: input.Seed, AspectRatio: input.AspectRatio,
-		Parameters: input.Parameters, IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		Parameters: input.Parameters, ReferenceIDs: input.ReferenceIDs, IdempotencyKey: r.Header.Get("Idempotency-Key"),
 	}
 	if req.IdempotencyKey == "" {
 		writeError(w, http.StatusBadRequest, "missing_idempotency_key", "Idempotency-Key header is required")
