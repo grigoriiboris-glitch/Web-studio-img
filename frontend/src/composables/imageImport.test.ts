@@ -40,7 +40,7 @@ describe('image import helpers', () => {
   it('does not treat editable controls as global paste targets', () => {
     const input = document.createElement('input')
     const div = document.createElement('div')
-    div.contentEditable = 'true'
+    div.setAttribute('contenteditable', 'true')
 
     expect(isEditableEventTarget(input)).toBe(true)
     expect(isEditableEventTarget(div)).toBe(true)
