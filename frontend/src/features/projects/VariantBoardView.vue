@@ -214,6 +214,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline -->
   <main class="variant-board">
     <header class="page-header">
       <div>
