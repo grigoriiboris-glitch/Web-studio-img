@@ -19,6 +19,7 @@ import {
   assistantApi,
   materialsApi,
   texturesApi,
+  type Asset,
   type Generation,
   type HumanAction,
   type Iteration,
@@ -51,6 +52,7 @@ const creating = ref(false)
 const generating = ref(false)
 const savingPrompt = ref(false)
 const addingReference = ref(false)
+const lastUploadedAsset = ref('')
 const verifying = ref(false)
 const provenanceVerified = ref<boolean | null>(null)
 const provenanceMessage = ref('')
@@ -792,7 +794,7 @@ async function approveProject() {
 }
 
 async function handleSketchImported(payload: {
-  asset: import('../../api/client').Asset
+  asset: Asset
   name: string
   source: 'file' | 'clipboard' | 'url'
 }) {
