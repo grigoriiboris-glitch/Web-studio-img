@@ -37,7 +37,7 @@ func (c *client) doJSON(ctx context.Context, method, path string, body any, out 
 	if body != nil { req.Header.Set("Content-Type", "application/json") }
 	resp, err := c.http.Do(req)
 	if err != nil { return fmt.Errorf("%w: %v", ErrProviderUnavailable, err) }
-	defer resp.Body.Close()
+	defer func(){_ = resp.Body.Close()}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
 		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnprocessableEntity {
