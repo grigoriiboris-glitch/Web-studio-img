@@ -247,7 +247,7 @@ func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "brief_approve_failed", "could not start approval transaction")
 		return
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(r.Context(), "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))", "creative-briefs:"+projectID.String()); err != nil {
 		writeError(w, http.StatusInternalServerError, "brief_approve_failed", "could not lock creative brief")
