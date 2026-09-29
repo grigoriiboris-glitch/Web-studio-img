@@ -65,7 +65,7 @@ func (p *Provider) Generate(ctx context.Context, req generation.Request) (genera
 	if maskKey:=stringValue(params,"mask_storage_key",""); maskKey!="" {
 		key,err:=p.assetKey(ctx,maskKey);if err!=nil{return generation.ProviderResult{},err}
 		data,info,err:=p.cfg.Storage.Get(ctx,key);if err!=nil{return generation.ProviderResult{},fmt.Errorf("load mask asset: %w",err)}
-		defer data.Close()
+		defer func(){_ = data.Close()}()
 		bytes,err:=readLimited(data,20<<20);if err!=nil{return generation.ProviderResult{},err}
 		upload,err:=p.client.upload(ctx,"mask-"+safeName(maskKey)+".png",info.ContentType,bytes);if err!=nil{return generation.ProviderResult{},err}
 		maskImage=upload.Name
