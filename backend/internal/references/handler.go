@@ -21,6 +21,8 @@ func (h *Handler) Register(mux *http.ServeMux){
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/references",h.list)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/references",h.create)
 	mux.HandleFunc("PATCH /api/v1/projects/{project_id}/references/{reference_id}",h.update)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/references/{reference_id}/usage",h.createUsage)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/references/{reference_id}/usage",h.listUsage)
 	mux.HandleFunc("DELETE /api/v1/projects/{project_id}/references/{reference_id}",h.delete)
 	mux.HandleFunc("DELETE /api/v1/references/{reference_id}",h.deleteGlobal)
 }
@@ -39,6 +41,39 @@ func (h *Handler) deleteGlobal(w http.ResponseWriter,r *http.Request) {
 	ref,err:=h.store.GetOwnedByID(r.Context(),u,rid);if err!=nil{writeErr(w,404,"reference_not_found","reference not found");return}
 	if err:=h.store.Delete(r.Context(),u,ref.ProjectID,rid);errors.Is(err,ErrReferenceNotFound){writeErr(w,404,"reference_not_found","reference not found");return}else if err!=nil{writeErr(w,500,"reference_delete_failed","could not delete reference");return}
 	h.record(r,ref.ProjectID,rid,"reference.deleted",nil);w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) createUsage(w http.ResponseWriter, r *http.Request) {
+	u, ok := userID(r)
+	if !ok { writeErr(w,401,"unauthorized","authentication required"); return }
+	pid, e1 := uuid.Parse(r.PathValue("project_id"))
+	rid, e2 := uuid.Parse(r.PathValue("reference_id"))
+	if e1 != nil || e2 != nil { writeErr(w,400,"invalid_reference_id","invalid reference id"); return }
+	var in struct {
+		IterationID *uuid.UUID `json:"iteration_id,omitempty"`
+		GenerationID *uuid.UUID `json:"generation_id,omitempty"`
+		UsageType string `json:"usage_type"`
+		Influence *Influence `json:"influence,omitempty"`
+	}
+	if err := decode(r,&in); err != nil { writeErr(w,400,"invalid_request","invalid reference usage payload"); return }
+	item, err := h.store.CreateUsage(r.Context(),u,pid,rid,UsageRequest{IterationID:in.IterationID,GenerationID:in.GenerationID,UsageType:in.UsageType,Influence:in.Influence})
+	if errors.Is(err,ErrInvalidUsage) { writeErr(w,400,"invalid_reference_usage","reference usage payload is invalid"); return }
+	if errors.Is(err,ErrReferenceNotFound) || errors.Is(err,ErrUsageNotFound) { writeErr(w,404,"reference_usage_target_not_found","reference, iteration or generation not found"); return }
+	if err != nil { writeErr(w,500,"reference_usage_create_failed","could not create reference usage"); return }
+	payload := map[string]any{"reference_id":rid,"iteration_id":in.IterationID,"generation_id":in.GenerationID,"usage_type":item.UsageType,"influence":item.Influence}
+	h.record(r,pid,rid,"reference.usage.created",payload)
+	writeJSON(w,201,item)
+}
+
+func (h *Handler) listUsage(w http.ResponseWriter, r *http.Request) {
+	u, ok := userID(r)
+	if !ok { writeErr(w,401,"unauthorized","authentication required"); return }
+	pid, e1 := uuid.Parse(r.PathValue("project_id"))
+	rid, e2 := uuid.Parse(r.PathValue("reference_id"))
+	if e1 != nil || e2 != nil { writeErr(w,400,"invalid_reference_id","invalid reference id"); return }
+	items, err := h.store.ListUsage(r.Context(),u,pid,rid)
+	if err != nil { writeErr(w,500,"reference_usage_list_failed","could not list reference usage"); return }
+	writeJSON(w,200,map[string]any{"usage":items})
 }
 
 func (h *Handler) delete(w http.ResponseWriter,r *http.Request){u,ok:=userID(r);if !ok{writeErr(w,401,"unauthorized","authentication required");return};pid,e1:=uuid.Parse(r.PathValue("project_id"));rid,e2:=uuid.Parse(r.PathValue("reference_id"));if e1!=nil||e2!=nil{writeErr(w,400,"invalid_reference_id","invalid reference id");return};if err:=h.store.Delete(r.Context(),u,pid,rid);errors.Is(err,ErrReferenceNotFound){writeErr(w,404,"reference_not_found","reference not found");return}else if err!=nil{writeErr(w,500,"reference_delete_failed","could not delete reference");return};h.record(r,pid,rid,"reference.deleted",nil);w.WriteHeader(http.StatusNoContent)}
