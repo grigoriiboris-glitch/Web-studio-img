@@ -227,7 +227,7 @@ type SecurityScanner interface {
 type ImageSecurityScanner struct{}
 
 func (ImageSecurityScanner) Scan(_ context.Context, data []byte, mime string) error {
-	if mime != "image/jpeg" && mime != "image/png" {
+	if mime != "image/jpeg" && mime != "image/png" && mime != "image/webp" {
 		return fmt.Errorf("unsupported image MIME type %q", mime)
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
