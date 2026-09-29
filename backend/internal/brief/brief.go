@@ -85,6 +85,7 @@ func NewHandler(db *sql.DB, actions *humanactions.Store, provenanceStore *proven
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/brief", h.current)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/brief/versions", h.list)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/brief/approved", h.approved)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/brief", h.create)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/brief/{brief_id}/approve", h.approve)
 }
@@ -101,6 +102,30 @@ func (h *Handler) current(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "brief_get_failed", "could not load creative brief")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) approved(w http.ResponseWriter, r *http.Request) {
+	userID, projectID, ok := h.authProject(w, r)
+	if !ok {
+		return
+	}
+	row := h.db.QueryRowContext(r.Context(), `
+		SELECT id,project_id,user_id,version,title,goal,audience,deliverable,aspect_ratio,target_width,target_height,
+		       subject,must_have,avoid,mood,required_elements,constraints,success_criteria,deadline,status,created_at,updated_at
+		FROM creative_briefs
+		WHERE project_id=$1 AND user_id=$2 AND status='approved'
+		LIMIT 1
+	`, projectID, userID)
+	item, err := scanBrief(row)
+	if errors.Is(err, ErrBriefNotFound) {
+		writeError(w, http.StatusNotFound, "approved_brief_not_found", "approved creative brief not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "brief_get_failed", "could not load approved creative brief")
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
