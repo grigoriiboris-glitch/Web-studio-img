@@ -62,11 +62,6 @@ func main() {
 		logger.Error("redis configuration failed", "error", err)
 		os.Exit(1)
 	}
-	provider, err := providers.NewImageProvider(cfg, objectStorage)
-	if err != nil {
-		logger.Error("image provider initialization failed", "provider", cfg.ImageProvider, "error", err)
-		os.Exit(1)
-	}
 	store, err := generation.NewSQLStore(db)
 	if err != nil {
 		logger.Error("generation store initialization failed", "error", err)
@@ -90,6 +85,12 @@ func main() {
 	})
 	if err != nil {
 		logger.Error("object storage initialization failed", "error", err)
+		os.Exit(1)
+	}
+
+	provider, err := providers.NewImageProvider(cfg, objectStorage)
+	if err != nil {
+		logger.Error("image provider initialization failed", "provider", cfg.ImageProvider, "error", err)
 		os.Exit(1)
 	}
 
