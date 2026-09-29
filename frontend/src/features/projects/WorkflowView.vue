@@ -187,6 +187,7 @@ onMounted(load)
 </script>
 
 <template>
+  <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline -->
   <main class="workflow">
     <h1>Project workflow</h1>
     <p v-if="error" class="error">
