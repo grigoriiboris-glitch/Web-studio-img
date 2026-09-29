@@ -1,0 +1,14 @@
+DROP INDEX IF EXISTS provenance_payload_trgm_idx;
+DROP INDEX IF EXISTS references_text_trgm_idx;
+DROP INDEX IF EXISTS assets_metadata_trgm_idx;
+DROP INDEX IF EXISTS iterations_text_trgm_idx;
+DROP INDEX IF EXISTS prompts_text_trgm_idx;
+DROP INDEX IF EXISTS projects_name_trgm_idx;
+DROP TABLE IF EXISTS usage_ledger;
+DROP TABLE IF EXISTS project_quota_accounts;
+DROP TABLE IF EXISTS quota_accounts;
+ALTER TABLE assets DROP COLUMN IF EXISTS purge_after;
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_mode_check;
+ALTER TABLE projects DROP COLUMN IF EXISTS mode;
+ALTER TABLE projects DROP COLUMN IF EXISTS deleted_at;
+ALTER TABLE projects DROP COLUMN IF EXISTS purge_after;
