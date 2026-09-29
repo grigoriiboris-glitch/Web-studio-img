@@ -149,5 +149,8 @@ func (s *SQLStore) scanOne(ctx context.Context, query string, args ...any) (Gene
 	if len(raw) > 0 && json.Unmarshal(raw, &item.Parameters) != nil {
 		return Generation{}, fmt.Errorf("decode generation parameters")
 	}
+	if len(refsRaw) > 0 && json.Unmarshal(refsRaw, &item.ReferenceIDs) != nil {
+		return Generation{}, fmt.Errorf("decode generation references")
+	}
 	return item, nil
 }
