@@ -409,7 +409,7 @@ export const assetsApi = {
   get: (projectId: string, assetId: string) => apiRequest<Asset>('/projects/' + projectId + '/assets/' + assetId),
   downloadUrl: (projectId: string, assetId: string) => apiRequest<{ asset_id: string; url: string; expires_at: string }>('/projects/' + projectId + '/assets/' + assetId + '/download-url'),
   uploadMultipart: (projectId: string, file: File) => assetsApi.uploadMultipartWithProgress(projectId, file),
-  uploadMultipartWithProgress: (projectId: string, file: File, onProgress?: (percentage: number) => void) =>
+  uploadMultipartWithProgress: (projectId: string, file: File, onProgress?: (_percentage: number) => void) =>
     new Promise<Asset>((resolve, reject) => {
       const token = localStorage.getItem('web-studio-access-token')
       const form = new FormData()
