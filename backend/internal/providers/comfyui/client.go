@@ -62,7 +62,7 @@ func (c *client) upload(ctx context.Context, name, contentType string, data []by
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	if contentType != "" { req.Header.Set("X-Content-Type", contentType) }
 	resp, err := c.http.Do(req); if err != nil { return uploadResponse{}, fmt.Errorf("%w: %v", ErrProviderUnavailable, err) }
-	defer resp.Body.Close()
+	defer func(){_ = resp.Body.Close()}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 { b,_:=io.ReadAll(io.LimitReader(resp.Body,16<<10)); return uploadResponse{}, fmt.Errorf("%w: upload status=%d body=%s",ErrProviderUnavailable,resp.StatusCode,strings.TrimSpace(string(b))) }
 	var out uploadResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil { return uploadResponse{}, err }
@@ -92,7 +92,7 @@ func (c *client) view(ctx context.Context, image outputImage) ([]byte,string,err
 	q.Set("filename",image.Filename); q.Set("subfolder",image.Subfolder); q.Set("type",image.Type)
 	req,err:=http.NewRequestWithContext(ctx,http.MethodGet,c.base+"/view?"+q.Encode(),nil);if err!=nil{return nil,"",err}
 	resp,err:=c.http.Do(req);if err!=nil{return nil,"",fmt.Errorf("%w: %v",ErrProviderUnavailable,err)}
-	defer resp.Body.Close()
+	defer func(){_ = resp.Body.Close()}()
 	if resp.StatusCode<200||resp.StatusCode>=300{return nil,"",fmt.Errorf("%w: view status=%d",ErrProviderUnavailable,resp.StatusCode)}
 	data,err:=io.ReadAll(io.LimitReader(resp.Body,20<<20));if err!=nil{return nil,"",err}
 	return data,resp.Header.Get("Content-Type"),nil
