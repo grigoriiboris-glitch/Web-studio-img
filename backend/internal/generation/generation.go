@@ -33,30 +33,34 @@ type Request struct {
 	Seed           *int64
 	AspectRatio    string
 	Parameters     map[string]any
+	ReferenceIDs   []uuid.UUID
 	IdempotencyKey string
 }
 
 type Generation struct {
-	ID             uuid.UUID      `json:"id"`
-	ProjectID      uuid.UUID      `json:"project_id"`
-	IterationID    *uuid.UUID     `json:"iteration_id,omitempty"`
-	UserID         uuid.UUID      `json:"user_id"`
-	Provider       string         `json:"provider"`
-	Model          string         `json:"model"`
-	ModelVersion   *string        `json:"model_version,omitempty"`
-	Prompt         string         `json:"prompt"`
-	NegativePrompt string         `json:"negative_prompt,omitempty"`
-	Seed           *int64         `json:"seed,omitempty"`
-	AspectRatio    string         `json:"aspect_ratio,omitempty"`
-	Parameters     map[string]any `json:"parameters,omitempty"`
-	Status         Status         `json:"status"`
-	ProviderJobID  *string        `json:"provider_job_id,omitempty"`
-	ErrorCode      *string        `json:"error_code,omitempty"`
-	ErrorMessage   *string        `json:"error_message,omitempty"`
-	Cost           *float64       `json:"cost,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	StartedAt      *time.Time     `json:"started_at,omitempty"`
-	CompletedAt    *time.Time     `json:"completed_at,omitempty"`
+	ID                    uuid.UUID      `json:"id"`
+	ProjectID             uuid.UUID      `json:"project_id"`
+	IterationID           *uuid.UUID     `json:"iteration_id,omitempty"`
+	UserID                uuid.UUID      `json:"user_id"`
+	Provider              string         `json:"provider"`
+	Model                 string         `json:"model"`
+	ModelVersion          *string        `json:"model_version,omitempty"`
+	Prompt                string         `json:"prompt"`
+	NegativePrompt        string         `json:"negative_prompt,omitempty"`
+	Seed                  *int64         `json:"seed,omitempty"`
+	AspectRatio           string         `json:"aspect_ratio,omitempty"`
+	Parameters            map[string]any `json:"parameters,omitempty"`
+	ReferenceIDs          []uuid.UUID    `json:"reference_ids,omitempty"`
+	Status                Status         `json:"status"`
+	ProviderJobID         *string        `json:"provider_job_id,omitempty"`
+	ErrorCode             *string        `json:"error_code,omitempty"`
+	ErrorMessage          *string        `json:"error_message,omitempty"`
+	Cost                  *float64       `json:"cost,omitempty"`
+	CreatedAt             time.Time      `json:"created_at"`
+	StartedAt             *time.Time     `json:"started_at,omitempty"`
+	CompletedAt           *time.Time     `json:"completed_at,omitempty"`
+	ProviderDeterministic bool           `json:"provider_deterministic"`
+	DeterminismNote       string         `json:"determinism_note"`
 }
 
 type Image struct {
@@ -92,7 +96,7 @@ func ValidateRequest(r Request) error {
 	if r.ProjectID == uuid.Nil || strings.TrimSpace(r.Prompt) == "" || len([]rune(r.Prompt)) > 20000 {
 		return ErrInvalidGeneration
 	}
-	if len([]rune(r.NegativePrompt)) > 10000 || len(r.IdempotencyKey) > 200 {
+	if len([]rune(r.NegativePrompt)) > 10000 || len(r.IdempotencyKey) > 200 || len(r.ReferenceIDs) > 50 {
 		return ErrInvalidGeneration
 	}
 	if r.AspectRatio == "" {
@@ -100,6 +104,16 @@ func ValidateRequest(r Request) error {
 	}
 	if r.IdempotencyKey == "" {
 		return ErrInvalidGeneration
+	}
+	seen := make(map[uuid.UUID]struct{}, len(r.ReferenceIDs))
+	for _, id := range r.ReferenceIDs {
+		if id == uuid.Nil {
+			return ErrInvalidGeneration
+		}
+		if _, ok := seen[id]; ok {
+			return ErrInvalidGeneration
+		}
+		seen[id] = struct{}{}
 	}
 	return nil
 }

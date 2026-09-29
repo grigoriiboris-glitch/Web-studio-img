@@ -28,26 +28,33 @@ func (s *SQLStore) Create(ctx context.Context, userID uuid.UUID, req Request, pr
 	if err != nil {
 		return Generation{}, false, fmt.Errorf("marshal generation parameters: %w", err)
 	}
+	referenceIDs, err := json.Marshal(req.ReferenceIDs)
+	if err != nil {
+		return Generation{}, false, fmt.Errorf("marshal generation references: %w", err)
+	}
 	var item Generation
 	var raw []byte
+	var refsRaw []byte
 	err = s.db.QueryRowContext(ctx, `
 		WITH owned_project AS (
 			SELECT id FROM projects WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
 		)
 		INSERT INTO generations
-			(user_id, project_id, iteration_id, provider, model, prompt, negative_prompt, seed, aspect_ratio, parameters, status, idempotency_key)
-		SELECT $2, p.id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+			(user_id, project_id, iteration_id, provider, model, prompt, negative_prompt, seed, aspect_ratio, parameters, reference_ids, status, idempotency_key, provider_deterministic, determinism_note)
+		SELECT $2, p.id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, 'Provider determinism is not guaranteed unless explicitly stated.'
 		FROM owned_project p
+		WHERE (SELECT count(*) FROM "references" r WHERE r.project_id=p.id AND r.id IN (SELECT value::uuid FROM jsonb_array_elements_text($11::jsonb))) = $14
 		ON CONFLICT (user_id, idempotency_key) DO NOTHING
 		RETURNING id, project_id, iteration_id, user_id, provider, model, model_version, prompt, negative_prompt,
-			seed, aspect_ratio, parameters, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at
-	`, req.ProjectID, userID, req.IterationID, provider, model, req.Prompt, req.NegativePrompt, req.Seed, req.AspectRatio, params, StatusQueued, req.IdempotencyKey).Scan(
+			seed, aspect_ratio, parameters, reference_ids, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at, provider_deterministic, determinism_note
+	`, req.ProjectID, userID, req.IterationID, provider, model, req.Prompt, req.NegativePrompt, req.Seed, req.AspectRatio, params, referenceIDs, StatusQueued, req.IdempotencyKey, len(req.ReferenceIDs)).Scan(
 		&item.ID, &item.ProjectID, &item.IterationID, &item.UserID, &item.Provider, &item.Model, &item.ModelVersion,
-		&item.Prompt, &item.NegativePrompt, &item.Seed, &item.AspectRatio, &raw, &item.Status, &item.ProviderJobID,
-		&item.ErrorCode, &item.ErrorMessage, &item.Cost, &item.CreatedAt, &item.StartedAt, &item.CompletedAt,
+		&item.Prompt, &item.NegativePrompt, &item.Seed, &item.AspectRatio, &raw, &refsRaw, &item.Status, &item.ProviderJobID,
+		&item.ErrorCode, &item.ErrorMessage, &item.Cost, &item.CreatedAt, &item.StartedAt, &item.CompletedAt, &item.ProviderDeterministic, &item.DeterminismNote,
 	)
 	if err == nil {
 		_ = json.Unmarshal(raw, &item.Parameters)
+		_ = json.Unmarshal(refsRaw, &item.ReferenceIDs)
 		return item, true, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -66,7 +73,7 @@ func (s *SQLStore) Create(ctx context.Context, userID uuid.UUID, req Request, pr
 func (s *SQLStore) GetByIdempotency(ctx context.Context, userID uuid.UUID, key string) (Generation, error) {
 	return s.scanOne(ctx, `
 		SELECT id, project_id, iteration_id, user_id, provider, model, model_version, prompt, negative_prompt,
-			seed, aspect_ratio, parameters, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at
+			seed, aspect_ratio, parameters, reference_ids, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at, provider_deterministic, determinism_note
 		FROM generations WHERE user_id = $1 AND idempotency_key = $2
 	`, userID, key)
 }
@@ -74,8 +81,8 @@ func (s *SQLStore) GetByIdempotency(ctx context.Context, userID uuid.UUID, key s
 func (s *SQLStore) GetOwned(ctx context.Context, userID, id uuid.UUID) (Generation, error) {
 	return s.scanOne(ctx, `
 		SELECT g.id, g.project_id, g.iteration_id, g.user_id, g.provider, g.model, g.model_version, g.prompt,
-			g.negative_prompt, g.seed, g.aspect_ratio, g.parameters, g.status, g.provider_job_id, g.error_code,
-			g.error_message, g.cost, g.created_at, g.started_at, g.completed_at
+			g.negative_prompt, g.seed, g.aspect_ratio, g.parameters, g.reference_ids, g.status, g.provider_job_id, g.error_code,
+			g.error_message, g.cost, g.created_at, g.started_at, g.completed_at, g.provider_deterministic, g.determinism_note
 		FROM generations g JOIN projects p ON p.id = g.project_id
 		WHERE g.id = $1 AND g.user_id = $2 AND p.user_id = $2 AND p.status <> 'deleted'
 	`, id, userID)
@@ -127,10 +134,11 @@ func expectOne(res sql.Result, notFound error) error {
 func (s *SQLStore) scanOne(ctx context.Context, query string, args ...any) (Generation, error) {
 	var item Generation
 	var raw []byte
+	var refsRaw []byte
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
 		&item.ID, &item.ProjectID, &item.IterationID, &item.UserID, &item.Provider, &item.Model, &item.ModelVersion,
-		&item.Prompt, &item.NegativePrompt, &item.Seed, &item.AspectRatio, &raw, &item.Status, &item.ProviderJobID,
-		&item.ErrorCode, &item.ErrorMessage, &item.Cost, &item.CreatedAt, &item.StartedAt, &item.CompletedAt,
+		&item.Prompt, &item.NegativePrompt, &item.Seed, &item.AspectRatio, &raw, &refsRaw, &item.Status, &item.ProviderJobID,
+		&item.ErrorCode, &item.ErrorMessage, &item.Cost, &item.CreatedAt, &item.StartedAt, &item.CompletedAt, &item.ProviderDeterministic, &item.DeterminismNote,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Generation{}, ErrGenerationNotFound
@@ -140,6 +148,9 @@ func (s *SQLStore) scanOne(ctx context.Context, query string, args ...any) (Gene
 	}
 	if len(raw) > 0 && json.Unmarshal(raw, &item.Parameters) != nil {
 		return Generation{}, fmt.Errorf("decode generation parameters")
+	}
+	if len(refsRaw) > 0 && json.Unmarshal(refsRaw, &item.ReferenceIDs) != nil {
+		return Generation{}, fmt.Errorf("decode generation references")
 	}
 	return item, nil
 }

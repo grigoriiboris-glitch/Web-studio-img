@@ -23,3 +23,18 @@ func TestValidateRequestRejectsOversizedPrompt(t *testing.T) {
 		t.Fatal("expected oversized prompt to fail")
 	}
 }
+
+func TestValidateRequestRejectsDuplicateReferenceIDs(t *testing.T) {
+	id := uuid.New()
+	req := Request{ProjectID: uuid.New(), Prompt: "test", IdempotencyKey: "key", ReferenceIDs: []uuid.UUID{id, id}}
+	if err := ValidateRequest(req); err != ErrInvalidGeneration {
+		t.Fatalf("expected duplicate reference IDs to be rejected, got %v", err)
+	}
+}
+
+func TestValidateRequestAcceptsReproducibilityMetadata(t *testing.T) {
+	req := Request{ProjectID: uuid.New(), Prompt: "test", IdempotencyKey: "key", ReferenceIDs: []uuid.UUID{uuid.New()}}
+	if err := ValidateRequest(req); err != nil {
+		t.Fatalf("expected valid reference metadata, got %v", err)
+	}
+}

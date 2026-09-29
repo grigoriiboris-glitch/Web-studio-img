@@ -116,6 +116,7 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 	timeline, err := h.loadJSON(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(e) ORDER BY e.sequence),'[]'::jsonb) FROM project_events e WHERE e.project_id=$1 AND e.user_id=$2`,projectID,userID); if err != nil { return err }
 	prompts, err := h.loadJSON(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(p) ORDER BY p.version),'[]'::jsonb) FROM prompts p WHERE p.project_id=$1`,projectID); if err != nil { return err }
 	refs, err := h.loadJSON(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY r.created_at),'[]'::jsonb) FROM "references" r WHERE r.project_id=$1`,projectID); if err != nil { return err }
+	referenceUsages, err := h.loadJSON(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(u) ORDER BY u.created_at),'[]'::jsonb) FROM reference_usages u WHERE u.project_id=$1 AND u.user_id=$2`,projectID,userID); if err != nil { return err }
 	actions, err := h.loadJSON(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY a.version),'[]'::jsonb) FROM human_actions a WHERE a.project_id=$1`,projectID); if err != nil { return err }
 	similarity, err := h.loadJSON(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY s.created_at),'[]'::jsonb) FROM similarity_checks s WHERE s.project_id=$1`,projectID); if err != nil { return err }
 	generations, err := h.loadJSON(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(g) ORDER BY g.created_at),'[]'::jsonb) FROM generations g WHERE g.project_id=$1`,projectID); if err != nil { return err }
@@ -125,7 +126,7 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 		"generated_at": time.Now().UTC(), "legal_note": "Creation Report describes the process and checks; it is not an automatic legal conclusion.",
 		"provenance_verification": verification,
 		"timeline_count": countJSON(timeline), "prompt_count": countJSON(prompts),
-		"reference_count": countJSON(refs), "human_action_count": countJSON(actions),
+		"reference_count": countJSON(refs), "reference_usage_count": countJSON(referenceUsages), "human_action_count": countJSON(actions),
 		"similarity_check_count": countJSON(similarity), "generation_count": countJSON(generations),
 	}
 	provenanceJSON, _ := json.MarshalIndent(map[string]any{"events":prov,"verification":verification}, "", "  ")
@@ -134,6 +135,7 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 		"timeline.json": timeline,
 		"prompts.json": prompts,
 		"references.json": refs,
+		"reference_usages.json": referenceUsages,
 		"human_actions.json": actions,
 		"similarity_checks.json": similarity,
 		"generations.json": generations,

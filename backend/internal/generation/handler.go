@@ -60,6 +60,7 @@ type requestPayload struct {
 	Seed           *int64         `json:"seed,omitempty"`
 	AspectRatio    string         `json:"aspect_ratio,omitempty"`
 	Parameters     map[string]any `json:"parameters,omitempty"`
+	ReferenceIDs   []uuid.UUID     `json:"reference_ids,omitempty"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +82,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	req := Request{
 		ProjectID: projectID, IterationID: input.IterationID, Prompt: input.Prompt,
 		NegativePrompt: input.NegativePrompt, Seed: input.Seed, AspectRatio: input.AspectRatio,
-		Parameters: input.Parameters, IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		Parameters: input.Parameters, ReferenceIDs: input.ReferenceIDs, IdempotencyKey: r.Header.Get("Idempotency-Key"),
 	}
 	if req.IdempotencyKey == "" {
 		writeError(w, http.StatusBadRequest, "missing_idempotency_key", "Idempotency-Key header is required")
@@ -115,7 +116,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	if created && h.projectEvents != nil { _, _ = h.projectEvents.Append(r.Context(), userID, projectID, "generation.queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model}) }
 	if created && h.provenance != nil {
-		_, _ = h.provenance.Append(r.Context(), provenance.Event{UserID: userID, ProjectID: projectID, IterationID: req.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_queued", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "prompt": item.Prompt, "negative_prompt": item.NegativePrompt, "seed": item.Seed, "aspect_ratio": item.AspectRatio, "parameters": item.Parameters}, CreatedAt: time.Now()})
+		_, _ = h.provenance.Append(r.Context(), provenance.Event{UserID: userID, ProjectID: projectID, IterationID: req.IterationID, EntityType: "generation", EntityID: item.ID, Action: "generation_queued", Payload: map[string]any{"provider": item.Provider, "model": item.Model, "prompt": item.Prompt, "negative_prompt": item.NegativePrompt, "seed": item.Seed, "aspect_ratio": item.AspectRatio, "parameters": item.Parameters, "reference_ids": item.ReferenceIDs, "provider_deterministic": item.ProviderDeterministic, "determinism_note": item.DeterminismNote}, CreatedAt: time.Now()})
 	}
 	status := http.StatusAccepted
 	if !created {
