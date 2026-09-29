@@ -1,7 +1,6 @@
 package generation
 
 import (
-	"github.com/google/uuid"
 	"testing"
 
 	"github.com/google/uuid"
@@ -24,7 +23,6 @@ func TestValidateRequestRejectsOversizedPrompt(t *testing.T) {
 		t.Fatal("expected oversized prompt to fail")
 	}
 }
-
 
 func TestValidateRequestRejectsDuplicateReferenceIDs(t *testing.T) {
 	id := uuid.New()
