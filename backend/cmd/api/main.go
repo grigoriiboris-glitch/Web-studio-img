@@ -72,6 +72,7 @@ func main() {
 
 	limiter := security.NewRateLimiter(cfg.RateLimit, cfg.RateWindow)
 	var projectHandler *projects.Handler
+	var variantHandler *variants.Handler
 	var iterationHandler *iterations.Handler
 	var generationHandler *generation.Handler
 	var eventHandler *events.Handler
@@ -146,6 +147,12 @@ func main() {
 		referenceStore, err := references.NewStore(projectDB)
 		if err != nil {
 			logger.Error("reference store initialization failed", "error", err)
+			os.Exit(1)
+		}
+
+		variantHandler, err = variants.NewHandler(projectDB, actionStore, provenanceStore, eventStore)
+		if err != nil {
+			logger.Error("variant handler initialization failed", "error", err)
 			os.Exit(1)
 		}
 
@@ -305,7 +312,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservability(
 		logger, cfg.CORSOrigins, limiter, metrics,
 		projectHandler, iterationHandler, generationHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler, variantHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
