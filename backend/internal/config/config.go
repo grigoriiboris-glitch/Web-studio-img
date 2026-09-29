@@ -34,6 +34,14 @@ type Config struct {
 	YandexARTAPIKey string
 	YandexARTFolderID string
 	YandexARTModel string
+	ImageProvider string
+	ComfyUIEndpoint string
+	ComfyUIModel string
+	ComfyUIModelVersion string
+	ComfyUIWorkflowJSON string
+	ComfyUIWorkflowPath string
+	ComfyUITimeout time.Duration
+	ComfyUIPollEvery time.Duration
 }
 
 func Load() (Config, error) {
@@ -62,6 +70,17 @@ func Load() (Config, error) {
 		YandexARTAPIKey: os.Getenv("YANDEXART_API_KEY"),
 		YandexARTFolderID: os.Getenv("YANDEXART_FOLDER_ID"),
 		YandexARTModel: getenv("YANDEXART_MODEL", "yandex-art/latest"),
+		ImageProvider: getenv("IMAGE_PROVIDER", "comfyui"),
+		ComfyUIEndpoint: getenv("COMFYUI_ENDPOINT", "http://host.docker.internal:8188"),
+		ComfyUIModel: getenv("COMFYUI_MODEL", "local"),
+		ComfyUIModelVersion: os.Getenv("COMFYUI_MODEL_VERSION"),
+		ComfyUIWorkflowJSON: os.Getenv("COMFYUI_WORKFLOW_JSON"),
+		ComfyUIWorkflowPath: os.Getenv("COMFYUI_WORKFLOW_PATH"),
+		ComfyUITimeout: durationEnv("COMFYUI_TIMEOUT", 10*time.Minute),
+		ComfyUIPollEvery: durationEnv("COMFYUI_POLL_EVERY", 2*time.Second),
+	}
+	if cfg.ImageProvider != "comfyui" && cfg.ImageProvider != "yandexart" {
+		return Config{}, errors.New("IMAGE_PROVIDER must be comfyui or yandexart")
 	}
 	if cfg.Port == "" {
 		return Config{}, errors.New("APP_PORT must not be empty")
