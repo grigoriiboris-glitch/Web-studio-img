@@ -344,6 +344,21 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/CreativeBrief'
+  /projects/{project_id}/brief/approved:
+    get:
+      summary: Get the approved creative brief
+      operationId: getApprovedCreativeBrief
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Approved creative brief
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreativeBrief'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /projects/{project_id}/brief/{brief_id}/approve:
     post:
       summary: Approve a creative brief version
