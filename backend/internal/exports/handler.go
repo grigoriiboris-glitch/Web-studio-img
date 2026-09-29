@@ -182,7 +182,7 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 		if expectedSize > 0 && int64(len(data)) != expectedSize{_ = maskRows.Close();return fmt.Errorf("mask asset %s size mismatch",id)}
 		outKey:=fmt.Sprintf("projects/%s/exports/%s/masks/%s",projectID,exportID,id)
 		if err:=h.storage.Put(ctx,outKey,strings.NewReader(string(data)),int64(len(data)),storage.PutOptions{ContentType:mime});err!=nil{_ = maskRows.Close();return fmt.Errorf("write mask asset %s: %w",id,err)}
-		name:="mask/"+id.String();artifactKeys[name]=outKey;hashes[name]=sha256Hex(data)
+		name:=maskArtifactName(id);artifactKeys[name]=outKey;hashes[name]=sha256Hex(data)
 	}
 	if err:=maskRows.Err();err!=nil{_ = maskRows.Close();return fmt.Errorf("load mask assets: %w",err)}
 	_ = maskRows.Close()
@@ -291,3 +291,5 @@ func minimalPDF(lines []string) []byte {
 
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
 func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}
+
+func maskArtifactName(id uuid.UUID) string { return "mask/" + id.String() }
