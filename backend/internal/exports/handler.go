@@ -169,6 +169,24 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 	for rows.Next(){var x sourceAsset;if err:=rows.Scan(&x.ID,&x.StorageKey,&x.MIMEType,&x.Checksum,&x.Size,&x.Width,&x.Height,&x.CreatedAt);err!=nil{return fmt.Errorf("scan source asset: %w",err)};sourceAssets=append(sourceAssets,x)}
 	if err:=rows.Err();err!=nil{return fmt.Errorf("load source assets: %w",err)}
 
+	// Export every active mask asset belonging to the project. Masks are regular assets with type=mask.
+	maskRows,err:=h.db.QueryContext(ctx,`SELECT id,storage_key,mime_type,size FROM assets WHERE project_id=$1 AND user_id=$2 AND lifecycle_status='active' AND type='mask' ORDER BY created_at ASC,id ASC`,projectID,userID)
+	if err!=nil{return fmt.Errorf("load mask assets: %w",err)}
+	for maskRows.Next(){
+		var id uuid.UUID; var key,mime string; var expectedSize int64
+		if err:=maskRows.Scan(&id,&key,&mime,&expectedSize);err!=nil{_ = maskRows.Close();return fmt.Errorf("scan mask asset: %w",err)}
+		obj,_,err:=h.storage.Get(ctx,key);if err!=nil{_ = maskRows.Close();return fmt.Errorf("read mask asset %s: %w",id,err)}
+		data,readErr:=io.ReadAll(io.LimitReader(obj,assets.MaxAssetSize+1));_ = obj.Close()
+		if readErr!=nil{_ = maskRows.Close();return fmt.Errorf("read mask asset %s: %w",id,readErr)}
+		if int64(len(data))>assets.MaxAssetSize{_ = maskRows.Close();return fmt.Errorf("mask asset %s exceeds export limit",id)}
+		if expectedSize > 0 && int64(len(data)) != expectedSize{_ = maskRows.Close();return fmt.Errorf("mask asset %s size mismatch",id)}
+		outKey:=fmt.Sprintf("projects/%s/exports/%s/masks/%s",projectID,exportID,id)
+		if err:=h.storage.Put(ctx,outKey,strings.NewReader(string(data)),int64(len(data)),storage.PutOptions{ContentType:mime});err!=nil{_ = maskRows.Close();return fmt.Errorf("write mask asset %s: %w",id,err)}
+		name:=maskArtifactName(id);artifactKeys[name]=outKey;hashes[name]=sha256Hex(data)
+	}
+	if err:=maskRows.Err();err!=nil{_ = maskRows.Close();return fmt.Errorf("load mask assets: %w",err)}
+	_ = maskRows.Close()
+
 	for _,src:=range sourceAssets {
 		obj,_,err:=h.storage.Get(ctx,src.StorageKey);if err!=nil{return fmt.Errorf("read source asset %s: %w",src.ID,err)}
 		data,readErr:=io.ReadAll(io.LimitReader(obj,assets.MaxAssetSize+1));_ = obj.Close();if readErr!=nil{return fmt.Errorf("read source asset %s: %w",src.ID,readErr)}
@@ -273,3 +291,5 @@ func minimalPDF(lines []string) []byte {
 
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
 func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}
+
+func maskArtifactName(id uuid.UUID) string { return "mask/" + id.String() }
