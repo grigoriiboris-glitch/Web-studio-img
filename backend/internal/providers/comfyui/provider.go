@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"fmt"
 	"os"
 	"strconv"
@@ -53,20 +54,20 @@ func (p *Provider) Generate(ctx context.Context, req generation.Request) (genera
 	operation:=stringValue(params,"operation","generate")
 	inputImage,maskImage:="", ""
 	width,height:=intValue(params,"width",0),intValue(params,"height",0)
-	if sourceID:=stringValue(params,"source_asset_id",""); sourceID!="" {
-		key,err:=p.assetKey(ctx,sourceID);if err!=nil{return generation.ProviderResult{},err}
+	if sourceKey:=stringValue(params,"source_storage_key",""); sourceKey!="" {
+		key,err:=p.assetKey(ctx,sourceKey);if err!=nil{return generation.ProviderResult{},err}
 		data,info,err:=p.cfg.Storage.Get(ctx,key);if err!=nil{return generation.ProviderResult{},fmt.Errorf("load source asset: %w",err)}
 		defer data.Close()
 		bytes,err:=readLimited(data,20<<20);if err!=nil{return generation.ProviderResult{},err}
-		upload,err:=p.client.upload(ctx,"source-"+sourceID+"."+extension(info.ContentType),info.ContentType,bytes);if err!=nil{return generation.ProviderResult{},err}
+		upload,err:=p.client.upload(ctx,"source-"+safeName(sourceKey)+"."+extension(info.ContentType),info.ContentType,bytes);if err!=nil{return generation.ProviderResult{},err}
 		inputImage=upload.Name
 	}
-	if maskID:=stringValue(params,"mask_asset_id",""); maskID!="" {
-		key,err:=p.assetKey(ctx,maskID);if err!=nil{return generation.ProviderResult{},err}
+	if maskKey:=stringValue(params,"mask_storage_key",""); maskKey!="" {
+		key,err:=p.assetKey(ctx,maskKey);if err!=nil{return generation.ProviderResult{},err}
 		data,info,err:=p.cfg.Storage.Get(ctx,key);if err!=nil{return generation.ProviderResult{},fmt.Errorf("load mask asset: %w",err)}
 		defer data.Close()
 		bytes,err:=readLimited(data,20<<20);if err!=nil{return generation.ProviderResult{},err}
-		upload,err:=p.client.upload(ctx,"mask-"+maskID+".png",info.ContentType,bytes);if err!=nil{return generation.ProviderResult{},err}
+		upload,err:=p.client.upload(ctx,"mask-"+safeName(maskKey)+".png",info.ContentType,bytes);if err!=nil{return generation.ProviderResult{},err}
 		maskImage=upload.Name
 	}
 	workflow,err:=mapWorkflow(p.workflow,mapperValues{Prompt:req.Prompt,NegativePrompt:req.NegativePrompt,Seed:req.Seed,AspectRatio:req.AspectRatio,InputImage:inputImage,MaskImage:maskImage,Width:width,Height:height,Operation:operation})
@@ -95,16 +96,17 @@ func (p *Provider) Cancel(ctx context.Context, _ string) error {
 	return nil
 }
 
-func (p *Provider) assetKey(ctx context.Context,id string)(string,error) {
-	if strings.TrimSpace(id)=="" {return "",errors.New("empty asset id")}
-	// The asset key is passed through provider parameters by the application layer.
-	// This method intentionally accepts a storage key when the provider is used standalone.
-	if strings.Contains(id,"/") {return id,nil}
-	return "",fmt.Errorf("asset %s requires storage key in comfyui parameters",id)
+func (p *Provider) assetKey(_ context.Context,key string)(string,error) {
+	key = strings.TrimSpace(key)
+	if key=="" { return "", errors.New("empty asset storage key") }
+	if strings.Contains(key, "\\") || strings.Contains(key, "..") { return "", errors.New("invalid asset storage key") }
+	return key,nil
 }
 
 func stringValue(m map[string]any,key,def string) string { if v,ok:=m[key].(string);ok&&strings.TrimSpace(v)!=""{return v};return def }
 func intValue(m map[string]any,key string,def int) int {switch v:=m[key].(type){case int:return v;case float64:return int(v);case string:n,_:=strconv.Atoi(v);if n>0{return n}};return def}
-func readLimited(r interface{Read([]byte)(int,error)},limit int)([]byte,error){var out []byte;buf:=make([]byte,64*1024);for{n,err:=r.Read(buf);if n>0{if len(out)+n>limit{return nil,fmt.Errorf("provider input exceeds %d bytes",limit)};out=append(out,buf[:n]...)};if err!=nil{if errors.Is(err,context.Canceled){return nil,err};if err.Error()=="EOF"{return out,nil};return out,err}}}
+func readLimited(r io.Reader,limit int)([]byte,error){var out []byte;buf:=make([]byte,64*1024);for{n,err:=r.Read(buf);if n>0{if len(out)+n>limit{return nil,fmt.Errorf("provider input exceeds %d bytes",limit)};out=append(out,buf[:n]...)};if err!=nil{if errors.Is(err,context.Canceled){return nil,err};if errors.Is(err,io.EOF){return out,nil};return out,err}}}
 func extension(mime string) string {switch mime{case "image/png":return "png";case "image/jpeg":return "jpg";default:return "img"}}
 func normalizeMIME(mime string) string {if strings.HasPrefix(mime,"image/"){return mime};return "image/png"}
+
+func safeName(value string) string { value = strings.Trim(value, "/"); value = strings.ReplaceAll(value, "/", "_"); return value }
