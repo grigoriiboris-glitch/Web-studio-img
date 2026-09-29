@@ -440,6 +440,49 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
 
+  /projects/{project_id}/references/{reference_id}/usage:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: reference_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listReferenceUsage
+      summary: List persisted reference influence usage
+      responses:
+        '200':
+          description: Reference usage records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [usage]
+                properties:
+                  usage: {type: array, items: {$ref: '#/components/schemas/ReferenceUsage'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createReferenceUsage
+      summary: Link a reference to an iteration and/or generation with influence metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReferenceUsageInput'}
+      responses:
+        '201':
+          description: Reference usage created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReferenceUsage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
   /projects/{project_id}/human-actions:
     parameters:
       - name: project_id
@@ -2025,6 +2068,10 @@ components:
         seed: {type: integer, format: int64}
         aspect_ratio: {type: string, pattern: '^[0-9]+:[0-9]+$'}
         parameters: {type: object, additionalProperties: true}
+        reference_ids:
+          type: array
+          maxItems: 50
+          items: {type: string, format: uuid}
 
     Prompt:
       type: object
@@ -2125,6 +2172,27 @@ components:
         sha256: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
         notes: {type: string, maxLength: 10000}
         influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+    ReferenceUsageInput:
+      type: object
+      additionalProperties: false
+      properties:
+        iteration_id: {type: string, format: uuid}
+        generation_id: {type: string, format: uuid}
+        usage_type: {type: string, minLength: 1, maxLength: 100}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+    ReferenceUsage:
+      type: object
+      required: [id, user_id, project_id, reference_id, usage_type, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        reference_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        generation_id: {type: string, format: uuid}
+        usage_type: {type: string}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+        created_at: {type: string, format: date-time}
     ReferenceList:
       type: object
       required: [references]
