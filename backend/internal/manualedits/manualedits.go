@@ -88,14 +88,14 @@ func (s *Store) Get(ctx context.Context,userID,id uuid.UUID)(Edit,error){
 
 func (s *Store) List(ctx context.Context,userID,projectID uuid.UUID)([]Edit,error){
 	rows,err:=s.db.QueryContext(ctx,"SELECT id,project_id,user_id,iteration_id,source_asset_id,mask_asset_id,result_asset_id,operation,prompt,parameters,status,idempotency_key,created_at,updated_at FROM manual_edits WHERE user_id=$1 AND project_id=$2 ORDER BY created_at ASC,id ASC",userID,projectID)
-	if err!=nil{return nil,err};defer rows.Close()
+	if err!=nil{return nil,err};defer func(){_ = rows.Close()}()
 	var out []Edit
 	for rows.Next(){e,err:=scan(rows);if err!=nil{return nil,err};out=append(out,e)}
 	return out,rows.Err()
 }
 
 func (s *Store) Apply(ctx context.Context,userID,id,resultID uuid.UUID,title *string)(Edit,error){
-	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return Edit{},err};defer tx.Rollback()
+	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return Edit{},err};defer func(){_ = tx.Rollback()}()
 	var e Edit;var raw []byte
 	err=tx.QueryRowContext(ctx,"SELECT id,project_id,user_id,iteration_id,source_asset_id,mask_asset_id,result_asset_id,operation,prompt,parameters,status,idempotency_key,created_at,updated_at FROM manual_edits WHERE id=$1 AND user_id=$2 FOR UPDATE",id,userID).Scan(&e.ID,&e.ProjectID,&e.UserID,&e.IterationID,&e.SourceAssetID,&e.MaskAssetID,&e.ResultAssetID,&e.Operation,&e.Prompt,&raw,&e.Status,&e.IdempotencyKey,&e.CreatedAt,&e.UpdatedAt)
 	if errors.Is(err,sql.ErrNoRows){return Edit{},ErrNotFound};if err!=nil{return Edit{},err}
