@@ -98,6 +98,8 @@ func (c *client) view(ctx context.Context, image outputImage) ([]byte,string,err
 	return data,resp.Header.Get("Content-Type"),nil
 }
 
-func (c *client) interrupt(ctx context.Context) error {
-	return c.doJSON(ctx,http.MethodPost,"/interrupt",map[string]any{},nil)
+func (c *client) interrupt(ctx context.Context, promptID string) error {
+	body := map[string]any{}
+	if strings.TrimSpace(promptID) != "" { body["prompt_id"] = promptID }
+	return c.doJSON(ctx, http.MethodPost, "/interrupt", body, nil)
 }
