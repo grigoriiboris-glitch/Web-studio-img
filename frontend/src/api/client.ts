@@ -408,16 +408,44 @@ export interface Asset {
 export const assetsApi = {
   get: (projectId: string, assetId: string) => apiRequest<Asset>('/projects/' + projectId + '/assets/' + assetId),
   downloadUrl: (projectId: string, assetId: string) => apiRequest<{ asset_id: string; url: string; expires_at: string }>('/projects/' + projectId + '/assets/' + assetId + '/download-url'),
-  uploadMultipart: async (projectId: string, file: File) => {
-    const token = localStorage.getItem('web-studio-access-token')
-    const form = new FormData()
-    form.append('file', file)
-    const response = await fetch(API_BASE_URL + '/projects/' + projectId + '/assets', {
-      method: 'POST', body: form, headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-    })
-    if (!response.ok) throw new Error('Asset upload failed with status ' + response.status)
-    return await response.json() as Asset
-  },
+  uploadMultipart: (projectId: string, file: File) => assetsApi.uploadMultipartWithProgress(projectId, file),
+  uploadMultipartWithProgress: (projectId: string, file: File, onProgress?: (percentage: number) => void) =>
+    new Promise<Asset>((resolve, reject) => {
+      const token = localStorage.getItem('web-studio-access-token')
+      const form = new FormData()
+      form.append('file', file)
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', API_BASE_URL + '/projects/' + projectId + '/assets')
+      if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token)
+      xhr.upload.onprogress = event => {
+        if (event.lengthComputable) onProgress?.(Math.min(99, Math.round((event.loaded / event.total) * 100)))
+      }
+      xhr.onerror = () => reject(new Error('Asset upload failed: network error'))
+      xhr.onabort = () => reject(new Error('Asset upload was cancelled'))
+      xhr.onload = () => {
+        let payload: unknown = null
+        try {
+          payload = xhr.responseText ? JSON.parse(xhr.responseText) : null
+        } catch {
+          payload = null
+        }
+        if (xhr.status >= 200 && xhr.status < 300 && payload && typeof payload === 'object') {
+          onProgress?.(100)
+          resolve(payload as Asset)
+          return
+        }
+        const message = payload && typeof payload === 'object' && 'error' in payload
+          ? String((payload as { error?: { message?: unknown } }).error?.message ?? '')
+          : ''
+        reject(new Error(message || 'Asset upload failed with status ' + xhr.status))
+      }
+      xhr.send(form)
+    }),
+  importFromUrl: (projectId: string, url: string) =>
+    apiRequest<Asset>('/projects/' + projectId + '/assets/import-url', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    }),
 }
 
 export interface SimilarityCheck {
