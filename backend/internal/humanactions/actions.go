@@ -44,7 +44,7 @@ var allowedActions = map[string]bool{
  "RIGHTS_UPDATED": true, "DO_NOT_USE_UPDATED": true,
  "LAYER_CREATED": true, "LAYER_UPDATED": true, "LAYER_DELETED": true,
  "MASK_CREATED": true, "MANUAL_EDIT_CREATED": true, "MANUAL_EDIT_APPLIED": true, "MANUAL_EDIT_REJECTED": true,
- "APPROVED": true, "EXPORT_CREATED": true,
+ "APPROVED": true, "EXPORT_CREATED": true, "CREATIVE_BRIEF_CREATED": true, "CREATIVE_BRIEF_APPROVED": true,
 }
 
 func (r Request) Validate(projectID, userID uuid.UUID) error {
