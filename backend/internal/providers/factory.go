@@ -1,8 +1,6 @@
 package providers
 
-import (
-	"context"
-	"errors"
+import (	"errors"
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
@@ -51,4 +49,3 @@ func ProviderReady(cfg config.Config, objectStorage storage.StorageProvider) boo
 	return cfg.YandexARTAPIKey != "" && cfg.YandexARTFolderID != ""
 }
 
-var _ = context.Background
