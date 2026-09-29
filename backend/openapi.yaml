@@ -112,6 +112,172 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /projects/{project_id}/variant-sources:
+    get:
+      operationId: listVariantSources
+      summary: List completed generation sources available to Variant Board
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Variant sources
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources]
+                properties:
+                  sources:
+                    type: array
+                    items: {$ref: '#/components/schemas/VariantSource'}
+  /projects/{project_id}/variant-sets:
+    get:
+      operationId: listVariantSets
+      summary: List Variant Sets
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Variant Sets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variant_sets]
+                properties:
+                  variant_sets:
+                    type: array
+                    items: {$ref: '#/components/schemas/VariantSet'}
+    post:
+      operationId: createVariantSet
+      summary: Create an immutable Variant Set from completed generations
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateVariantSetInput'}
+      responses:
+        '201':
+          description: Variant Set created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variant_set, variants]
+                properties:
+                  variant_set: {$ref: '#/components/schemas/VariantSet'}
+                  variants:
+                    type: array
+                    items: {$ref: '#/components/schemas/Variant'}
+  /projects/{project_id}/variant-sets/{set_id}:
+    get:
+      operationId: getVariantSet
+      summary: Get a Variant Set with variants
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: set_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Variant Set
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variant_set, variants]
+                properties:
+                  variant_set: {$ref: '#/components/schemas/VariantSet'}
+                  variants:
+                    type: array
+                    items: {$ref: '#/components/schemas/Variant'}
+  /projects/{project_id}/variant-sets/{set_id}/compare:
+    get:
+      operationId: compareVariants
+      summary: Load 2 to 4 variants for comparison
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: set_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: variant_id
+          in: query
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 2
+            maxItems: 4
+            items: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Variants for comparison
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variants]
+                properties:
+                  variants:
+                    type: array
+                    items: {$ref: '#/components/schemas/Variant'}
+  /projects/{project_id}/variant-sets/{set_id}/variants/{variant_id}:
+    patch:
+      operationId: updateVariantDecision
+      summary: Update variant decision, favorite or compare selection
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: set_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: variant_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VariantPatch'}
+      responses:
+        '200':
+          description: Updated variant
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Variant'}
+  /projects/{project_id}/variant-sets/{set_id}/iterations:
+    post:
+      operationId: createIterationFromVariants
+      summary: Create a new immutable selection iteration from variants
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: set_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateVariantIterationInput'}
+      responses:
+        '201':
+          description: Created selection iteration
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [iteration_id, title, description]
+                properties:
+                  iteration_id: {type: string, format: uuid}
+                  title: {type: string}
+                  description: {type: string}
   /projects/{project_id}/iterations:
     parameters:
       - name: project_id
@@ -2053,6 +2219,78 @@ components:
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string, maxLength: 2000}
         status: {type: string, enum: [active, archived, deleted]}
+    VariantSet:
+      type: object
+      required: [id, project_id, user_id, name, metadata, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        name: {type: string}
+        metadata: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    VariantSource:
+      type: object
+      required: [generation_id, status, prompt, provider, model, created_at]
+      properties:
+        generation_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        status: {type: string}
+        prompt: {type: string}
+        provider: {type: string}
+        model: {type: string}
+        created_at: {type: string, format: date-time}
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+    Variant:
+      type: object
+      required: [id, variant_set_id, generation_id, ordinal, decision, favorite, compare_selected, reject_reason, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        variant_set_id: {type: string, format: uuid}
+        generation_id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        ordinal: {type: integer, minimum: 1}
+        decision: {type: string, enum: [candidate, kept, rejected, selected]}
+        favorite: {type: boolean}
+        compare_selected: {type: boolean}
+        reject_reason: {type: array, items: {type: string}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        source: {$ref: '#/components/schemas/VariantSource'}
+    CreateVariantSetInput:
+      type: object
+      additionalProperties: false
+      required: [name, generation_ids]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        generation_ids:
+          type: array
+          minItems: 2
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+    VariantPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        decision: {type: string, enum: [candidate, kept, rejected, selected]}
+        favorite: {type: boolean}
+        compare_selected: {type: boolean}
+        reject_reason: {type: array, maxItems: 20, items: {type: string, maxLength: 500}}
+    CreateVariantIterationInput:
+      type: object
+      additionalProperties: false
+      required: [variant_ids]
+      properties:
+        variant_ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+        title: {type: string, maxLength: 200}
     ProjectList:
       type: object
       required: [projects]
@@ -2238,7 +2476,7 @@ components:
         iteration_id: {type: string, format: uuid}
         user_id: {type: string, format: uuid}
         version: {type: integer, format: int64, minimum: 1}
-        action_type: {type: string, enum: [IDEA_CREATED, SKETCH_IMPORTED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SELECTED, VARIANT_REJECTED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, COMPOSITION_MUTATION_ACCEPTED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED, MATERIAL_CREATED, MATERIAL_UPDATED, MATERIAL_DELETED, TEXTURE_CREATED, TEXTURE_UPDATED, TEXTURE_DELETED, STYLE_PROFILE_CREATED, STYLE_PROFILE_UPDATED, STYLE_PROFILE_APPLIED, ASSET_DNA_CREATED, VISUAL_LANGUAGE_UPDATED, RIGHTS_UPDATED, DO_NOT_USE_UPDATED, LAYER_CREATED, LAYER_UPDATED, LAYER_DELETED, MASK_CREATED, MANUAL_EDIT_CREATED, MANUAL_EDIT_APPLIED, MANUAL_EDIT_REJECTED]}
+        action_type: {type: string, enum: [IDEA_CREATED, SKETCH_IMPORTED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SET_CREATED, VARIANT_SELECTED, VARIANT_REJECTED, VARIANT_FAVORITED, VARIANT_UNFAVORITED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, COMPOSITION_MUTATION_ACCEPTED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED, MATERIAL_CREATED, MATERIAL_UPDATED, MATERIAL_DELETED, TEXTURE_CREATED, TEXTURE_UPDATED, TEXTURE_DELETED, STYLE_PROFILE_CREATED, STYLE_PROFILE_UPDATED, STYLE_PROFILE_APPLIED, ASSET_DNA_CREATED, VISUAL_LANGUAGE_UPDATED, RIGHTS_UPDATED, DO_NOT_USE_UPDATED, LAYER_CREATED, LAYER_UPDATED, LAYER_DELETED, MASK_CREATED, MANUAL_EDIT_CREATED, MANUAL_EDIT_APPLIED, MANUAL_EDIT_REJECTED]}
         payload: {type: object, additionalProperties: true}
         old_state: {type: object, additionalProperties: true}
         new_state: {type: object, additionalProperties: true}
