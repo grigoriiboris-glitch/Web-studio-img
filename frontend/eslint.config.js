@@ -41,6 +41,13 @@ export default [
     },
   },
   {
+    files: ['src/components/SketchImportZone.vue'],
+    rules: {
+      'vue/max-attributes-per-line': 'off',
+      'vue/singleline-html-element-content-newline': 'off',
+    },
+  },
+  {
     files: [
       'src/features/projects/DashboardView.vue',
       'src/features/projects/StudioView.vue',
