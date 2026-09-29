@@ -26,7 +26,8 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/dna"
 	"github.com/oleg3190/Web-studio-img/backend/internal/rights"
 	"github.com/oleg3190/Web-studio-img/backend/internal/styles"
-	"github.com/oleg3190/Web-studio-img/backend/internal/layers"\n\t"github.com/oleg3190/Web-studio-img/backend/internal/workflow"
+	"github.com/oleg3190/Web-studio-img/backend/internal/layers"
+\t"github.com/oleg3190/Web-studio-img/backend/internal/workflow"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
@@ -85,7 +86,8 @@ func main() {
 	var styleHandler *styles.Handler
 	var dnaHandler *dna.Handler
 	var rightsHandler *rights.Handler
-	var layersHandler *layers.Handler\n\tvar workflowHandler *workflow.Handler
+	var layersHandler *layers.Handler
+\tvar workflowHandler *workflow.Handler
 	var assistantHandler *assistant.Handler
 	var assistantActionStore *assistant.Store
 	var compositionAnalyzer *composition.Analyzer
