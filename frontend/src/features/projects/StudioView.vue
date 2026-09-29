@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { extractImageFiles, extractImageFilesFromItems, isEditableEventTarget } from '../../composables/imageImport'
 import {
   assetsApi,
   generationsApi,
@@ -52,6 +53,8 @@ const savingPrompt = ref(false)
 const addingReference = ref(false)
 const assetUploading = ref(false)
 const lastUploadedAsset = ref('')
+const assetDragActive = ref(false)
+let assetDragDepth = 0
 const verifying = ref(false)
 const provenanceVerified = ref<boolean | null>(null)
 const provenanceMessage = ref('')
@@ -792,10 +795,12 @@ async function approveProject() {
   }
 }
 
-async function uploadAsset(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+async function uploadAssetFile(file: File) {
+  if (assetUploading.value) return
+  if (!extractImageFiles([file]).length) {
+    error.value = 'Only JPEG and PNG sketches are supported'
+    return
+  }
   assetUploading.value = true
   error.value = null
   try {
@@ -806,8 +811,51 @@ async function uploadAsset(event: Event) {
     error.value = err instanceof Error ? err.message : 'Could not upload asset'
   } finally {
     assetUploading.value = false
-    input.value = ''
   }
+}
+
+async function uploadAsset(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) await uploadAssetFile(file)
+  input.value = ''
+}
+
+function handleAssetDragOver(event: DragEvent) {
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function handleAssetDragEnter(event: DragEvent) {
+  event.preventDefault()
+  assetDragDepth += 1
+  assetDragActive.value = true
+}
+
+function handleAssetDragLeave(event: DragEvent) {
+  event.preventDefault()
+  assetDragDepth = Math.max(0, assetDragDepth - 1)
+  if (assetDragDepth === 0) assetDragActive.value = false
+}
+
+function handleAssetDrop(event: DragEvent) {
+  event.preventDefault()
+  assetDragDepth = 0
+  assetDragActive.value = false
+  const files = extractImageFiles(event.dataTransfer?.files ?? [])
+  if (files.length > 0) {
+    void uploadAssetFile(files[0])
+  } else if ((event.dataTransfer?.files.length ?? 0) > 0) {
+    error.value = 'Only JPEG and PNG sketches are supported'
+  }
+}
+
+function handleAssetPaste(event: ClipboardEvent) {
+  if (assetUploading.value || isEditableEventTarget(event.target)) return
+  const files = event.clipboardData ? extractImageFilesFromItems(event.clipboardData.items) : []
+  if (files.length === 0) return
+  event.preventDefault()
+  void uploadAssetFile(files[0])
 }
 
 async function addReference() {
@@ -921,6 +969,7 @@ async function restoreIteration(iteration: Iteration) {
 }
 
 onMounted(async () => {
+  document.addEventListener('paste', handleAssetPaste)
   try {
     await loadStudio()
     await loadLibraries()
@@ -935,6 +984,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('paste', handleAssetPaste)
+  assetDragDepth = 0
+  assetDragActive.value = false
   eventAbort?.abort()
 })
 </script>
@@ -1048,12 +1100,25 @@ onUnmounted(() => {
         </el-card>
 
         <el-card class="create-card">
-          <template #header>Upload asset</template>
-          <el-space wrap>
-            <input type="file" accept="image/jpeg,image/png" :disabled="assetUploading" @change="uploadAsset">
-            <el-button v-if="assetUploading" loading>Uploading…</el-button>
+          <template #header>Upload sketch</template>
+          <div
+            class="asset-dropzone"
+            :class="{ 'asset-dropzone--active': assetDragActive, 'asset-dropzone--disabled': assetUploading }"
+            @dragenter="handleAssetDragEnter"
+            @dragover="handleAssetDragOver"
+            @dragleave="handleAssetDragLeave"
+            @drop="handleAssetDrop"
+          >
+            <div class="asset-dropzone__title">
+              {{ assetDragActive ? 'Drop sketch here' : 'Drag a sketch here or paste it with Ctrl+V / ⌘V' }}
+            </div>
+            <div class="asset-dropzone__hint">JPEG or PNG. You can also choose a file manually.</div>
+            <label class="asset-dropzone__button">
+              <input type="file" accept="image/jpeg,image/png" :disabled="assetUploading" @change="uploadAsset">
+              <el-button :loading="assetUploading">Choose sketch</el-button>
+            </label>
             <el-tag v-if="lastUploadedAsset" type="success">Asset {{ lastUploadedAsset }}</el-tag>
-          </el-space>
+          </div>
         </el-card>
 
         <el-card class="create-card">
@@ -1562,6 +1627,47 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.asset-dropzone {
+  border: 1px dashed var(--el-border-color);
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.asset-dropzone--active {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.asset-dropzone--disabled {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.asset-dropzone__title {
+  font-weight: 600;
+}
+
+.asset-dropzone__hint {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.asset-dropzone__button {
+  display: inline-block;
+  margin-top: 14px;
+}
+
+.asset-dropzone__button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
 .studio { min-height: 100vh; }
 .header { display: flex; align-items: center; justify-content: space-between; }
 .create-card, .timeline-card { margin-bottom: 16px; }
