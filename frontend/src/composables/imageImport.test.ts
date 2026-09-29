@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   extractImageFiles,
   extractImageFilesFromItems,
+  extractImageUrls,
+  formatSketchFileSize,
   isEditableEventTarget,
+  isImageLikeDataTransfer,
 } from './imageImport'
 
 function createFile(type: string, name = 'sketch'): File {
@@ -10,7 +13,7 @@ function createFile(type: string, name = 'sketch'): File {
 }
 
 describe('image import helpers', () => {
-  it('accepts JPEG and PNG files from drag/drop or file input', () => {
+  it('accepts JPEG, PNG and WebP files', () => {
     const files = [
       createFile('image/png', 'sketch.png'),
       createFile('text/plain', 'notes.txt'),
@@ -21,20 +24,43 @@ describe('image import helpers', () => {
     expect(extractImageFiles(files).map(file => file.name)).toEqual([
       'sketch.png',
       'reference.jpg',
+      'other.webp',
     ])
   })
 
   it('extracts image files from clipboard items', () => {
     const png = createFile('image/png', 'clipboard.png')
-    const text = createFile('text/plain', 'text.txt')
     const items = [
       { kind: 'string', type: 'text/plain', getAsFile: () => null },
       { kind: 'file', type: 'image/png', getAsFile: () => png },
       { kind: 'file', type: 'image/jpeg', getAsFile: () => null },
-      { kind: 'file', type: 'text/plain', getAsFile: () => text },
     ] as unknown as DataTransferItemList
 
     expect(extractImageFilesFromItems(items)).toEqual([png])
+  })
+
+  it('extracts public image URLs from text and HTML drag payloads', () => {
+    expect(extractImageUrls('https://example.com/a.png\nnot-a-url')).toEqual([
+      'https://example.com/a.png',
+    ])
+    expect(extractImageUrls('<img src="https://example.com/b.webp">')).toEqual([
+      'https://example.com/b.webp',
+    ])
+  })
+
+  it('recognizes URL-based image drag payloads', () => {
+    const dataTransfer = {
+      items: [],
+      getData: (type: string) => type === 'text/uri-list' ? 'https://example.com/sketch.png' : '',
+    } as unknown as DataTransfer
+
+    expect(isImageLikeDataTransfer(dataTransfer)).toBe(true)
+  })
+
+  it('formats useful upload sizes', () => {
+    expect(formatSketchFileSize(512)).toBe('512 B')
+    expect(formatSketchFileSize(1536)).toBe('1.5 KB')
+    expect(formatSketchFileSize(2 * 1024 * 1024)).toBe('2.0 MB')
   })
 
   it('does not treat editable controls as global paste targets', () => {
