@@ -127,7 +127,7 @@ func (s *Store) FinalizePendingUpload(ctx context.Context,userID,projectID,asset
 
 func (p *Processor) ProcessUpload(ctx context.Context,userID,projectID uuid.UUID,data []byte,mime string)(Asset,error){
 	if len(data)==0||int64(len(data))>MaxAssetSize{return Asset{},fmt.Errorf("asset exceeds %d bytes",MaxAssetSize)}
-	detected:=http.DetectContentType(data);if detected!="image/jpeg"&&detected!="image/png"{return Asset{},fmt.Errorf("unsupported upload MIME type %q",detected)}
+	detected:=http.DetectContentType(data);if detected!="image/jpeg"&&detected!="image/png"&&detected!="image/webp"{return Asset{},fmt.Errorf("unsupported upload MIME type %q",detected)}
 	if mime!=""&&mime!="application/octet-stream"&&mime!=detected{return Asset{},fmt.Errorf("MIME mismatch: declared=%q detected=%q",mime,detected)}
 	if err:=p.scanner().Scan(ctx,data,detected);err!=nil{return Asset{},fmt.Errorf("security scan failed: %w",err)}
 	cfg,format,err:=image.DecodeConfig(bytes.NewReader(data));if err!=nil{return Asset{},fmt.Errorf("decode image config: %w",err)}
