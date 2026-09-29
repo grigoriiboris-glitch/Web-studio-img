@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardView from '../features/projects/DashboardView.vue'
 import StudioView from '../features/projects/StudioView.vue'
+import CreativeResourcesView from '../features/projects/CreativeResourcesView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -8,6 +9,7 @@ const router = createRouter({
     { path: '/', redirect: '/projects' },
     { path: '/projects', name: 'projects', component: DashboardView },
     { path: '/projects/:projectId/studio', name: 'project-studio', component: StudioView },
+    { path: '/projects/:projectId/resources', name: 'creative-resources', component: CreativeResourcesView },
     { path: '/:pathMatch(.*)*', redirect: '/projects' },
   ],
 })
