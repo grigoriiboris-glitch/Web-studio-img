@@ -27,6 +27,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/rights"
 	"github.com/oleg3190/Web-studio-img/backend/internal/styles"
 	"github.com/oleg3190/Web-studio-img/backend/internal/layers"
+	"github.com/oleg3190/Web-studio-img/backend/internal/manualedits"
 	"github.com/oleg3190/Web-studio-img/backend/internal/workflow"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
@@ -87,6 +88,7 @@ func main() {
 	var dnaHandler *dna.Handler
 	var rightsHandler *rights.Handler
 	var layersHandler *layers.Handler
+	var manualEditHandler *manualedits.Handler
 	var workflowHandler *workflow.Handler
 	var assistantHandler *assistant.Handler
 	var assistantActionStore *assistant.Store
@@ -244,6 +246,10 @@ func main() {
 		if err != nil { logger.Error("rights handler initialization failed", "error", err); os.Exit(1) }
 		layersHandler, err = layers.NewHandler(projectDB, actionStore, provenanceStore)
 		if err != nil { logger.Error("layers handler initialization failed", "error", err); os.Exit(1) }
+		manualEditStore, manualEditErr := manualedits.NewStore(projectDB)
+		if manualEditErr != nil { logger.Error("manual edit store initialization failed", "error", manualEditErr); os.Exit(1) }
+		manualEditHandler, manualEditErr = manualedits.NewHandler(manualEditStore, eventStore, provenanceStore)
+		if manualEditErr != nil { logger.Error("manual edit handler initialization failed", "error", manualEditErr); os.Exit(1) }
 		if imageproviders.ProviderReady(cfg, objectStorage) {
 			redisCfg, redisErr := queue.ParseRedisURL(cfg.RedisURL)
 			if redisErr != nil {
@@ -299,7 +305,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservability(
 		logger, cfg.CORSOrigins, limiter, metrics,
 		projectHandler, iterationHandler, generationHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, workflowHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
