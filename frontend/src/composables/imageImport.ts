@@ -23,5 +23,7 @@ export function extractImageFilesFromItems(items: DataTransferItemList): File[] 
 
 export function isEditableEventTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+  if (target.isContentEditable) return true
+  if (target.closest('[contenteditable]:not([contenteditable="false"])')) return true
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
