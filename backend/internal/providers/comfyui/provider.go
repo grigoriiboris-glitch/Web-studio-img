@@ -91,8 +91,8 @@ func (p *Provider) Generate(ctx context.Context, req generation.Request) (genera
 	}
 }
 
-func (p *Provider) Cancel(ctx context.Context, _ string) error {
-	if err:=p.client.interrupt(ctx);err!=nil && !errors.Is(err,context.Canceled){return err}
+func (p *Provider) Cancel(ctx context.Context, promptID string) error {
+	if err:=p.client.interrupt(ctx, promptID);err!=nil && !errors.Is(err,context.Canceled){return err}
 	return nil
 }
 
