@@ -1,0 +1,36 @@
+name: debug-frontend-lint
+
+on:
+  push:
+    branches: ["feat/18-visual-dna-v2"]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package.json
+      - name: Install dependencies
+        run: npm install
+      - name: Capture lint output
+        run: |
+          set +e
+          npm run lint > ../lint-output.txt 2>&1
+          rc=$?
+          cat ../lint-output.txt
+          exit 0
+      - name: Upload lint output
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-lint-output
+          path: lint-output.txt
