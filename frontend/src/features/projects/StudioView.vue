@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   RouterLink, useRoute } from 'vue-router'
 import SketchImportZone from '../../components/SketchImportZone.vue'
+import BranchPanel from './BranchPanel.vue'
 import {
   generationsApi,
   humanActionsApi,
@@ -1028,6 +1029,7 @@ onUnmounted(() => {
       <el-skeleton v-if="loading" :rows="8" animated />
 
       <template v-else>
+        <BranchPanel :project-id="projectId()" @merged="loadStudio" />
         <el-card v-if="rejectionSummary?.reasons.length" class="create-card avoid-card">
           <template #header>Avoid based on previous decisions</template>
           <el-space wrap>
