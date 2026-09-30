@@ -232,9 +232,6 @@ async function createRevision() {
   }
 }
 
-function checkClass(status: string) {
-  return 'check-' + status
-}
 async function setMode(next: string) {
   try {
     policy.value = await api('/projects/' + projectId + '/mode', {
