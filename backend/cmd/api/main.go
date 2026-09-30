@@ -34,6 +34,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/variants"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
+	"github.com/oleg3190/Web-studio-img/backend/internal/privacy"
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
 	imageproviders "github.com/oleg3190/Web-studio-img/backend/internal/providers"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
@@ -303,6 +304,9 @@ func main() {
 			generationQueue = queueClient
 			generationProvider = provider
 			generationHandler, err = generation.NewHandlerWithRecipeResolver(generationStore, queueClient, provider, provenanceStore, eventStore, recipeHandler)
+			privacyPolicy, privacyErr := privacy.NewPolicy(projectDB)
+			if privacyErr != nil { logger.Error("privacy policy initialization failed", "error", privacyErr); os.Exit(1) }
+			generationHandler.SetPrivacyPolicy(privacyPolicy)
 			if err != nil {
 				logger.Error("generation handler initialization failed", "error", err)
 				os.Exit(1)
