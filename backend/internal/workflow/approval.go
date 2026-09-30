@@ -64,7 +64,7 @@ func (h *Handler) registerApprovalRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) getApprovalGate(w http.ResponseWriter, r *http.Request) {
-    userID, projectID, ok := h.authProject(w, r)
+    userID, projectID, ok := approvalProject(w, r)
     if !ok { return }
     gate, err := h.evaluateApprovalGate(r.Context(), userID, projectID)
     if err != nil { workflowError(w, 500, "approval_gate_failed", "could not evaluate approval checklist"); return }
@@ -335,6 +335,13 @@ func decodeWorkflowJSON(r *http.Request, v any) error {
     return dec.Decode(v)
 }
 
+func approvalProject(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+    userID, ok := user(r)
+    if !ok { workflowError(w, 401, "unauthorized", "authentication required"); return uuid.Nil, uuid.Nil, false }
+    projectID, err := id(r, "project_id")
+    if err != nil { workflowError(w, 400, "invalid_project_id", "invalid project id"); return uuid.Nil, uuid.Nil, false }
+    return userID, projectID, true
+}
 func workflowError(w http.ResponseWriter, status int, code, message string) {
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(status)
