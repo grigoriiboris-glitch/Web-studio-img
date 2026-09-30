@@ -240,11 +240,55 @@ export type IterationType =
 export interface Iteration {
   id: string
   project_id: string
+  branch_id: string
   parent_iteration_id?: string
   type: IterationType
   title?: string
   description?: string
+  decisions?: Record<string, unknown>
+  merge_sources?: string[]
   created_at: string
+}
+
+export interface Branch {
+  id: string
+  project_id: string
+  name: string
+  parent_iteration_id?: string
+  status: 'active' | 'archived'
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BranchDecision {
+  source_branch_id: string
+  value: unknown
+}
+
+export interface BranchDifference {
+  dimension: string
+  source?: unknown
+  target?: unknown
+  different: boolean
+}
+
+export interface BranchMergeInput {
+  source_branch_ids: string[]
+  decisions: Record<string, BranchDecision>
+}
+
+export const branchesApi = {
+  list: (projectId: string) =>
+    apiRequest<{ branches: Branch[] }>(`/projects/${projectId}/branches`),
+  create: (projectId: string, input: { name: string; parent_iteration_id?: string }) =>
+    apiRequest<Branch>(`/projects/${projectId}/branches`, { method: 'POST', body: JSON.stringify(input) }),
+  update: (projectId: string, branchId: string, input: { name: string; status: Branch['status'] }) =>
+    apiRequest<Branch>(`/projects/${projectId}/branches/${branchId}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  compare: (projectId: string, sourceBranchId: string, targetBranchId: string) =>
+    apiRequest<{ differences: BranchDifference[] }>(`/projects/${projectId}/branches/compare?source_branch_id=${sourceBranchId}&target_branch_id=${targetBranchId}`),
+  merge: (projectId: string, targetBranchId: string, input: BranchMergeInput) =>
+    apiRequest<Iteration>(`/projects/${projectId}/branches/${targetBranchId}/merge`, { method: 'POST', body: JSON.stringify(input) }),
 }
 
 export const iterationsApi = {
