@@ -2712,13 +2712,14 @@ components:
           items: {$ref: '#/components/schemas/Iteration'}
     Project:
       type: object
-      required: [id, user_id, name, status, created_at, updated_at]
+      required: [id, user_id, name, status, privacy_mode, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         user_id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string}
         status: {type: string, enum: [active, archived, deleted]}
+        privacy_mode: {type: string, enum: [local_only, provider_allowed, project_default]}
         workflow_state: {type: string, enum: [draft, explore, develop, ready_for_review, approved, final]}
         final_iteration_id: {type: string, format: uuid}
         created_at: {type: string, format: date-time}
@@ -2738,6 +2739,7 @@ components:
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string, maxLength: 2000}
         status: {type: string, enum: [active, archived, deleted]}
+        privacy_mode: {type: string, enum: [local_only, provider_allowed, project_default]}
     CreativeBrief:
       type: object
       required: [id, project_id, user_id, version, title, goal, must_have, avoid, required_elements, constraints, success_criteria, status, created_at, updated_at]
