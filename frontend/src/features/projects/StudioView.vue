@@ -1,4 +1,4 @@
-<!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline -->
+<!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/html-indent -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
@@ -462,14 +462,6 @@ async function loadRecipes() {
 function selectRecipe() {
   const defaults = selectedRecipe.value?.version?.default_parameters ?? {}
   recipeParameters.value = { ...defaults }
-}
-
-function recipeParameterValue(name: string): unknown {
-  return recipeParameters.value[name]
-}
-
-function setRecipeParameter(name: string, value: unknown) {
-  recipeParameters.value = { ...recipeParameters.value, [name]: value }
 }
 
 async function createGeneration() {
@@ -1002,6 +994,7 @@ onMounted(async () => {
   try {
     await loadStudio()
     await loadLibraries()
+    await loadRecipes()
     const compositionIteration = iterations.value.find(item => item.type === 'composition')
     if (compositionIteration) await loadComposition(compositionIteration.id)
     void startProjectEvents()
