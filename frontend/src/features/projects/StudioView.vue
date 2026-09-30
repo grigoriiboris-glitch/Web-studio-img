@@ -477,7 +477,14 @@ async function createGeneration() {
   error.value = null
   try {
     const created = await generationsApi.create(projectId(), {
-      prompt: generationForm.value.prompt.trim(),
+      prompt: const generationPayload = {
+    ...generationPayload,
+    parameters: { ...(generationForm.value.parameters ?? {}), ...recipeParameters.value },
+    recipe_id: selectedRecipeId.value || undefined,
+    recipe_version: selectedRecipe.value?.current_version,
+  }
+
+generationForm.value.prompt.trim(),
       negative_prompt: generationForm.value.negative_prompt.trim() || undefined,
       aspect_ratio: generationForm.value.aspect_ratio,
       seed: generationForm.value.seed,
