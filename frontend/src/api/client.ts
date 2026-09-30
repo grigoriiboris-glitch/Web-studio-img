@@ -720,6 +720,85 @@ export const referencesApi = {
     apiRequest<Reference>('/projects/' + projectId + '/references/' + referenceId + '/influence', { method: 'POST', body: JSON.stringify({ target_asset_id: targetAssetId }) }),
 }
 
+
+export type AssetLibraryAssetType = 'character' | 'object' | 'product' | 'logo' | 'symbol' | 'background' | 'texture' | 'material' | 'mask' | 'image' | 'other'
+export type AssetLibraryRightsStatus = 'inherited' | 'verified' | 'unverified' | 'restricted' | 'unknown'
+export interface AssetLibraryVersion {
+  id: string
+  library_item_id: string
+  version: number
+  source_asset_id?: string
+  source_project_id?: string
+  mime_type: string
+  size: number
+  width: number
+  height: number
+  checksum: string
+  rights_snapshot: Record<string, unknown>
+  provenance: Record<string, unknown>
+  original_url?: string
+  preview_url?: string
+  thumbnail_url?: string
+  created_at: string
+}
+export interface AssetLibraryItem {
+  id: string
+  user_id: string
+  name: string
+  description?: string
+  asset_type: AssetLibraryAssetType
+  tags: string[]
+  status: 'active' | 'archived'
+  current_version: number
+  created_at: string
+  updated_at: string
+  current?: AssetLibraryVersion
+}
+export interface AssetLibraryUsage {
+  id: string
+  library_version_id: string
+  user_id: string
+  project_id: string
+  project_name?: string
+  rights_status: AssetLibraryRightsStatus
+  rights_notes?: string
+  created_at: string
+}
+export interface AssetLibrarySource {
+  id: string
+  project_id: string
+  type: string
+  mime_type: string
+  size: number
+  width: number
+  height: number
+  checksum: string
+  preview_url?: string
+  created_at: string
+}
+export const assetLibraryApi = {
+  list: (params: { q?: string; type?: AssetLibraryAssetType; tag?: string; status?: 'active' | 'archived' } = {}) => {
+    const query = new URLSearchParams()
+    if (params.q) query.set('q', params.q)
+    if (params.type) query.set('type', params.type)
+    if (params.tag) query.set('tag', params.tag)
+    if (params.status) query.set('status', params.status)
+    const suffix = query.toString() ? '?' + query.toString() : ''
+    return apiRequest<{ items: AssetLibraryItem[] }>('/library/assets' + suffix)
+  },
+  get: (itemId: string) => apiRequest<{ item: AssetLibraryItem; versions: AssetLibraryVersion[]; usage: AssetLibraryUsage[] }>('/library/assets/' + itemId),
+  create: (input: { source_asset_id: string; name: string; description?: string; asset_type: AssetLibraryAssetType; tags: string[] }) =>
+    apiRequest<AssetLibraryItem>('/library/assets', { method: 'POST', body: JSON.stringify(input) }),
+  archive: (itemId: string) => apiRequest<void>('/library/assets/' + itemId, { method: 'DELETE' }),
+  versions: (itemId: string) => apiRequest<{ versions: AssetLibraryVersion[] }>('/library/assets/' + itemId + '/versions'),
+  createVersion: (itemId: string, sourceAssetId: string) =>
+    apiRequest<AssetLibraryVersion>('/library/assets/' + itemId + '/versions', { method: 'POST', body: JSON.stringify({ source_asset_id: sourceAssetId }) }),
+  usage: (itemId: string) => apiRequest<{ usage: AssetLibraryUsage[] }>('/library/assets/' + itemId + '/usage'),
+  useInProject: (itemId: string, input: { project_id: string; version?: number; rights_status?: AssetLibraryRightsStatus; rights_notes?: string }) =>
+    apiRequest<{ usage: AssetLibraryUsage; version: AssetLibraryVersion }>('/library/assets/' + itemId + '/use', { method: 'POST', body: JSON.stringify(input) }),
+  sources: (projectId: string) => apiRequest<{ sources: AssetLibrarySource[] }>('/library/sources?project_id=' + encodeURIComponent(projectId)),
+}
+
 export const humanActionsApi = {
   list: (projectId: string) => apiRequest<{ actions: HumanAction[] }>('/projects/' + projectId + '/human-actions'),
   create: (projectId: string, input: {

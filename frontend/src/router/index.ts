@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import DashboardView from '../features/projects/DashboardView.vue'
 import StudioView from '../features/projects/StudioView.vue'
 import CreativeResourcesView from '../features/projects/CreativeResourcesView.vue'
+import AssetLibraryView from '../features/library/AssetLibraryView.vue'
 import WorkflowView from '../features/projects/WorkflowView.vue'
 import VariantBoardView from '../features/projects/VariantBoardView.vue'
 
@@ -14,6 +15,7 @@ const router = createRouter({
     { path: '/projects/:projectId/resources', name: 'creative-resources', component: CreativeResourcesView },
     { path: '/projects/:projectId/workflow', name: 'project-workflow', component: WorkflowView },
     { path: '/projects/:projectId/variants', name: 'variant-board', component: VariantBoardView },
+    { path: '/library', name: 'asset-library', component: AssetLibraryView },
     { path: '/:pathMatch(.*)*', redirect: '/projects' },
   ],
 })

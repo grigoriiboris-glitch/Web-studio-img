@@ -92,7 +92,7 @@ onMounted(loadProjects)
           <strong>Web Studio</strong>
           <span>Projects</span>
         </div>
-        <el-button type="primary" @click="openCreate">New project</el-button>
+        <div class="header-actions"><RouterLink to="/library"><el-button>Asset Library</el-button></RouterLink><el-button type="primary" @click="openCreate">New project</el-button></div>
       </div>
     </el-header>
 
@@ -156,7 +156,8 @@ onMounted(loadProjects)
 .header-content,
 .card-header,
 .actions,
-.dialog-actions {
+.dialog-actions,
+.header-actions {
   display: flex;
   align-items: center;
 }
@@ -177,6 +178,8 @@ onMounted(loadProjects)
   min-height: 48px;
   color: var(--el-text-color-secondary);
 }
+
+.header-actions { gap: 8px; }
 
 .actions {
   gap: 8px;
