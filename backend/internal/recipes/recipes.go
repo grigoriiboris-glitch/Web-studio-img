@@ -250,7 +250,7 @@ func setPath(root map[string]any,path string,value any)error {
 func workflowHash(v any)(string,error){b,err:=json.Marshal(v);if err!=nil{return "",err};sum:=sha256.Sum256(b);return hex.EncodeToString(sum[:]),nil}
 func deepCopy(v map[string]any)map[string]any{b,_:=json.Marshal(v);var out map[string]any;_=json.Unmarshal(b,&out);return out}
 func uniqueStrings(in []string)[]string{seen:=map[string]bool{};out:=make([]string,0,len(in));for _,v:=range in{v=strings.TrimSpace(v);if v!=""&&!seen[v]{seen[v]=true;out=append(out,v)}};sort.Strings(out);return out}
-func decode(r *http.Request,v any)error{defer r.Body.Close();d:=json.NewDecoder(r.Body);d.DisallowUnknownFields();return d.Decode(v)}
+func decode(r *http.Request,v any)error{defer func(){ _ = r.Body.Close() }();d:=json.NewDecoder(r.Body);d.DisallowUnknownFields();return d.Decode(v)}
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
 func writeErr(w http.ResponseWriter,status int,code,message string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":message}})}
 func (h *Handler) auth(w http.ResponseWriter,r *http.Request)(uuid.UUID,uuid.UUID,bool){principal,ok:=auth.PrincipalFromContext(r.Context());if !ok{writeErr(w,401,"unauthorized","authentication required");return uuid.Nil,uuid.Nil,false};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{writeErr(w,400,"invalid_project_id","invalid project id");return uuid.Nil,uuid.Nil,false};return principal.UserID,pid,true}
