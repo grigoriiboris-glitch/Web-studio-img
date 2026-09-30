@@ -42,7 +42,7 @@ func (s *SQLStore) Get(ctx context.Context, userID, projectID uuid.UUID) (Projec
 
 func (s *SQLStore) List(ctx context.Context, userID uuid.UUID) ([]Project, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, user_id, name, description, status, created_at, updated_at
+		SELECT id, user_id, name, description, status, privacy_mode, created_at, updated_at
 		FROM projects
 		WHERE user_id = $1 AND status <> 'deleted'
 		ORDER BY updated_at DESC, id DESC
@@ -71,15 +71,14 @@ func (s *SQLStore) Update(ctx context.Context, userID, projectID uuid.UUID, name
 	if err != nil {
 		return Project{}, err
 	}
-	if err := ValidateStatus(status); err != nil {
-		return Project{}, err
-	}
+	if err := ValidateStatus(status); err != nil { return Project{}, err }
+	if err := ValidatePrivacyMode(privacyMode); err != nil { return Project{}, err }
 	return s.queryOne(ctx, `
 		UPDATE projects
-		SET name = $1, description = $2, status = $3, updated_at = now()
-		WHERE id = $4 AND user_id = $5 AND status <> 'deleted'
-		RETURNING id, user_id, name, description, status, created_at, updated_at
-	`, name, description, status, projectID, userID)
+		SET name = $1, description = $2, status = $3, privacy_mode = $4, updated_at = now()
+		WHERE id = $5 AND user_id = $6 AND status <> 'deleted'
+		RETURNING id, user_id, name, description, status, privacy_mode, created_at, updated_at
+	`, name, description, status, privacyMode, projectID, userID)
 }
 
 func (s *SQLStore) Archive(ctx context.Context, userID, projectID uuid.UUID) (Project, error) {
@@ -87,7 +86,7 @@ func (s *SQLStore) Archive(ctx context.Context, userID, projectID uuid.UUID) (Pr
 		UPDATE projects
 		SET status = 'archived', updated_at = now()
 		WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
-		RETURNING id, user_id, name, description, status, created_at, updated_at
+		RETURNING id, user_id, name, description, status, privacy_mode, created_at, updated_at
 	`, projectID, userID)
 }
 
