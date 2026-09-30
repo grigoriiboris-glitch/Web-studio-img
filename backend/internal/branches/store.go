@@ -109,15 +109,6 @@ func (s *Store) Merge(ctx context.Context,userID,projectID,targetID uuid.UUID,re
     return item,nil
 }
 
-func validateConflicts(sources []uuid.UUID,merged,target map[string]any) error {
-    if len(sources)<2{return nil}
-    seen:=map[string]string{}
-    for _,id:=range sources{_ = id}
-    for k,v:=range merged{sv:=stringify(v);if prev,ok:=seen[k];ok&&prev!=sv{return ErrMergeConflict};seen[k]=sv}
-    _=target
-    return nil
-}
-
 func (s *Store) latestDecisions(ctx context.Context,projectID,branchID uuid.UUID)(map[string]any,error){
     if _,err:=s.branch(ctx,projectID,branchID);err!=nil{return nil,err}
     var raw []byte
