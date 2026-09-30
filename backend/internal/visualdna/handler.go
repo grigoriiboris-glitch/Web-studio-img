@@ -9,10 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	_ "golang.org/x/image/webp"
@@ -347,7 +350,7 @@ func (h *Handler) loadProfileByID(ctx context.Context, userID, projectID, id uui
 	var out = map[string]any{}
 	var version int
 	var algorithmVersion, name string
-	var createdAt string
+	var createdAt time.Time
 	err := h.db.QueryRowContext(ctx,
 		"SELECT id, name, version, algorithm_version, signals, summary, source_assets, source_iterations, uncertainty, created_at "+
 			"FROM visual_dna_profiles WHERE id=$1 AND user_id=$2 AND project_id=$3",
