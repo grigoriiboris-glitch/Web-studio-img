@@ -34,6 +34,7 @@ type Influence struct {
 	Style       float64 `json:"style"`
 	Material    float64 `json:"material"`
 	Geometry    float64 `json:"geometry"`
+	Mood        float64 `json:"mood"`
 	Warning     string  `json:"warning,omitempty"`
 }
 
@@ -96,7 +97,7 @@ func (r Request) Validate() error {
 		return ErrInvalidReference
 	}
 	if r.Influence != nil {
-		for _, score := range []float64{r.Influence.Composition, r.Influence.Semantic, r.Influence.Color, r.Influence.Style, r.Influence.Material, r.Influence.Geometry} {
+		for _, score := range []float64{r.Influence.Composition, r.Influence.Semantic, r.Influence.Color, r.Influence.Style, r.Influence.Material, r.Influence.Geometry, r.Influence.Mood} {
 			if score < 0 || score > 1 { return ErrInvalidReference }
 		}
 	}
