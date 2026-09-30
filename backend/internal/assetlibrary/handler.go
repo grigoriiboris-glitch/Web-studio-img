@@ -105,7 +105,6 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
   if tag != "" {
     query += fmt.Sprintf(" AND i.tags ? $%d", arg)
     args = append(args, strings.ToLower(tag))
-    arg++
   }
   query += " ORDER BY i.updated_at DESC LIMIT 200"
 
@@ -114,7 +113,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
     writeErr(w, http.StatusInternalServerError, "library_list_failed", "could not list library assets")
     return
   }
-  defer rows.Close()
+  defer func() { _ = rows.Close() }()
 
   items := make([]Item, 0)
   for rows.Next() {
@@ -297,7 +296,7 @@ func (h *Handler) listVersions(ctx context.Context,uid,itemID uuid.UUID)([]Versi
     "SELECT v.id,v.library_item_id,v.version,v.source_asset_id,v.source_project_id,v.storage_key,v.preview_key,v.thumbnail_key,v.mime_type,v.size,v.width,v.height,v.checksum,v.rights_snapshot,v.provenance,v.created_at FROM asset_library_versions v JOIN asset_library_items i ON i.id=v.library_item_id WHERE i.id=$1 AND i.user_id=$2 ORDER BY v.version DESC",
     itemID,uid,
   )
-  if err!=nil{return nil,err};defer rows.Close()
+  if err!=nil{return nil,err};defer func() { _ = rows.Close() }()
   out:=make([]Version,0)
   for rows.Next(){
     var v Version;var sourceAsset,sourceProject uuid.NullUUID;var preview,thumb sql.NullString;var rightsRaw,provRaw []byte
@@ -379,7 +378,7 @@ func (h *Handler) listUsage(w http.ResponseWriter,r *http.Request){
 
 func (h *Handler) loadUsage(ctx context.Context,uid,itemID uuid.UUID)([]Usage,error){
   rows,err:=h.db.QueryContext(ctx,"SELECT u.id,u.library_version_id,u.user_id,u.project_id,p.name,u.rights_status,u.rights_notes,u.created_at FROM asset_library_usages u JOIN asset_library_versions v ON v.id=u.library_version_id JOIN asset_library_items i ON i.id=v.library_item_id JOIN projects p ON p.id=u.project_id WHERE i.id=$1 AND i.user_id=$2 ORDER BY u.created_at DESC",itemID,uid)
-  if err!=nil{return nil,err};defer rows.Close()
+  if err!=nil{return nil,err};defer func() { _ = rows.Close() }()
   out:=make([]Usage,0);for rows.Next(){var item Usage;if err:=rows.Scan(&item.ID,&item.LibraryVersionID,&item.UserID,&item.ProjectID,&item.ProjectName,&item.RightsStatus,&item.RightsNotes,&item.CreatedAt);err!=nil{return nil,err};out=append(out,item)}
   return out,rows.Err()
 }
@@ -388,7 +387,7 @@ func (h *Handler) listSources(w http.ResponseWriter,r *http.Request){
   uid,ok:=h.userID(r);if !ok{writeErr(w,401,"unauthorized","authentication required");return}
   projectID,err:=uuid.Parse(strings.TrimSpace(r.URL.Query().Get("project_id")));if err!=nil{writeErr(w,400,"invalid_project_id","project_id is required");return}
   rows,err:=h.db.QueryContext(r.Context(),"SELECT a.id,a.project_id,a.type,a.mime_type,a.size,a.width,a.height,a.checksum,a.preview_key,a.created_at FROM assets a JOIN projects p ON p.id=a.project_id WHERE a.project_id=$1 AND a.user_id=$2 AND p.status <> 'deleted' AND a.lifecycle_status='active' ORDER BY a.created_at DESC LIMIT 200",projectID,uid)
-  if err!=nil{writeErr(w,500,"library_sources_failed","could not list source assets");return};defer rows.Close()
+  if err!=nil{writeErr(w,500,"library_sources_failed","could not list source assets");return};defer func() { _ = rows.Close() }()
   out:=make([]SourceAsset,0)
   for rows.Next(){var item SourceAsset;var preview sql.NullString;if err:=rows.Scan(&item.ID,&item.ProjectID,&item.Type,&item.MIMEType,&item.Size,&item.Width,&item.Height,&item.Checksum,&preview,&item.CreatedAt);err!=nil{writeErr(w,500,"library_sources_failed","could not read source assets");return};if preview.Valid&&h.storage!=nil{if signed,e:=h.storage.PresignGet(r.Context(),preview.String,10*time.Minute);e==nil{item.PreviewURL=signed.URL}};out=append(out,item)}
   if err:=rows.Err();err!=nil{writeErr(w,500,"library_sources_failed","could not read source assets");return}
@@ -409,7 +408,7 @@ func (h *Handler) event(ctx context.Context,uid,itemID,versionID,projectID *uuid
 }
 
 func copyObject(ctx context.Context,p storage.StorageProvider,src,dst,contentType,checksum string) error{
-  object,info,err:=p.Get(ctx,src);if err!=nil{return err};defer object.Close()
+  object,info,err:=p.Get(ctx,src);if err!=nil{return err};defer func() { _ = object.Close() }()
   data,err:=io.ReadAll(object);if err!=nil{return err};if contentType==""{contentType=info.ContentType}
   return p.Put(ctx,dst,bytes.NewReader(data),int64(len(data)),storage.PutOptions{ContentType:contentType,Metadata:map[string]string{"sha256":checksum}})
 }
