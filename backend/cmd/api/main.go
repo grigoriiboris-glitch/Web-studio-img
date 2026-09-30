@@ -36,6 +36,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
 	imageproviders "github.com/oleg3190/Web-studio-img/backend/internal/providers"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
+	"github.com/oleg3190/Web-studio-img/backend/internal/recipes"
 	"github.com/oleg3190/Web-studio-img/backend/internal/queue"
 	"github.com/oleg3190/Web-studio-img/backend/internal/references"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
@@ -76,6 +77,7 @@ func main() {
 	var projectHandler *projects.Handler
 	var variantHandler *variants.Handler
 	var briefHandler *brief.Handler
+	var recipeHandler *recipes.Handler
 	var iterationHandler *iterations.Handler
 	var generationHandler *generation.Handler
 	var eventHandler *events.Handler
@@ -158,6 +160,8 @@ func main() {
 			logger.Error("variant handler initialization failed", "error", err)
 			os.Exit(1)
 		}
+
+		recipeHandler = recipes.NewHandler(projectDB)
 
 		briefHandler, err = brief.NewHandler(projectDB, actionStore, provenanceStore, eventStore)
 		if err != nil {
@@ -290,7 +294,7 @@ func main() {
 			}
 			generationQueue = queueClient
 			generationProvider = provider
-			generationHandler, err = generation.NewHandlerWithDependencies(generationStore, queueClient, provider, provenanceStore, eventStore)
+			generationHandler, err = generation.NewHandlerWithRecipeResolver(generationStore, queueClient, provider, provenanceStore, eventStore, recipeHandler)
 			if err != nil {
 				logger.Error("generation handler initialization failed", "error", err)
 				os.Exit(1)
@@ -321,7 +325,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservability(
 		logger, cfg.CORSOrigins, limiter, metrics,
 		projectHandler, iterationHandler, generationHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler, briefHandler, variantHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler, briefHandler, variantHandler, recipeHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
