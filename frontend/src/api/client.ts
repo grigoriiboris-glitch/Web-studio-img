@@ -85,6 +85,49 @@ export interface CreativeBrief {
 
 export type CreativeBriefInput = Omit<CreativeBrief, 'id' | 'project_id' | 'user_id' | 'version' | 'status' | 'created_at' | 'updated_at'>
 
+export type ApprovalCheckStatus = 'passed' | 'warning' | 'blocked'
+
+export interface ApprovalCheck {
+  key: string
+  label: string
+  status: ApprovalCheckStatus
+  critical: boolean
+  message: string
+}
+
+export interface ApprovalGate {
+  workflow_state: 'draft' | 'explore' | 'develop' | 'ready_for_review' | 'approved' | 'final'
+  final_iteration_id?: string
+  final_asset_id?: string
+  checks: ApprovalCheck[]
+  warnings: string[]
+  blocked: string[]
+  can_request_review: boolean
+  can_approve: boolean
+  can_finalize: boolean
+  override_required: boolean
+  approved_at?: string
+  finalized_at?: string
+}
+
+export const approvalGateApi = {
+  get: (projectId: string) =>
+    apiRequest<ApprovalGate>(`/projects/${projectId}/approval-gate`),
+  requestReview: (projectId: string) =>
+    apiRequest<ApprovalGate>(`/projects/${projectId}/approval-gate/review`, { method: 'POST' }),
+  approve: (projectId: string) =>
+    apiRequest<ApprovalGate>(`/projects/${projectId}/approval-gate/approve`, { method: 'POST' }),
+  approveComposition: (projectId: string) =>
+    apiRequest<ApprovalGate>(`/projects/${projectId}/approval-gate/composition/approve`, { method: 'POST' }),
+  finalize: (projectId: string, input: { override_reason?: string; override_checks?: string[] }) =>
+    apiRequest<ApprovalGate>(`/projects/${projectId}/approval-gate/finalize`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  revision: (projectId: string) =>
+    apiRequest<ApprovalGate>(`/projects/${projectId}/approval-gate/revision`, { method: 'POST' }),
+}
+
 export const creativeBriefApi = {
   current: (projectId: string) =>
     apiRequest<CreativeBrief>('/projects/' + projectId + '/brief'),
@@ -634,6 +677,7 @@ export interface CreationExport {
   project_id: string
   user_id: string
   final_asset_id: string
+  final_iteration_id?: string
   status: 'running' | 'completed' | 'failed'
   artifacts: Record<string, string>
   manifest: Record<string, unknown>
