@@ -14,6 +14,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/brief"
+	"github.com/oleg3190/Web-studio-img/backend/internal/branches"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assistant"
 	"github.com/oleg3190/Web-studio-img/backend/internal/composition"
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
@@ -75,6 +76,7 @@ func main() {
 
 	limiter := security.NewRateLimiter(cfg.RateLimit, cfg.RateWindow)
 	var projectHandler *projects.Handler
+	var branchHandler *branches.Handler
 	var variantHandler *variants.Handler
 	var briefHandler *brief.Handler
 	var recipeHandler *recipes.Handler
@@ -124,6 +126,11 @@ func main() {
 			logger.Error("project store initialization failed", "error", err)
 			os.Exit(1)
 		}
+		branchStore, err := branches.NewStore(projectDB)
+		if err != nil { logger.Error("branch store initialization failed", "error", err); os.Exit(1) }
+		branchHandler, err = branches.NewHandler(branchStore, eventStore, provenanceStore)
+		if err != nil { logger.Error("branch handler initialization failed", "error", err); os.Exit(1) }
+
 		iterationStore, err := iterations.NewSQLStore(projectDB)
 		if err != nil {
 			logger.Error("iteration store initialization failed", "error", err)
@@ -324,7 +331,7 @@ func main() {
 
 	api := httpapi.NewServerWithStudioAndObservability(
 		logger, cfg.CORSOrigins, limiter, metrics,
-		projectHandler, iterationHandler, generationHandler,
+		projectHandler, iterationHandler, generationHandler, branchHandler,
 		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler, briefHandler, variantHandler, recipeHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
