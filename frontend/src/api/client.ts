@@ -223,6 +223,9 @@ export interface Variant {
   favorite: boolean
   compare_selected: boolean
   reject_reason: string[]
+  reject_comment?: string
+  reject_severity?: 'low' | 'medium' | 'high'
+  reject_reason_skipped: boolean
   created_at: string
   updated_at: string
   source?: VariantSource
@@ -266,12 +269,19 @@ export const variantBoardApi = {
       favorite?: boolean
       compare_selected?: boolean
       reject_reason?: string[]
+      reject_comment?: string
+      reject_severity?: 'low' | 'medium' | 'high'
+      skip_reason?: boolean
     },
   ) =>
     apiRequest<Variant>(
       `/projects/${projectId}/variant-sets/${setId}/variants/${variantId}`,
       { method: 'PATCH', body: JSON.stringify(input) },
     ),
+  rejectionSummary: (projectId: string) =>
+    apiRequest<RejectReasonSummary>(`/projects/${projectId}/variant-rejection-summary`),
+  rejectionTimeline: (projectId: string) =>
+    apiRequest<{ items: RejectTimelineItem[] }>(`/projects/${projectId}/variant-rejection-timeline`),
   createIteration: (projectId: string, setId: string, variantIds: string[], title?: string) =>
     apiRequest<{ iteration_id: string; title: string; description: string }>(
       `/projects/${projectId}/variant-sets/${setId}/iterations`,
@@ -281,6 +291,21 @@ export const variantBoardApi = {
 
 
 
+
+export interface RejectReasonSummary {
+  rejected_count: number
+  reasons: Array<{ reason: string; count: number; percent: number }>
+}
+
+export interface RejectTimelineItem {
+  id: string
+  version: number
+  action_type: string
+  payload?: Record<string, unknown>
+  old_state?: Record<string, unknown>
+  new_state?: Record<string, unknown>
+  created_at: string
+}
 
 export type ProjectEvent = {
   id: number
