@@ -22,7 +22,7 @@ func (f *fakeStore) Create(_ context.Context, userID uuid.UUID, name string, des
 	if err != nil {
 		return Project{}, err
 	}
-	project := Project{ID: uuid.New(), UserID: userID, Name: name, Description: description, Status: StatusActive, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	project := Project{ID: uuid.New(), UserID: userID, Name: name, Description: description, Status: StatusActive, PrivacyMode: PrivacyProjectDefault, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	f.items = append(f.items, project)
 	return project, nil
 }
@@ -46,7 +46,7 @@ func (f *fakeStore) List(_ context.Context, userID uuid.UUID) ([]Project, error)
 	return items, nil
 }
 
-func (f *fakeStore) Update(_ context.Context, userID, projectID uuid.UUID, name string, description *string, status Status) (Project, error) {
+func (f *fakeStore) Update(_ context.Context, userID, projectID uuid.UUID, name string, description *string, status Status, privacyMode PrivacyMode) (Project, error) {
 	for i, item := range f.items {
 		if item.ID != projectID || item.UserID != userID || item.Status == StatusDeleted {
 			continue
@@ -57,7 +57,10 @@ func (f *fakeStore) Update(_ context.Context, userID, projectID uuid.UUID, name 
 		if err := ValidateStatus(status); err != nil {
 			return Project{}, err
 		}
-		f.items[i].Name, f.items[i].Description, f.items[i].Status = name, description, status
+		if err := ValidatePrivacyMode(privacyMode); err != nil {
+			return Project{}, err
+		}
+		f.items[i].Name, f.items[i].Description, f.items[i].Status, f.items[i].PrivacyMode = name, description, status, privacyMode
 		f.items[i].UpdatedAt = time.Now()
 		return f.items[i], nil
 	}
@@ -84,6 +87,9 @@ func TestValidateProjectInput(t *testing.T) {
 	}
 	if err := ValidateStatus(Status("broken")); !errors.Is(err, ErrInvalidProject) {
 		t.Fatal("expected invalid status rejection")
+	}
+	if err := ValidatePrivacyMode(PrivacyMode("broken")); !errors.Is(err, ErrInvalidProject) {
+		t.Fatal("expected invalid privacy mode rejection")
 	}
 }
 
