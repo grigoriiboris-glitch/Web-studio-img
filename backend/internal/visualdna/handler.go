@@ -123,7 +123,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = rows.Close() }()
 	out := make([]map[string]any, 0)
 	for rows.Next() {
-		item, err := scanProfile(rows)
+		item, err := h.scanProfile(rows)
 		if err != nil { writeError(w, http.StatusInternalServerError, "visual_dna_list_failed", err.Error()); return }
 		out = append(out, item)
 	}
