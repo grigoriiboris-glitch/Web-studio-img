@@ -2810,6 +2810,7 @@ components:
         recipe_id: {type: string, format: uuid}
         recipe_version: {type: integer, minimum: 1}
         resolved_workflow_hash: {type: string, minLength: 64, maxLength: 64}
+        resolved_reference_influence: {type: object, additionalProperties: true}
         final_parameters: {type: object, additionalProperties: true}
     GenerationInput:
       type: object
@@ -2828,6 +2829,7 @@ components:
           type: array
           maxItems: 50
           items: {type: string, format: uuid}
+        reference_influence: {type: object, additionalProperties: true}
 
     Prompt:
       type: object
@@ -2905,7 +2907,7 @@ components:
         updated_at: {type: string, format: date-time}
     ReferenceInfluence:
       type: object
-      required: [composition, semantic, color, style, material, geometry]
+      required: [composition, semantic, color, style, material, geometry, mood]
       properties:
         composition: {type: number, minimum: 0, maximum: 1}
         semantic: {type: number, minimum: 0, maximum: 1}
@@ -2913,6 +2915,7 @@ components:
         style: {type: number, minimum: 0, maximum: 1}
         material: {type: number, minimum: 0, maximum: 1}
         geometry: {type: number, minimum: 0, maximum: 1}
+        mood: {type: number, minimum: 0, maximum: 1}
         warning: {type: string}
     ReferenceInput:
       type: object
@@ -2935,6 +2938,7 @@ components:
         iteration_id: {type: string, format: uuid}
         generation_id: {type: string, format: uuid}
         usage_type: {type: string, minLength: 1, maxLength: 100}
+        role: {type: string, enum: [inspiration, composition, subject, color, material, mood]}
         influence: {$ref: '#/components/schemas/ReferenceInfluence'}
     ReferenceUsage:
       type: object
@@ -2947,6 +2951,7 @@ components:
         iteration_id: {type: string, format: uuid}
         generation_id: {type: string, format: uuid}
         usage_type: {type: string}
+        role: {type: string, enum: [inspiration, composition, subject, color, material, mood]}
         influence: {$ref: '#/components/schemas/ReferenceInfluence'}
         created_at: {type: string, format: date-time}
     ReferenceList:

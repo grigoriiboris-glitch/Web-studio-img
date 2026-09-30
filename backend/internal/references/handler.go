@@ -53,14 +53,15 @@ func (h *Handler) createUsage(w http.ResponseWriter, r *http.Request) {
 		IterationID *uuid.UUID `json:"iteration_id,omitempty"`
 		GenerationID *uuid.UUID `json:"generation_id,omitempty"`
 		UsageType string `json:"usage_type"`
+		Role string `json:"role,omitempty"`
 		Influence *Influence `json:"influence,omitempty"`
 	}
 	if err := decode(r,&in); err != nil { writeErr(w,400,"invalid_request","invalid reference usage payload"); return }
-	item, err := h.store.CreateUsage(r.Context(),u,pid,rid,UsageRequest{IterationID:in.IterationID,GenerationID:in.GenerationID,UsageType:in.UsageType,Influence:in.Influence})
+	item, err := h.store.CreateUsage(r.Context(),u,pid,rid,UsageRequest{IterationID:in.IterationID,GenerationID:in.GenerationID,UsageType:in.UsageType,Role:in.Role,Influence:in.Influence})
 	if errors.Is(err,ErrInvalidUsage) { writeErr(w,400,"invalid_reference_usage","reference usage payload is invalid"); return }
 	if errors.Is(err,ErrReferenceNotFound) || errors.Is(err,ErrUsageNotFound) { writeErr(w,404,"reference_usage_target_not_found","reference, iteration or generation not found"); return }
 	if err != nil { writeErr(w,500,"reference_usage_create_failed","could not create reference usage"); return }
-	payload := map[string]any{"reference_id":rid,"iteration_id":in.IterationID,"generation_id":in.GenerationID,"usage_type":item.UsageType,"influence":item.Influence}
+	payload := map[string]any{"reference_id":rid,"iteration_id":in.IterationID,"generation_id":in.GenerationID,"usage_type":item.UsageType,"role":item.Role,"influence":item.Influence}
 	h.record(r,pid,rid,"reference.usage.created",payload)
 	writeJSON(w,201,item)
 }

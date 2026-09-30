@@ -34,6 +34,7 @@ type Request struct {
 	AspectRatio          string
 	Parameters           map[string]any
 	ReferenceIDs         []uuid.UUID
+	ResolvedReferenceInfluence map[string]any
 	IdempotencyKey       string
 	RecipeID             *uuid.UUID
 	RecipeVersion        int
@@ -70,6 +71,7 @@ type Generation struct {
 	RecipeVersion         *int            `json:"recipe_version,omitempty"`
 	ResolvedWorkflowHash  string          `json:"resolved_workflow_hash,omitempty"`
 	ResolvedWorkflow      map[string]any  `json:"resolved_workflow,omitempty"`
+	ResolvedReferenceInfluence map[string]any `json:"resolved_reference_influence,omitempty"`
 	FinalParameters       map[string]any  `json:"final_parameters,omitempty"`
 }
 

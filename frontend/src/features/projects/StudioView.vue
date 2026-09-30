@@ -59,6 +59,10 @@ const creating = ref(false)
 const generating = ref(false)
 const savingPrompt = ref(false)
 const addingReference = ref(false)
+const savingReferenceUsage = ref(false)
+const referenceUsageGenerationId = ref('')
+const referenceUsageRole = ref<'inspiration' | 'composition' | 'subject' | 'color' | 'material' | 'mood'>('inspiration')
+const referenceUsageInfluence = ref({ composition: 0, semantic: 0, color: 0, style: 0, material: 0, geometry: 0, mood: 0 })
 const lastUploadedAsset = ref('')
 const verifying = ref(false)
 const provenanceVerified = ref<boolean | null>(null)
@@ -139,6 +143,7 @@ const referenceForm = ref({
     style: 0,
     material: 0,
     geometry: 0,
+    mood: 0,
   },
 })
 const builderText = computed(() => {
@@ -494,11 +499,16 @@ async function createGeneration() {
       aspect_ratio: generationForm.value.aspect_ratio,
       seed: generationForm.value.seed,
       parameters: { ...recipeParameters.value },
+      reference_ids: selectedReferenceId.value ? [selectedReferenceId.value] : undefined,
+      reference_influence: selectedReferenceId.value
+        ? { [selectedReferenceId.value]: references.value.find(item => item.id === selectedReferenceId.value)?.influence ?? {} }
+        : undefined,
       recipe_id: selectedRecipeId.value || undefined,
       recipe_version: selectedRecipe.value?.current_version,
     }
   const created = await generationsApi.create(projectId(), generationPayload, crypto.randomUUID())
     generations.value = [created, ...generations.value.filter(item => item.id !== created.id)]
+    referenceUsageGenerationId.value = created.id
     generationForm.value = { prompt: '', negative_prompt: '', aspect_ratio: '1:1', seed: undefined }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not queue generation'
@@ -900,6 +910,41 @@ async function handleSketchImported(payload: {
   }
 }
 
+async function saveReferenceUsage() {
+  if (!selectedReferenceId.value) {
+    error.value = 'Select a reference first'
+    return
+  }
+  if (!referenceUsageGenerationId.value) {
+    error.value = 'Select a generation first'
+    return
+  }
+  savingReferenceUsage.value = true
+  error.value = null
+  try {
+    await referencesApi.createUsage(projectId(), selectedReferenceId.value, {
+      generation_id: referenceUsageGenerationId.value,
+      usage_type: 'generation',
+      role: referenceUsageRole.value,
+      influence: { ...referenceUsageInfluence.value },
+    })
+    const generation = generations.value.find(item => item.id === referenceUsageGenerationId.value)
+    if (generation) {
+      generation.resolved_reference_influence = {
+        ...(generation.resolved_reference_influence ?? {}),
+        [selectedReferenceId.value]: {
+          ...referenceUsageInfluence.value,
+          role: referenceUsageRole.value,
+        },
+      }
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not save reference influence'
+  } finally {
+    savingReferenceUsage.value = false
+  }
+}
+
 async function addReference() {
   addingReference.value = true
   error.value = null
@@ -927,7 +972,7 @@ async function addReference() {
       user_owned: false,
       sha256: '',
       notes: '',
-      influence: { composition: 0, semantic: 0, color: 0, style: 0, material: 0, geometry: 0 },
+      influence: { composition: 0, semantic: 0, color: 0, style: 0, material: 0, geometry: 0, mood: 0 },
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not add reference'
@@ -1296,7 +1341,8 @@ onUnmounted(() => {
                   Co {{ scope.row.influence.color.toFixed(1) }},
                   St {{ scope.row.influence.style.toFixed(1) }},
                   M {{ scope.row.influence.material.toFixed(1) }},
-                  G {{ scope.row.influence.geometry.toFixed(1) }}
+                  G {{ scope.row.influence.geometry.toFixed(1) }},
+                  Mood {{ (scope.row.influence.mood ?? 0).toFixed(1) }}
                 </span>
                 <span v-else>Not analysed</span>
                 <el-alert v-if="scope.row.influence?.warning" :title="scope.row.influence.warning" type="warning" :closable="false" />
@@ -1312,6 +1358,57 @@ onUnmounted(() => {
               <template #default="scope"><el-button link type="danger" @click="removeReference(scope.row)">Remove</el-button></template>
             </el-table-column>
           </el-table>
+        </el-card>
+
+        <el-card v-if="references.length" class="create-card">
+          <template #header>Reference Influence — per generation</template>
+          <el-alert
+            title="Influence is stored on the specific reference usage. It does not change the reference globally. User approval is required before generation influence is applied."
+            type="info"
+            :closable="false"
+            style="margin-bottom: 12px"
+          />
+          <el-space wrap>
+            <el-select v-model="referenceUsageGenerationId" filterable placeholder="Generation" style="width: 320px">
+              <el-option
+                v-for="item in generations"
+                :key="'usage-generation-' + item.id"
+                :value="item.id"
+                :label="item.prompt.slice(0, 70) + ' · ' + item.status"
+              />
+            </el-select>
+            <el-select v-model="selectedReferenceId" filterable placeholder="Reference" style="width: 320px">
+              <el-option
+                v-for="item in references"
+                :key="'usage-reference-' + item.id"
+                :value="item.id"
+                :label="item.source_type + ' · ' + item.id.slice(0, 8)"
+              />
+            </el-select>
+            <el-select v-model="referenceUsageRole" placeholder="Role" style="width: 180px">
+              <el-option label="Inspiration" value="inspiration" />
+              <el-option label="Composition" value="composition" />
+              <el-option label="Subject" value="subject" />
+              <el-option label="Color" value="color" />
+              <el-option label="Material" value="material" />
+              <el-option label="Mood" value="mood" />
+            </el-select>
+          </el-space>
+          <el-row :gutter="12" style="margin-top: 12px">
+            <el-col v-for="channel in (['composition','semantic','color','style','material','geometry','mood'] as const)" :key="'usage-' + channel" :span="8">
+              <el-form-item :label="channel">
+                <el-slider v-model="referenceUsageInfluence[channel]" :min="0" :max="1" :step="0.01" show-input />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-button
+            type="primary"
+            :loading="savingReferenceUsage"
+            :disabled="!selectedReferenceId || !referenceUsageGenerationId"
+            @click="saveReferenceUsage"
+          >
+            Save approved influence
+          </el-button>
         </el-card>
 
         <el-card v-if="generations.length" class="timeline-card">
