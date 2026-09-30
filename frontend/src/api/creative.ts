@@ -94,6 +94,72 @@ export const dnaApi = {
     apiRequest<Record<string, unknown>>('/projects/' + projectId + '/visual-language/' + id + '/apply', { method: 'POST' }),
 }
 
+
+export interface VisualDNASource {
+  id: string
+  iteration_id?: string
+  checksum: string
+  mime_type: string
+  size: number
+  width: number
+  height: number
+}
+
+export interface VisualDNAProfile {
+  id: string
+  name: string
+  version: number
+  algorithm_version: string
+  signals: Record<string, unknown>
+  summary: {
+    recurring: string[]
+    emerging: string[]
+    outliers: Array<{ asset_id: string; distance: number; reason: string }>
+    confidence: number
+    uncertainty: string
+  }
+  source_assets: string[]
+  source_iterations: string[]
+  uncertainty: Record<string, unknown>
+  created_at: string
+}
+
+export interface VisualDNAComparison {
+  profile_id: string
+  target: Record<string, unknown>
+  comparison: Array<{
+    signal: string
+    profile_mean: number
+    asset_value: number
+    delta: number
+    interpretation: string
+  }>
+  algorithm_version: string
+  uncertainty: string
+}
+
+export const visualDnaApi = {
+  sources: (projectId: string) =>
+    apiRequest<{ sources: VisualDNASource[] }>('/projects/' + projectId + '/visual-dna/sources'),
+  list: (projectId: string) =>
+    apiRequest<{ profiles: VisualDNAProfile[] }>('/projects/' + projectId + '/visual-dna'),
+  analyze: (projectId: string, input: { asset_ids?: string[]; iteration_ids?: string[] } = {}) =>
+    apiRequest<VisualDNAProfile>('/projects/' + projectId + '/visual-dna/analyze', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  get: (projectId: string, profileId: string) =>
+    apiRequest<VisualDNAProfile>('/projects/' + projectId + '/visual-dna/profiles/' + profileId),
+  recompute: (projectId: string, profileId: string) =>
+    apiRequest<VisualDNAProfile>('/projects/' + projectId + '/visual-dna/profiles/' + profileId + '/recompute', { method: 'POST' }),
+  compare: (projectId: string, profileId: string, assetId: string) =>
+    apiRequest<VisualDNAComparison>('/projects/' + projectId + '/visual-dna/profiles/' + profileId + '/compare?asset_id=' + encodeURIComponent(assetId)),
+  suggestion: (projectId: string, profileId: string) =>
+    apiRequest<{ automatic_prompt_mutation: false; user_must_approve: true; algorithm_version: string; suggestion: Record<string, unknown> }>(
+      '/projects/' + projectId + '/visual-dna/profiles/' + profileId + '/suggestion',
+    ),
+}
+
 export interface RightsItem {
   id: string
   user_id: string
