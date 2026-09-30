@@ -309,6 +309,8 @@ func (h *Handler) createProfile(ctx context.Context, userID, projectID uuid.UUID
 	rawSummary, err := json.Marshal(summary); if err != nil { return nil, err }
 	rawAssets, err := json.Marshal(sourceAssets); if err != nil { return nil, err }
 	rawIterations, err := json.Marshal(iterations); if err != nil { return nil, err }
+	uncertainty := map[string]any{"summary": summary["uncertainty"], "algorithm_version": AlgorithmVersion}
+	rawUncertainty, err := json.Marshal(uncertainty); if err != nil { return nil, err }
 	var version int
 	if err := h.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0)+1 FROM visual_dna_profiles WHERE user_id=$1 AND project_id=$2", userID, projectID).Scan(&version); err != nil { return nil, err }
 	var id uuid.UUID
