@@ -116,7 +116,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusBadRequest, "invalid_request", "invalid project payload")
 		return
 	}
-	project, err := h.store.Update(r.Context(), userID, projectID, input.Name, input.Description, Status(input.Status))
+	privacyMode := PrivacyMode(input.PrivacyMode)
+	if privacyMode == "" { privacyMode = PrivacyProjectDefault }
+	project, err := h.store.Update(r.Context(), userID, projectID, input.Name, input.Description, Status(input.Status), privacyMode)
 	if errors.Is(err, ErrInvalidProject) {
 		writeProjectError(w, http.StatusBadRequest, "invalid_project", "project payload is invalid")
 		return
@@ -161,6 +163,7 @@ type projectInput struct {
 	Name string `json:"name"`
 	Description *string `json:"description"`
 	Status string `json:"status,omitempty"`
+	PrivacyMode string `json:"privacy_mode,omitempty"`
 }
 
 func decodeProjectInput(r *http.Request, input *projectInput) error {
