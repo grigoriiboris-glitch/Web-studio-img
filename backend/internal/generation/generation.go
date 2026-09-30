@@ -26,15 +26,20 @@ var (
 )
 
 type Request struct {
-	ProjectID      uuid.UUID
-	IterationID    *uuid.UUID
-	Prompt         string
-	NegativePrompt string
-	Seed           *int64
-	AspectRatio    string
-	Parameters     map[string]any
-	ReferenceIDs   []uuid.UUID
-	IdempotencyKey string
+	ProjectID            uuid.UUID
+	IterationID          *uuid.UUID
+	Prompt               string
+	NegativePrompt       string
+	Seed                 *int64
+	AspectRatio          string
+	Parameters           map[string]any
+	ReferenceIDs         []uuid.UUID
+	IdempotencyKey       string
+	RecipeID             *uuid.UUID
+	RecipeVersion        int
+	ResolvedWorkflow     map[string]any
+	ResolvedWorkflowHash string
+	FinalParameters      map[string]any
 }
 
 type Generation struct {
@@ -61,6 +66,26 @@ type Generation struct {
 	CompletedAt           *time.Time     `json:"completed_at,omitempty"`
 	ProviderDeterministic bool           `json:"provider_deterministic"`
 	DeterminismNote       string         `json:"determinism_note"`
+	RecipeID              *uuid.UUID      `json:"recipe_id,omitempty"`
+	RecipeVersion         *int            `json:"recipe_version,omitempty"`
+	ResolvedWorkflowHash  string          `json:"resolved_workflow_hash,omitempty"`
+	ResolvedWorkflow      map[string]any  `json:"resolved_workflow,omitempty"`
+	FinalParameters       map[string]any  `json:"final_parameters,omitempty"`
+}
+
+type RecipeResolution struct {
+	RecipeID             uuid.UUID
+	Version              int
+	Provider             string
+	Model                string
+	ModelVersion         string
+	ResolvedWorkflow     map[string]any
+	ResolvedWorkflowHash string
+	FinalParameters      map[string]any
+}
+
+type RecipeResolver interface {
+	Resolve(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, int, map[string]any) (RecipeResolution, error)
 }
 
 type Image struct {
