@@ -335,6 +335,49 @@ paths:
                         created_at: {type: string, format: date-time}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/branches:
+    get:
+      operationId: listBranches
+      summary: List creative branches
+      parameters: [{name: project_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Branches, content: {application/json: {schema: {type: object, required: [branches], properties: {branches: {type: array, items: {$ref: '#/components/schemas/Branch'}}}}}}}
+    post:
+      operationId: createBranch
+      summary: Create a creative branch
+      parameters: [{name: project_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BranchInput'}}}}
+      responses: {'201': {description: Branch, content: {application/json: {schema: {$ref: '#/components/schemas/Branch'}}}}}
+  /projects/{project_id}/branches/{branch_id}:
+    patch:
+      operationId: updateBranch
+      summary: Rename or archive a branch
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: branch_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BranchUpdate'}}}}
+      responses: {'200': {description: Branch, content: {application/json: {schema: {$ref: '#/components/schemas/Branch'}}}}}
+  /projects/{project_id}/branches/compare:
+    get:
+      operationId: compareBranches
+      summary: Compare persisted branch decisions
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: source_branch_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: target_branch_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses: {'200': {description: Branch differences, content: {application/json: {schema: {type: object, required: [differences], properties: {differences: {type: array, items: {$ref: '#/components/schemas/BranchDifference'}}}}}}}}
+  /projects/{project_id}/branches/{branch_id}/merge:
+    post:
+      operationId: mergeBranchDecisions
+      summary: Create an immutable target iteration from selected branch decisions
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: branch_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BranchMergeInput'}}}}
+      responses:
+        '201': {description: Merged iteration, content: {application/json: {schema: {$ref: '#/components/schemas/Iteration'}}}}
+        '409': {description: Merge conflict}
+
   /projects/{project_id}/iterations:
     parameters:
       - name: project_id
@@ -2169,6 +2212,47 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   schemas:
+    Branch:
+      type: object
+      required: [id, project_id, name, status, created_by, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 200}
+        parent_iteration_id: {type: string, format: uuid}
+        status: {type: string, enum: [active, archived]}
+        created_by: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    BranchInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        parent_iteration_id: {type: string, format: uuid}
+    BranchUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, status]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        status: {type: string, enum: [active, archived]}
+    BranchDifference:
+      type: object
+      required: [dimension, different]
+      properties:
+        dimension: {type: string}
+        source: {}
+        target: {}
+        different: {type: boolean}
+    BranchMergeInput:
+      type: object
+      additionalProperties: false
+      required: [source_branch_ids, decisions]
+      properties:
+        source_branch_ids: {type: array, minItems: 1, items: {type: string, format: uuid}}
+        decisions: {type: object, additionalProperties: true}
 
     StyleProfile:
       type: object

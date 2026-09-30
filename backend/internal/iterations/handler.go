@@ -1,6 +1,7 @@
 package iterations
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -59,7 +60,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeIterationError(w, http.StatusConflict, "final_iteration_managed_by_gate", "final iterations must be created through the Approval Gate")
 		return
 	}
-	item, err := h.store.Create(r.Context(), userID, projectID, input.ParentIterationID, input.Type, input.Title, input.Description)
+var item Iteration
+	if creator, ok := h.store.(interface {
+		CreateWithDecisions(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *uuid.UUID, Type, *string, *string, map[string]any, []uuid.UUID) (Iteration, error)
+	}); ok && input.BranchID != nil {
+		item, err = creator.CreateWithDecisions(r.Context(), userID, projectID, *input.BranchID, input.ParentIterationID, input.Type, input.Title, input.Description, input.Decisions, nil)
+	} else {
+		item, err = h.store.Create(r.Context(), userID, projectID, input.ParentIterationID, input.Type, input.Title, input.Description)
+	}
 	if errors.Is(err, ErrInvalidIteration) { writeIterationError(w, http.StatusBadRequest, "invalid_iteration", "iteration payload is invalid"); return }
 	if errors.Is(err, ErrIterationNotFound) { writeIterationError(w, http.StatusNotFound, "iteration_parent_or_project_not_found", "project or parent iteration not found"); return }
 	if err != nil { writeIterationError(w, http.StatusInternalServerError, "iteration_create_failed", "could not create iteration"); return }
@@ -109,9 +117,11 @@ func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
 
 type iterationInput struct {
 	ParentIterationID *uuid.UUID `json:"parent_iteration_id,omitempty"`
+	BranchID *uuid.UUID `json:"branch_id,omitempty"`
 	Type Type `json:"type"`
 	Title *string `json:"title,omitempty"`
 	Description *string `json:"description,omitempty"`
+	Decisions map[string]any `json:"decisions,omitempty"`
 }
 
 func decodeIterationInput(r *http.Request, input *iterationInput) error {
