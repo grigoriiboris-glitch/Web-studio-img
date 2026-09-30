@@ -68,7 +68,7 @@ func (h *Handler) getApprovalGate(w http.ResponseWriter, r *http.Request) {
     if !ok { return }
     gate, err := h.evaluateApprovalGate(r.Context(), userID, projectID)
     if err != nil { workflowError(w, 500, "approval_gate_failed", "could not evaluate approval checklist"); return }
-    writeJSON(w, 200, gate)
+    jsonOut(w, 200, gate)
 }
 
 func (h *Handler) requestReview(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +95,7 @@ func (h *Handler) requestReview(w http.ResponseWriter, r *http.Request) {
     gate.CanRequestReview = false
     gate.CanApprove = len(gate.Blocked) == 0
     gate.CanFinalize = false
-    writeJSON(w, 200, gate)
+    jsonOut(w, 200, gate)
 }
 
 func (h *Handler) approveProject(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +124,7 @@ func (h *Handler) approveProject(w http.ResponseWriter, r *http.Request) {
     gate.CanRequestReview = false
     gate.CanApprove = false
     gate.CanFinalize = len(gate.Blocked) == 0
-    writeJSON(w, 200, gate)
+    jsonOut(w, 200, gate)
 }
 
 func (h *Handler) approveComposition(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +141,7 @@ func (h *Handler) approveComposition(w http.ResponseWriter, r *http.Request) {
         map[string]any{"composition_action": oldAction}, map[string]any{"composition_action": "COMPOSITION_APPROVED"})
     gate, err := h.evaluateApprovalGate(r.Context(), userID, projectID)
     if err != nil { workflowError(w, 500, "approval_gate_failed", "could not re-evaluate checklist"); return }
-    writeJSON(w, 200, gate)
+    jsonOut(w, 200, gate)
 }
 
 func (h *Handler) finalizeProject(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +195,7 @@ func (h *Handler) finalizeProject(w http.ResponseWriter, r *http.Request) {
     if err != nil { workflowError(w, 500, "approval_gate_failed", "final state was created but checklist reload failed"); return }
     gate.FinalIterationID = &finalIterationID
     gate.FinalAssetID = &assetID
-    writeJSON(w, 201, gate)
+    jsonOut(w, 201, gate)
 }
 
 func (h *Handler) createRevision(w http.ResponseWriter, r *http.Request) {
@@ -218,7 +218,7 @@ func (h *Handler) createRevision(w http.ResponseWriter, r *http.Request) {
         map[string]any{"workflow_state": workflowDevelop, "final_iteration_id": nil})
     gate, err := h.evaluateApprovalGate(r.Context(), userID, projectID)
     if err != nil { workflowError(w, 500, "approval_gate_failed", "revision created but checklist reload failed"); return }
-    writeJSON(w, 201, gate)
+    jsonOut(w, 201, gate)
 }
 
 func (h *Handler) evaluateApprovalGate(ctx context.Context, userID, projectID uuid.UUID) (approvalGate, error) {
