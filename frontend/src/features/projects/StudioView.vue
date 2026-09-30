@@ -1,7 +1,8 @@
 <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import {
+  await loadRecipes() RouterLink, useRoute } from 'vue-router'
 import SketchImportZone from '../../components/SketchImportZone.vue'
 import {
   generationsApi,
@@ -35,6 +36,8 @@ import {
   type AssistantAction,
   type AssistantRecommendation,
   type LibraryItem,
+  recipesApi,
+  type Recipe,
 } from '../../api/client'
 
 const route = useRoute()
@@ -104,6 +107,11 @@ const form = ref<{ type: IterationType; title: string; description: string }>({
   title: '',
   description: '',
 })
+const recipes = ref<Recipe[]>([])
+const selectedRecipeId = ref('')
+const recipeParameters = ref<Record<string, unknown>>({})
+const selectedRecipe = computed(() => recipes.value.find(recipe => recipe.id === selectedRecipeId.value) ?? null)
+
 const generationForm = ref({ prompt: '', negative_prompt: '', aspect_ratio: '1:1', seed: undefined as number | undefined })
 const promptForm = ref({
   original_text: '',
@@ -440,6 +448,28 @@ function applyAvoidConstraints() {
   generationForm.value.negative_prompt = current
     ? current + ', ' + constraints
     : constraints
+}
+
+async function loadRecipes() {
+  try {
+    const result = await recipesApi.list(projectId)
+    recipes.value = result.recipes
+  } catch {
+    recipes.value = []
+  }
+}
+
+function selectRecipe() {
+  const defaults = selectedRecipe.value?.version?.default_parameters ?? {}
+  recipeParameters.value = { ...defaults }
+}
+
+function recipeParameterValue(name: string): unknown {
+  return recipeParameters.value[name]
+}
+
+function setRecipeParameter(name: string, value: unknown) {
+  recipeParameters.value = { ...recipeParameters.value, [name]: value }
 }
 
 async function createGeneration() {
