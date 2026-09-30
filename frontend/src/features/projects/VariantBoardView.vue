@@ -521,7 +521,7 @@ onMounted(async () => {
         </div>
       </div>
     </section>
-      <div v-if="rejectDialogItem" class="dialog-backdrop" @click.self="closeReject">
+    <div v-if="rejectDialogItem" class="dialog-backdrop" @click.self="closeReject">
       <section class="reject-dialog" role="dialog" aria-modal="true" aria-labelledby="reject-title">
         <div class="panel-title">
           <div>
@@ -550,7 +550,7 @@ onMounted(async () => {
 
         <label>
           Comment
-          <textarea v-model="rejectComment" maxlength="2000" rows="4" placeholder="Например: composition too centered."></textarea>
+          <textarea v-model="rejectComment" maxlength="2000" rows="4" placeholder="Например: composition too centered." />
         </label>
 
         <label>
@@ -569,7 +569,8 @@ onMounted(async () => {
         </div>
       </section>
     </div>
-</main>
+    </div>
+  </main>
 </template>
 
 <style scoped>
