@@ -58,8 +58,8 @@ func TestBuildProfileCarriesAlgorithmAndSources(t *testing.T) {
 		values = append(values, value)
 	}
 	signals, summary := BuildProfile(values)
-	if signals["algorithm_version"] != nil {
-		t.Fatalf("unexpected top-level algorithm_version in signals")
+	if signals["algorithm_version"] != AlgorithmVersion {
+		t.Fatalf("algorithm_version = %v, want %s", signals["algorithm_version"], AlgorithmVersion)
 	}
 	brightness := signals["brightness"].(map[string]any)
 	if brightness["algorithm"] != AlgorithmVersion {
