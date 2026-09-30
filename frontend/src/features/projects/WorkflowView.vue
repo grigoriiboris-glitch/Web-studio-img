@@ -166,10 +166,6 @@ async function api(path: string, init?: RequestInit) {
   return data
 }
 
-async function refreshApprovalGate() {
-  approvalGate.value = await approvalGateApi.get(projectId)
-}
-
 async function requestReview() {
   approvalLoading.value = true
   error.value = ''
