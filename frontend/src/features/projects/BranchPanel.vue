@@ -1,5 +1,5 @@
-<!-- eslint-disable vue/singleline-html-element-content-newline, vue/max-attributes-per-line, vue/attributes-order -->
 <script setup lang="ts">
+/* eslint-disable vue/singleline-html-element-content-newline, vue/max-attributes-per-line, vue/attributes-order */
 import { computed, onMounted, ref, watch } from 'vue'
 import { branchesApi, iterationsApi, type Branch, type BranchDifference } from '../../api/client'
 
