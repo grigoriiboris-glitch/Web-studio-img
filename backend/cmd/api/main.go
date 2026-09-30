@@ -23,6 +23,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
 	"github.com/oleg3190/Web-studio-img/backend/internal/httpapi"
 	"github.com/oleg3190/Web-studio-img/backend/internal/humanactions"
+	"github.com/oleg3190/Web-studio-img/backend/internal/visualdna"
 	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
 	"github.com/oleg3190/Web-studio-img/backend/internal/library"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assetlibrary"
@@ -101,6 +102,7 @@ func main() {
 	var layersHandler *layers.Handler
 	var manualEditHandler *manualedits.Handler
 	var workflowHandler *workflow.Handler
+	var visualDNAHandler *visualdna.Handler
 	var assistantHandler *assistant.Handler
 	var assistantActionStore *assistant.Store
 	var compositionAnalyzer *composition.Analyzer
@@ -339,7 +341,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservability(
 		logger, cfg.CORSOrigins, limiter, metrics,
 		projectHandler, iterationHandler, generationHandler, branchHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler, briefHandler, variantHandler, recipeHandler, assetLibraryHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, variantHandler, recipeHandler, assetLibraryHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
