@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
-  await loadRecipes() RouterLink, useRoute } from 'vue-router'
+  RouterLink, useRoute } from 'vue-router'
 import SketchImportZone from '../../components/SketchImportZone.vue'
 import {
   generationsApi,
