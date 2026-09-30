@@ -18,7 +18,8 @@ CREATE INDEX branches_parent_iteration_idx ON branches (parent_iteration_id);
 
 ALTER TABLE iterations
     ADD COLUMN branch_id UUID REFERENCES branches(id) ON DELETE RESTRICT,
-    ADD COLUMN decisions JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ADD COLUMN decisions JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ADD COLUMN merge_sources JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE INDEX iterations_branch_created_idx ON iterations (branch_id, created_at);
 
