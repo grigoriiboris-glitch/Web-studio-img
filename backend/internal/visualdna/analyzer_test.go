@@ -12,9 +12,9 @@ func TestAnalyzeExtractsActualImageSignals(t *testing.T) {
 	for y := 0; y < 4; y++ {
 		for x := 0; x < 8; x++ {
 			if x < 4 {
-				img.SetRGBA(x, y, color.RGBA{R: 240, G: 20, B: 20, A: 255})
+				img.SetRGBA(x, y, color.RGBA{R: 255, G: 20, B: 20, A: 255})
 			} else {
-				img.SetRGBA(x, y, color.RGBA{R: 20, G: 20, B: 240, A: 255})
+				img.SetRGBA(x, y, color.RGBA{R: 255, G: 255, B: 255, A: 255})
 			}
 		}
 	}
@@ -38,7 +38,7 @@ func TestAnalyzeExtractsActualImageSignals(t *testing.T) {
 		t.Fatalf("expected geometry signal: %+v", got.Geometry)
 	}
 	if got.Lighting.Direction == "unknown" {
-		t.Fatalf("expected lighting direction signal")
+		t.Fatalf("expected lighting direction signal: %+v", got.Lighting)
 	}
 }
 
