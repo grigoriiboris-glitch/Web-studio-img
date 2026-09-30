@@ -22,7 +22,7 @@ func NewStore(db *sql.DB) (*Store, error) {
 func (s *Store) List(ctx context.Context, userID, projectID uuid.UUID) ([]Branch, error) {
     if err := s.ownedProject(ctx,userID,projectID); err != nil { return nil,err }
     rows,err:=s.db.QueryContext(ctx, `SELECT id,project_id,name,parent_iteration_id,status,created_by,created_at,updated_at FROM branches WHERE project_id=$1 ORDER BY created_at ASC,id ASC`,projectID)
-    if err!=nil{return nil,fmt.Errorf("list branches: %w",err)};defer rows.Close()
+    if err!=nil{return nil,fmt.Errorf("list branches: %w",err)};defer func() { _ = rows.Close() }()
     out:=[]Branch{}
     for rows.Next(){var b Branch;if err:=rows.Scan(&b.ID,&b.ProjectID,&b.Name,&b.ParentIterationID,&b.Status,&b.CreatedBy,&b.CreatedAt,&b.UpdatedAt);err!=nil{return nil,err};out=append(out,b)}
     return out,rows.Err()
