@@ -31,4 +31,4 @@ func(h *Handler)merge(w http.ResponseWriter,r *http.Request){u,ok:=user(r);if !o
 func(h *Handler)record(r *http.Request,u,p,e uuid.UUID,action string,payload map[string]any){if h.events!=nil{_,_=h.events.Append(r.Context(),u,p,action,"branch",e,payload)};if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u,ProjectID:p,IterationID:&e,EntityType:"branch",EntityID:e,Action:action,Payload:payload})}}
 func decode(r *http.Request,v any)bool{d:=json.NewDecoder(io.LimitReader(r.Body,1<<20));d.DisallowUnknownFields();if d.Decode(v)!=nil{return false};var extra any;return d.Decode(&extra)==io.EOF}
 func jsonOut(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
-func errJSON(w http.ResponseWriter,status,code string){jsonOut(w,status,map[string]any{"error":map[string]string{"code":code,"request_id":uuid.NewString()}})}
+func errJSON(w http.ResponseWriter,status int,code string){jsonOut(w,status,map[string]any{"error":map[string]string{"code":code,"request_id":uuid.NewString()}})}
