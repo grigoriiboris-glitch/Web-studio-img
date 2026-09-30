@@ -9,6 +9,7 @@ import {
   type CreativeBrief,
   type CreativeBriefInput,
 } from '../../api/client'
+import { allWarningsOverridden, approvalStatusClass } from './workflowApproval'
 
 const route = useRoute()
 const projectId = String(route.params.projectId)
@@ -416,7 +417,7 @@ onMounted(load)
       </div>
 
       <div v-if="approvalGate" class="approval-checklist">
-        <article v-for="check in approvalGate.checks" :key="check.key" :class="['approval-check', checkClass(check.status)]">
+        <article v-for="check in approvalGate.checks" :key="check.key" :class="['approval-check', approvalStatusClass(check.status)]">
           <div>
             <strong>{{ check.label }}</strong>
             <p>{{ check.message }}</p>
