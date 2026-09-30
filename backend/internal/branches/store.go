@@ -59,28 +59,52 @@ func (s *Store) Compare(ctx context.Context,userID,projectID,aID,bID uuid.UUID)(
 }
 
 func (s *Store) Merge(ctx context.Context,userID,projectID,targetID uuid.UUID,req MergeRequest)(iterations.Iteration,error){
-    if len(req.Sources)==0{return iterations.Iteration{},ErrMergeConflict};if err:=s.ownedProject(ctx,userID,projectID);err!=nil{return iterations.Iteration{},err}
-    target,err:=s.branch(ctx,projectID,targetID);if err!=nil{return iterations.Iteration{},err};if target.Status==StatusArchived{return iterations.Iteration{},ErrBranchArchived}
-    merged:=map[string]any{}
+    if len(req.Sources)==0{return iterations.Iteration{},ErrMergeConflict}
+    if err:=s.ownedProject(ctx,userID,projectID);err!=nil{return iterations.Iteration{},err}
+    target,err:=s.branch(ctx,projectID,targetID);if err!=nil{return iterations.Iteration{},err}
+    if target.Status==StatusArchived{return iterations.Iteration{},ErrBranchArchived}
+
+    sourceValues:=map[string]map[uuid.UUID]any{}
     for _,sourceID:=range req.Sources{
         if sourceID==targetID{return iterations.Iteration{},ErrMergeConflict}
         b,berr:=s.branch(ctx,projectID,sourceID);if berr!=nil{return iterations.Iteration{},berr}
         if b.Status==StatusArchived{return iterations.Iteration{},ErrBranchArchived}
         vals,verr:=s.latestDecisions(ctx,projectID,sourceID);if verr!=nil{return iterations.Iteration{},verr}
-        for k,v:=range vals{if _,ok:=merged[k];!ok{merged[k]=v}}
+        for dimension,value:=range vals{
+            if !IsDecisionDimension(dimension){return iterations.Iteration{},ErrMergeConflict}
+            if sourceValues[dimension]==nil{sourceValues[dimension]=map[uuid.UUID]any{}}
+            sourceValues[dimension][sourceID]=value
+        }
     }
     targetVals,err:=s.latestDecisions(ctx,projectID,targetID);if err!=nil{return iterations.Iteration{},err}
-    for k,v:=range targetVals{if _,ok:=merged[k];!ok{merged[k]=v}}
-    for k,selection:=range req.Decisions{
-        if !IsDecisionDimension(k) || selection.SourceBranchID==uuid.Nil{return iterations.Iteration{},ErrMergeConflict}
-        allowed:=false;for _,id:=range req.Sources{if id==selection.SourceBranchID{allowed=true;break}};if !allowed{return iterations.Iteration{},ErrMergeConflict}
-        vals,verr:=s.latestDecisions(ctx,projectID,selection.SourceBranchID);if verr!=nil{return iterations.Iteration{},verr}
-        value,ok:=vals[k];if !ok{return iterations.Iteration{},ErrMergeConflict};merged[k]=value
+    merged:=map[string]any{}
+    for k,v:=range targetVals{merged[k]=v}
+
+    for dimension,values:=range sourceValues{
+        unique:=map[string]bool{}
+        for _,value:=range values{unique[stringify(value)]=true}
+        if len(unique)>1{
+            selection,ok:=req.Decisions[dimension]
+            if !ok{return iterations.Iteration{},ErrMergeConflict}
+            value,exists:=values[selection.SourceBranchID]
+            if !exists{return iterations.Iteration{},ErrMergeConflict}
+            merged[dimension]=value
+            continue
+        }
+        for _,value:=range values{merged[dimension]=value;break}
     }
-    if err:=validateConflicts(req.Sources,merged,targetVals);err!=nil{return iterations.Iteration{},err}
+    for dimension,selection:=range req.Decisions{
+        if !IsDecisionDimension(dimension)||selection.SourceBranchID==uuid.Nil{return iterations.Iteration{},ErrMergeConflict}
+        values:=sourceValues[dimension];value,ok:=values[selection.SourceBranchID];if !ok{return iterations.Iteration{},ErrMergeConflict}
+        merged[dimension]=value
+    }
+
+    parentID:=(*uuid.UUID)(nil)
+    var latest uuid.UUID
+    if err:=s.db.QueryRowContext(ctx,`SELECT id FROM iterations WHERE branch_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1`,targetID).Scan(&latest);err==nil{parentID=&latest}else if !errors.Is(err,sql.ErrNoRows){return iterations.Iteration{},err}
     raw,_:=json.Marshal(merged);sourcesRaw,_:=json.Marshal(req.Sources)
     var item iterations.Iteration
-    err=s.db.QueryRowContext(ctx,`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description,decisions,merge_sources) VALUES($1,$2,(SELECT id FROM iterations WHERE branch_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1),'selection','Merge decisions',NULL,$3,$4) RETURNING id,project_id,branch_id,parent_iteration_id,type,title,description,decisions,merge_sources,created_at`,projectID,targetID,raw,sourcesRaw).Scan(&item.ID,&item.ProjectID,&item.BranchID,&item.ParentIterationID,&item.Type,&item.Title,&item.Description,&item.Decisions,&item.MergeSources,&item.CreatedAt)
+    err=s.db.QueryRowContext(ctx,`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description,decisions,merge_sources) VALUES($1,$2,$3,'selection','Merge decisions',NULL,$4,$5) RETURNING id,project_id,branch_id,parent_iteration_id,type,title,description,decisions,merge_sources,created_at`,projectID,targetID,parentID,raw,sourcesRaw).Scan(&item.ID,&item.ProjectID,&item.BranchID,&item.ParentIterationID,&item.Type,&item.Title,&item.Description,&item.Decisions,&item.MergeSources,&item.CreatedAt)
     if err!=nil{return iterations.Iteration{},fmt.Errorf("merge iteration: %w",err)}
     return item,nil
 }
