@@ -3,7 +3,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import {
+  approvalGateApi,
   creativeBriefApi,
+  type ApprovalGate,
   type CreativeBrief,
   type CreativeBriefInput,
 } from '../../api/client'
@@ -23,6 +25,10 @@ const briefVersions = ref<CreativeBrief[]>([])
 const briefLoading = ref(false)
 const briefSaving = ref(false)
 const briefApproving = ref(false)
+const approvalGate = ref<ApprovalGate | null>(null)
+const approvalLoading = ref(false)
+const overrideReason = ref('')
+const overrideChecks = ref<string[]>([])
 
 const briefForm = reactive<CreativeBriefInput>({
   title: '',
@@ -66,6 +72,15 @@ function applyBriefToForm(value: CreativeBrief | null) {
   briefForm.constraints = [...value.constraints]
   briefForm.success_criteria = [...value.success_criteria]
   briefForm.deadline = value.deadline
+}
+
+async function loadApprovalGate() {
+  try {
+    approvalGate.value = await approvalGateApi.get(projectId)
+    overrideChecks.value = approvalGate.value.warnings
+  } catch (e: any) {
+    error.value = e.message
+  }
 }
 
 async function loadBrief() {
@@ -137,7 +152,7 @@ async function load() {
   } catch (e: any) {
     error.value = e.message
   }
-  await loadBrief()
+  await Promise.all([loadBrief(), loadApprovalGate()])
 }
 
 async function api(path: string, init?: RequestInit) {
@@ -151,6 +166,78 @@ async function api(path: string, init?: RequestInit) {
   return data
 }
 
+async function refreshApprovalGate() {
+  approvalGate.value = await approvalGateApi.get(projectId)
+}
+
+async function requestReview() {
+  approvalLoading.value = true
+  error.value = ''
+  try {
+    approvalGate.value = await approvalGateApi.requestReview(projectId)
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    approvalLoading.value = false
+  }
+}
+
+async function approveProject() {
+  approvalLoading.value = true
+  error.value = ''
+  try {
+    approvalGate.value = await approvalGateApi.approve(projectId)
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    approvalLoading.value = false
+  }
+}
+
+async function approveComposition() {
+  approvalLoading.value = true
+  error.value = ''
+  try {
+    approvalGate.value = await approvalGateApi.approveComposition(projectId)
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    approvalLoading.value = false
+  }
+}
+
+async function finalizeProject() {
+  approvalLoading.value = true
+  error.value = ''
+  try {
+    approvalGate.value = await approvalGateApi.finalize(projectId, {
+      override_reason: overrideReason.value.trim() || undefined,
+      override_checks: overrideChecks.value,
+    })
+    mode.value = 'finalize'
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    approvalLoading.value = false
+  }
+}
+
+async function createRevision() {
+  approvalLoading.value = true
+  error.value = ''
+  try {
+    approvalGate.value = await approvalGateApi.revision(projectId)
+    mode.value = 'develop'
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    approvalLoading.value = false
+  }
+}
+
+function checkClass(status: string) {
+  return 'check-' + status
+}
 async function setMode(next: string) {
   try {
     policy.value = await api('/projects/' + projectId + '/mode', {
@@ -307,18 +394,66 @@ onMounted(load)
     <section>
       <h2>Mode</h2>
       <button
-        v-for="item in ['explore', 'develop', 'finalize']"
+        v-for="item in ['explore', 'develop']"
         :key="item"
         type="button"
+        :disabled="approvalGate?.workflow_state === 'final'"
         @click="setMode(item)"
       >
         {{ item }}
       </button>
+      <span v-if="approvalGate" class="workflow-state">
+        {{ approvalGate.workflow_state }}
+      </span>
       <p v-if="policy">
         {{ mode }} · max variants: {{ policy.max_variants }} · {{ policy.generation_priority }}
       </p>
     </section>
 
+    <section class="panel approval-panel">
+      <div class="section-header">
+        <div>
+          <h2>Approval / Finalize Gate</h2>
+          <p>Каждый критический пункт должен быть закрыт до Approval. Предупреждения требуют явного override.</p>
+        </div>
+        <span v-if="approvalGate" class="status">{{ approvalGate.workflow_state }}</span>
+      </div>
+
+      <div v-if="approvalGate" class="approval-checklist">
+        <article v-for="check in approvalGate.checks" :key="check.key" :class="['approval-check', checkClass(check.status)]">
+          <div>
+            <strong>{{ check.label }}</strong>
+            <p>{{ check.message }}</p>
+          </div>
+          <span class="check-status">{{ check.status }}</span>
+        </article>
+      </div>
+
+      <div v-if="approvalGate?.warnings.length" class="override-box">
+        <strong>Warnings to override before Finalize</strong>
+        <label v-for="warning in approvalGate.warnings" :key="warning" class="override-row">
+          <input v-model="overrideChecks" type="checkbox" :value="warning">
+          {{ warning }}
+        </label>
+        <label>
+          Override reason
+          <textarea v-model="overrideReason" rows="3" maxlength="2000" placeholder="Why is this warning acceptable for production?" />
+        </label>
+      </div>
+
+      <div class="actions">
+        <button v-if="approvalGate?.can_request_review" type="button" :disabled="approvalLoading" @click="requestReview">Request review</button>
+        <button v-if="approvalGate?.can_approve" type="button" :disabled="approvalLoading" @click="approveProject">Approve</button>
+        <button v-if="approvalGate?.checks.some(check => check.key === 'composition' && check.status === 'blocked')" type="button" :disabled="approvalLoading" @click="approveComposition">Approve composition</button>
+        <button v-if="approvalGate?.can_finalize" type="button" :disabled="approvalLoading || (approvalGate.warnings.length > 0 && !overrideReason.trim()) || overrideChecks.length !== approvalGate.warnings.length" @click="finalizeProject">Finalize</button>
+        <button v-if="approvalGate?.workflow_state === 'final'" type="button" :disabled="approvalLoading" @click="createRevision">Create new revision</button>
+      </div>
+
+      <p v-if="approvalGate?.final_iteration_id" class="final-info">
+        Final revision: {{ approvalGate.final_iteration_id }}
+        <span v-if="approvalGate.final_asset_id"> · asset {{ approvalGate.final_asset_id }}</span>
+      </p>
+    </section>
     <section>
       <h2>Lifecycle</h2>
       <p>Status: {{ lifecycle?.status }}</p>
@@ -350,6 +485,70 @@ onMounted(load)
 </template>
 
 <style scoped>
+.workflow-state,
+.check-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.approval-checklist {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.approval-check {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border-left: 4px solid #d0d5dd;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.approval-check p {
+  margin: 4px 0 0;
+}
+
+.approval-check.check-passed {
+  border-left-color: #12b76a;
+}
+
+.approval-check.check-warning {
+  border-left-color: #f79009;
+}
+
+.approval-check.check-blocked {
+  border-left-color: #f04438;
+}
+
+.override-box {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: #fff7ed;
+}
+
+.override-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.final-info {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
 .workflow {
   padding: 24px;
   min-height: 100vh;
