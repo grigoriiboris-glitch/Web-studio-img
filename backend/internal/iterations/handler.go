@@ -55,6 +55,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if err := decodeIterationInput(r, &input); err != nil {
 		writeIterationError(w, http.StatusBadRequest, "invalid_request", "invalid iteration payload"); return
 	}
+	if input.Type == TypeFinal {
+		writeIterationError(w, http.StatusConflict, "final_iteration_managed_by_gate", "final iterations must be created through the Approval Gate")
+		return
+	}
 	item, err := h.store.Create(r.Context(), userID, projectID, input.ParentIterationID, input.Type, input.Title, input.Description)
 	if errors.Is(err, ErrInvalidIteration) { writeIterationError(w, http.StatusBadRequest, "invalid_iteration", "iteration payload is invalid"); return }
 	if errors.Is(err, ErrIterationNotFound) { writeIterationError(w, http.StatusNotFound, "iteration_parent_or_project_not_found", "project or parent iteration not found"); return }
