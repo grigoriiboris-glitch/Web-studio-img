@@ -518,6 +518,7 @@ export interface ReferenceInfluence {
   style: number
   material: number
   geometry: number
+  mood: number
   warning?: string
 }
 
@@ -535,6 +536,19 @@ export interface Reference {
   influence?: ReferenceInfluence
   created_at: string
   updated_at: string
+}
+
+export interface ReferenceUsage {
+  id: string
+  user_id: string
+  project_id: string
+  reference_id: string
+  iteration_id?: string
+  generation_id?: string
+  usage_type: string
+  role: 'inspiration' | 'composition' | 'subject' | 'color' | 'material' | 'mood'
+  influence?: ReferenceInfluence
+  created_at: string
 }
 
 export interface HumanAction {
@@ -671,6 +685,9 @@ export const promptsApi = {
 
 export const referencesApi = {
   list: (projectId: string) => apiRequest<{ references: Reference[] }>('/projects/' + projectId + '/references'),
+  listUsage: (projectId: string, referenceId: string) => apiRequest<{ usage: ReferenceUsage[] }>('/projects/' + projectId + '/references/' + referenceId + '/usage'),
+  createUsage: (projectId: string, referenceId: string, input: { iteration_id?: string; generation_id?: string; usage_type: string; role: ReferenceUsage['role']; influence?: ReferenceInfluence }) =>
+    apiRequest<ReferenceUsage>('/projects/' + projectId + '/references/' + referenceId + '/usage', { method: 'POST', body: JSON.stringify(input) }),
   create: (projectId: string, input: {
     asset_id?: string
     source_url?: string
