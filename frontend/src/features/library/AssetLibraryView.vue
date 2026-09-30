@@ -1,4 +1,3 @@
-<!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/attributes-order, vue/html-self-closing -->
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -174,6 +173,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/attributes-order, vue/html-self-closing -->
   <el-container class="library-page">
     <el-header class="header">
       <div>
