@@ -15,6 +15,8 @@ const newName = ref('')
 const creating = ref(false)
 const merging = ref(false)
 const message = ref('')
+const decisionJson = ref('{\n  "prompt": "example",\n  "lighting": "soft"\n}')
+const savingDecision = ref(false)
 
 const activeBranches = computed(() => branches.value.filter(b => b.status === 'active'))
 const sourceBranches = computed(() => activeBranches.value.filter(b => b.id !== targetId.value))
@@ -46,6 +48,15 @@ async function createBranch() {
     const created = await branchesApi.create(props.projectId, { name: newName.value.trim(), parent_iteration_id: latestIteration(activeId.value) })
     branches.value.push(created); newName.value = ''; activeId.value = created.id; message.value = 'Branch created.'
   } catch (e) { message.value = e instanceof Error ? e.message : 'Could not create branch' } finally { creating.value = false }
+}
+async function saveDecision() {
+  savingDecision.value = true; message.value = ''
+  try {
+    const decisions = JSON.parse(decisionJson.value) as Record<string, unknown>
+    await iterationsApi.create(props.projectId, { branch_id: activeId.value, type: 'selection', title: 'Branch decision', decisions })
+    message.value = 'Decision iteration created.'
+    await load(); emit('merged')
+  } catch (e) { message.value = e instanceof Error ? e.message : 'Invalid decision JSON' } finally { savingDecision.value = false }
 }
 async function rename(branch: Branch) {
   const name = window.prompt('Branch name', branch.name)?.trim()
@@ -89,6 +100,11 @@ onMounted(load)
         </template>
       </el-table-column>
     </el-table>
+    <el-divider />
+    <el-space wrap>
+      <el-input v-model="decisionJson" type="textarea" :rows="3" style="width: 420px" aria-label="Decision JSON" />
+      <el-button type="primary" :loading="savingDecision" @click="saveDecision">Save decision iteration</el-button>
+    </el-space>
     <el-divider />
     <el-space wrap>
       <el-select v-model="sourceId" filterable placeholder="Compare source" style="width: 240px">
