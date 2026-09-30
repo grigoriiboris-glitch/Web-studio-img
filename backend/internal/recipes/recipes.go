@@ -101,7 +101,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
   uid,pid,ok:=h.auth(w,r); if !ok{return}
-  rows,err:=h.db.QueryContext(r.Context(),`SELECT id,user_id,project_id,name,description,provider,model,COALESCE(model_version,''),scope,tags,published,current_version,created_at,updated_at FROM recipes WHERE user_id=$1 AND (project_id=$2 OR scope='global') ORDER BY updated_at DESC`,uid,pid)
+  rows,err:=h.db.QueryContext(r.Context(),`SELECT id,user_id,project_id,name,description,provider,model,COALESCE(model_version,''),scope,tags,published,current_version,created_at,updated_at FROM recipes WHERE (project_id=$2 AND user_id=$1) OR (scope='global' AND published=TRUE) ORDER BY updated_at DESC`,uid,pid)
   if err!=nil{writeErr(w,500,"recipe_list_failed","could not list recipes");return}
   defer func(){_=rows.Close()}()
   out:=make([]Recipe,0)
@@ -188,13 +188,16 @@ func (h *Handler) createRecipe(ctx context.Context,uid,pid uuid.UUID,in CreateIn
   if err=tx.Commit();err!=nil{return nil,err};return h.load(ctx,uid,pid,id)
 }
 
-func (h *Handler) load(ctx context.Context,uid,pid,id uuid.UUID)(*Recipe,error) {
+func (h *Handler) load(ctx context.Context,uid,pid,id uuid.UUID,requestedVersion ...int)(*Recipe,error) {
   var x Recipe;var tags []byte
-  err:=h.db.QueryRowContext(ctx,`SELECT id,user_id,project_id,name,description,provider,model,COALESCE(model_version,''),scope,tags,preview_asset_id,published,current_version,created_at,updated_at FROM recipes WHERE id=$1 AND user_id=$2 AND (project_id=$3 OR scope='global')`,id,uid,pid).Scan(&x.ID,&x.UserID,&x.ProjectID,&x.Name,&x.Description,&x.Provider,&x.Model,&x.ModelVersion,&x.Scope,&tags,&x.PreviewAssetID,&x.Published,&x.CurrentVersion,&x.CreatedAt,&x.UpdatedAt)
+  recipeQuery := `SELECT id,user_id,project_id,name,description,provider,model,COALESCE(model_version,''),scope,tags,preview_asset_id,published,current_version,created_at,updated_at FROM recipes WHERE id=$1 AND ((user_id=$2 AND project_id=$3) OR (scope='global' AND published=TRUE))`
+  err:=h.db.QueryRowContext(ctx,recipeQuery,id,uid,pid).Scan(&x.ID,&x.UserID,&x.ProjectID,&x.Name,&x.Description,&x.Provider,&x.Model,&x.ModelVersion,&x.Scope,&tags,&x.PreviewAssetID,&x.Published,&x.CurrentVersion,&x.CreatedAt,&x.UpdatedAt)
   if errors.Is(err,sql.ErrNoRows){return nil,ErrNotFound};if err!=nil{return nil,err};_=json.Unmarshal(tags,&x.Tags)
+  version:=x.CurrentVersion;if len(requestedVersion)>0&&requestedVersion[0]>0{version=requestedVersion[0]}
   var v RecipeVersion;var wf,m,e,d []byte
-  err=h.db.QueryRowContext(ctx,`SELECT id,recipe_id,version,workflow,input_mappings,exposed_parameters,default_parameters,workflow_hash,created_by,created_at FROM recipe_versions WHERE recipe_id=$1 AND version=$2`,id,x.CurrentVersion).Scan(&v.ID,&v.RecipeID,&v.Version,&wf,&m,&e,&d,&v.WorkflowHash,&v.CreatedBy,&v.CreatedAt)
-  if err==nil{_=json.Unmarshal(wf,&v.Workflow);_=json.Unmarshal(m,&v.InputMappings);_=json.Unmarshal(e,&v.ExposedParameters);_=json.Unmarshal(d,&v.DefaultParameters);x.Version=&v}
+  err=h.db.QueryRowContext(ctx,`SELECT id,recipe_id,version,workflow,input_mappings,exposed_parameters,default_parameters,workflow_hash,created_by,created_at FROM recipe_versions WHERE recipe_id=$1 AND version=$2`,id,version).Scan(&v.ID,&v.RecipeID,&v.Version,&wf,&m,&e,&d,&v.WorkflowHash,&v.CreatedBy,&v.CreatedAt)
+  if errors.Is(err,sql.ErrNoRows){return nil,ErrNotFound};if err!=nil{return nil,err}
+  _=json.Unmarshal(wf,&v.Workflow);_=json.Unmarshal(m,&v.InputMappings);_=json.Unmarshal(e,&v.ExposedParameters);_=json.Unmarshal(d,&v.DefaultParameters);x.Version=&v
   return &x,nil
 }
 
