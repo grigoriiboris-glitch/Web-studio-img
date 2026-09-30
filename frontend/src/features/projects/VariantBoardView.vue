@@ -569,7 +569,6 @@ onMounted(async () => {
         </div>
       </section>
     </div>
-    </div>
   </main>
 </template>
 
