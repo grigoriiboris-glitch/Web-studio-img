@@ -253,7 +253,6 @@ func (h *Handler) create(w http.ResponseWriter,r *http.Request){
     uid,source.Checksum,
   ).Scan(&existing.StorageKey,&existing.PreviewKey,&existing.ThumbnailKey)
   if dedupeErr != nil && !errors.Is(dedupeErr, sql.ErrNoRows) { writeErr(w, 500, "library_dedupe_lookup_failed", "could not check library deduplication"); return }
-  if dedupeErr != nil && !errors.Is(dedupeErr, sql.ErrNoRows) { writeErr(w, 500, "library_dedupe_lookup_failed", "could not check library deduplication"); return }
   if dedupeErr==nil{reused=true;versionKey=existing.StorageKey;if existing.PreviewKey.Valid{previewKey=existing.PreviewKey.String}else{previewKey=""};if existing.ThumbnailKey.Valid{thumbKey=existing.ThumbnailKey.String}else{thumbKey=""}}
   if !reused{
     if err:=copyObject(r.Context(),h.storage,source.StorageKey,versionKey,source.MIMEType,source.Checksum);err!=nil{writeErr(w,502,"library_copy_failed","could not copy source asset");return}
@@ -333,6 +332,7 @@ func (h *Handler) createVersion(w http.ResponseWriter,r *http.Request){
   reused:=false
   var existing struct{StorageKey string;PreviewKey,ThumbnailKey sql.NullString}
   dedupeErr:=h.db.QueryRowContext(r.Context(),"SELECT v.storage_key,v.preview_key,v.thumbnail_key FROM asset_library_versions v JOIN asset_library_items i ON i.id=v.library_item_id WHERE i.user_id=$1 AND v.checksum=$2 ORDER BY v.created_at LIMIT 1",uid,source.Checksum).Scan(&existing.StorageKey,&existing.PreviewKey,&existing.ThumbnailKey)
+  if dedupeErr != nil && !errors.Is(dedupeErr, sql.ErrNoRows) { writeErr(w, 500, "library_dedupe_lookup_failed", "could not check library deduplication"); return }
   if dedupeErr==nil{reused=true;versionKey=existing.StorageKey;if existing.PreviewKey.Valid{previewKey=existing.PreviewKey.String}else{previewKey=""};if existing.ThumbnailKey.Valid{thumbKey=existing.ThumbnailKey.String}else{thumbKey=""}}
   if !reused{
     if err:=copyObject(r.Context(),h.storage,source.StorageKey,versionKey,source.MIMEType,source.Checksum);err!=nil{writeErr(w,502,"library_copy_failed","could not copy source asset");return}
