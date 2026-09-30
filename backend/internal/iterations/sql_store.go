@@ -27,7 +27,7 @@ func(s *SQLStore)resolveBranch(ctx context.Context,userID,projectID uuid.UUID,pa
 }
 func(s *SQLStore)Get(ctx context.Context,userID,id uuid.UUID)(Iteration,error){return s.getOwned(ctx,userID,id)}
 func(s *SQLStore)List(ctx context.Context,userID,projectID uuid.UUID)([]Iteration,error){
-    rows,err:=s.db.QueryContext(ctx,`SELECT i.id,i.project_id,i.branch_id,i.parent_iteration_id,i.type,i.title,i.description,i.decisions,i.merge_sources,i.created_at FROM iterations i JOIN projects p ON p.id=i.project_id WHERE i.project_id=$1 AND p.user_id=$2 AND p.status<>'deleted' ORDER BY i.created_at ASC,i.id ASC`,projectID,userID);if err!=nil{return nil,fmt.Errorf("list iterations: %w",err)};defer rows.Close();out:=[]Iteration{};for rows.Next(){v,e:=scanIteration(rows);if e!=nil{return nil,e};out=append(out,v)};return out,rows.Err()
+    rows,err:=s.db.QueryContext(ctx,`SELECT i.id,i.project_id,i.branch_id,i.parent_iteration_id,i.type,i.title,i.description,i.decisions,i.merge_sources,i.created_at FROM iterations i JOIN projects p ON p.id=i.project_id WHERE i.project_id=$1 AND p.user_id=$2 AND p.status<>'deleted' ORDER BY i.created_at ASC,i.id ASC`,projectID,userID);if err!=nil{return nil,fmt.Errorf("list iterations: %w",err)};defer func() { _ = rows.Close() }();out:=[]Iteration{};for rows.Next(){v,e:=scanIteration(rows);if e!=nil{return nil,e};out=append(out,v)};return out,rows.Err()
 }
 func(s *SQLStore)Restore(ctx context.Context,userID,id uuid.UUID)(Iteration,error){src,e:=s.getOwned(ctx,userID,id);if e!=nil{return Iteration{},e};return s.insert(ctx,src.ProjectID,src.BranchID,&src.ID,src.Type,src.Title,src.Description,src.Decisions,src.MergeSources)}
 func(s *SQLStore)getOwned(ctx context.Context,userID,id uuid.UUID)(Iteration,error){
