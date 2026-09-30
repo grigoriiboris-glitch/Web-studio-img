@@ -229,6 +229,19 @@ func rejectSecrets(value any)error {
   case []any:for _,v:=range x{if err:=rejectSecrets(v);err!=nil{return err}}};return nil
 }
 
+func workflowPathExists(root map[string]any,path string) bool {
+  if !strings.HasPrefix(path,"/") { return false }
+  parts:=strings.Split(strings.TrimPrefix(path,"/"),"/")
+  var cur any=root
+  for _,raw:=range parts {
+    part:=strings.ReplaceAll(strings.ReplaceAll(raw,"~1","/"),"~0","~")
+    m,ok:=cur.(map[string]any); if !ok { return false }
+    next,ok:=m[part]; if !ok { return false }
+    cur=next
+  }
+  return true
+}
+
 func setPath(root map[string]any,path string,value any)error {
   parts:=strings.Split(strings.TrimPrefix(path,"/"),"/");var cur any=root
   for i,part:=range parts{part=strings.ReplaceAll(strings.ReplaceAll(part,"~1","/"),"~0","~");m,ok:=cur.(map[string]any);if !ok{return errors.New("path does not point to object")};if i==len(parts)-1{if _,exists:=m[part];!exists{return fmt.Errorf("workflow path %s does not exist",path)};m[part]=value;return nil};next,ok:=m[part];if !ok{return fmt.Errorf("workflow path %s does not exist",path)};cur=next};return nil
