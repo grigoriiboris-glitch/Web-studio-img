@@ -200,6 +200,88 @@ export const generationsApi = {
 }
 
 
+export interface VariantSource {
+  generation_id: string
+  iteration_id?: string
+  asset_id?: string
+  status: GenerationStatus
+  prompt: string
+  provider: string
+  model: string
+  created_at: string
+  width?: number
+  height?: number
+}
+
+export interface Variant {
+  id: string
+  variant_set_id: string
+  generation_id: string
+  asset_id?: string
+  ordinal: number
+  decision: 'candidate' | 'kept' | 'rejected' | 'selected'
+  favorite: boolean
+  compare_selected: boolean
+  reject_reason: string[]
+  created_at: string
+  updated_at: string
+  source?: VariantSource
+}
+
+export interface VariantSet {
+  id: string
+  project_id: string
+  user_id: string
+  name: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+export const variantBoardApi = {
+  sources: (projectId: string) =>
+    apiRequest<{ sources: VariantSource[] }>(`/projects/${projectId}/variant-sources`),
+  listSets: (projectId: string) =>
+    apiRequest<{ variant_sets: VariantSet[] }>(`/projects/${projectId}/variant-sets`),
+  createSet: (projectId: string, input: { name: string; generation_ids: string[] }) =>
+    apiRequest<{ variant_set: VariantSet; variants: Variant[] }>(
+      `/projects/${projectId}/variant-sets`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  getSet: (projectId: string, setId: string) =>
+    apiRequest<{ variant_set: VariantSet; variants: Variant[] }>(
+      `/projects/${projectId}/variant-sets/${setId}`,
+    ),
+  compare: (projectId: string, setId: string, variantIds: string[]) => {
+    const query = variantIds.map(id => 'variant_id=' + encodeURIComponent(id)).join('&')
+    return apiRequest<{ variants: Variant[] }>(
+      `/projects/${projectId}/variant-sets/${setId}/compare?${query}`,
+    )
+  },
+  patchVariant: (
+    projectId: string,
+    setId: string,
+    variantId: string,
+    input: {
+      decision?: Variant['decision']
+      favorite?: boolean
+      compare_selected?: boolean
+      reject_reason?: string[]
+    },
+  ) =>
+    apiRequest<Variant>(
+      `/projects/${projectId}/variant-sets/${setId}/variants/${variantId}`,
+      { method: 'PATCH', body: JSON.stringify(input) },
+    ),
+  createIteration: (projectId: string, setId: string, variantIds: string[], title?: string) =>
+    apiRequest<{ iteration_id: string; title: string; description: string }>(
+      `/projects/${projectId}/variant-sets/${setId}/iterations`,
+      { method: 'POST', body: JSON.stringify({ variant_ids: variantIds, title }) },
+    ),
+}
+
+
+
+
 export type ProjectEvent = {
   id: number
   project_id: string

@@ -189,7 +189,10 @@ onMounted(load)
 <template>
   <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline -->
   <main class="workflow">
-    <h1>Project workflow</h1>
+    <div class="workflow-header">
+      <h1>Project workflow</h1>
+      <a class="variant-link" :href="'/projects/' + projectId + '/variants'">Variant Board</a>
+    </div>
     <p v-if="error" class="error">
       {{ error }}
     </p>

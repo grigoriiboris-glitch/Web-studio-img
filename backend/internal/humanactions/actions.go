@@ -34,7 +34,7 @@ var ErrInvalidAction = errors.New("invalid human action")
 
 var allowedActions = map[string]bool{
  "IDEA_CREATED": true, "SKETCH_IMPORTED": true, "PROMPT_EDITED": true, "PROMPT_APPROVED": true,
- "REFERENCE_ADDED": true, "REFERENCE_SELECTED": true, "VARIANT_SELECTED": true, "VARIANT_REJECTED": true,
+ "REFERENCE_ADDED": true, "REFERENCE_SELECTED": true, "VARIANT_SET_CREATED": true, "VARIANT_SELECTED": true, "VARIANT_REJECTED": true, "VARIANT_FAVORITED": true, "VARIANT_UNFAVORITED": true,
  "AI_RECOMMENDATION_REJECTED": true, "COMPOSITION_CHANGED": true,
  "MATERIAL_SELECTED": true, "TEXTURE_SELECTED": true, "MANUAL_EDIT": true,
  "MATERIAL_CREATED": true, "MATERIAL_UPDATED": true, "MATERIAL_DELETED": true,

@@ -1,0 +1,51 @@
+CREATE TABLE IF NOT EXISTS variant_sets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT variant_sets_name_not_blank CHECK (btrim(name) <> '')
+);
+
+CREATE INDEX IF NOT EXISTS variant_sets_project_created_idx
+  ON variant_sets(project_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS variants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  variant_set_id UUID NOT NULL REFERENCES variant_sets(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  generation_id UUID NOT NULL REFERENCES generations(id) ON DELETE RESTRICT,
+  asset_id UUID REFERENCES assets(id) ON DELETE RESTRICT,
+  ordinal INTEGER NOT NULL CHECK (ordinal > 0),
+  decision TEXT NOT NULL DEFAULT 'candidate',
+  favorite BOOLEAN NOT NULL DEFAULT FALSE,
+  compare_selected BOOLEAN NOT NULL DEFAULT FALSE,
+  reject_reason JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT variants_decision_check CHECK (decision IN ('candidate','kept','rejected','selected')),
+  UNIQUE(variant_set_id, ordinal),
+  UNIQUE(variant_set_id, generation_id)
+);
+
+CREATE INDEX IF NOT EXISTS variants_set_idx
+  ON variants(variant_set_id, ordinal);
+
+CREATE INDEX IF NOT EXISTS variants_project_idx
+  ON variants(project_id, created_at DESC);
+
+ALTER TABLE human_actions DROP CONSTRAINT IF EXISTS human_actions_type_check;
+ALTER TABLE human_actions ADD CONSTRAINT human_actions_type_check CHECK (
+  action_type IN (
+    'IDEA_CREATED','SKETCH_IMPORTED','PROMPT_EDITED','PROMPT_APPROVED','REFERENCE_ADDED','REFERENCE_SELECTED',
+    'VARIANT_SET_CREATED','VARIANT_SELECTED','VARIANT_REJECTED','VARIANT_FAVORITED','VARIANT_UNFAVORITED',
+    'AI_RECOMMENDATION_REJECTED','COMPOSITION_CHANGED','COMPOSITION_MUTATION_ACCEPTED','MATERIAL_SELECTED',
+    'TEXTURE_SELECTED','MANUAL_EDIT','APPROVED','EXPORT_CREATED','MATERIAL_CREATED','MATERIAL_UPDATED',
+    'MATERIAL_DELETED','TEXTURE_CREATED','TEXTURE_UPDATED','TEXTURE_DELETED','STYLE_PROFILE_CREATED',
+    'STYLE_PROFILE_UPDATED','STYLE_PROFILE_APPLIED','ASSET_DNA_CREATED','VISUAL_LANGUAGE_UPDATED',
+    'RIGHTS_UPDATED','DO_NOT_USE_UPDATED','LAYER_CREATED','LAYER_UPDATED','LAYER_DELETED','MASK_CREATED',
+    'MANUAL_EDIT_CREATED','MANUAL_EDIT_APPLIED','MANUAL_EDIT_REJECTED'
+  )
+);
