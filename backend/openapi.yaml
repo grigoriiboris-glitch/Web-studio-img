@@ -1795,6 +1795,100 @@ paths:
       responses:
         '201': {description: Visual language profile, content: {application/json: {schema: {$ref: '#/components/schemas/VisualLanguageProfile'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /projects/{project_id}/visual-dna:
+    get:
+      operationId: listVisualDNA
+      summary: List immutable Visual DNA profiles
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Visual DNA profiles, content: {application/json: {schema: {$ref: '#/components/schemas/VisualDNAProfileList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/visual-dna/sources:
+    get:
+      operationId: listVisualDNASources
+      summary: List project assets allowed for Visual DNA analysis
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Analysis sources
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources]
+                properties:
+                  sources: {type: array, items: {$ref: '#/components/schemas/VisualDNASource'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/visual-dna/analyze:
+    post:
+      operationId: analyzeVisualDNAv2
+      summary: Analyze actual image features into a new immutable Visual DNA version
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisualDNAAnalyzeInput'
+      responses:
+        '201': {description: Created profile, content: {application/json: {schema: {$ref: '#/components/schemas/VisualDNAProfile'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /projects/{project_id}/visual-dna/profiles/{profile_id}:
+    get:
+      operationId: getVisualDNA
+      summary: Get an immutable Visual DNA profile
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: profile_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Visual DNA profile, content: {application/json: {schema: {$ref: '#/components/schemas/VisualDNAProfile'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/visual-dna/profiles/{profile_id}/recompute:
+    post:
+      operationId: recomputeVisualDNA
+      summary: Recompute from the same source assets into a new version
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: profile_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '201': {description: New Visual DNA profile, content: {application/json: {schema: {$ref: '#/components/schemas/VisualDNAProfile'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /projects/{project_id}/visual-dna/profiles/{profile_id}/compare:
+    get:
+      operationId: compareVisualDNA
+      summary: Compare a Visual DNA profile with a concrete project asset
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: profile_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: asset_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Comparison, content: {application/json: {schema: {$ref: '#/components/schemas/VisualDNAComparison'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /projects/{project_id}/visual-dna/profiles/{profile_id}/suggestion:
+    get:
+      operationId: suggestVisualDNA
+      summary: Return a suggestion without changing any prompt
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: profile_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Suggestion, content: {application/json: {schema: {$ref: '#/components/schemas/VisualDNASuggestion'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
   /projects/{project_id}/visual-language/{profile_id}/apply:
     post:
       operationId: suggestVisualLanguagePrompt
@@ -2439,6 +2533,59 @@ components:
         profiles:
           type: array
           items: {$ref: '#/components/schemas/VisualLanguageProfile'}
+    VisualDNASource:
+      type: object
+      required: [id, checksum, mime_type, size, width, height]
+      properties:
+        id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        checksum: {type: string}
+        mime_type: {type: string}
+        size: {type: integer, format: int64}
+        width: {type: integer, minimum: 0}
+        height: {type: integer, minimum: 0}
+    VisualDNAAnalyzeInput:
+      type: object
+      additionalProperties: false
+      properties:
+        asset_ids: {type: array, items: {type: string, format: uuid}, maxItems: 50}
+        iteration_ids: {type: array, items: {type: string, format: uuid}, maxItems: 50}
+    VisualDNAProfile:
+      type: object
+      required: [id, name, version, algorithm_version, signals, summary, source_assets, source_iterations, uncertainty, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        version: {type: integer, minimum: 1}
+        algorithm_version: {type: string}
+        signals: {type: object, additionalProperties: true}
+        summary: {type: object, additionalProperties: true}
+        source_assets: {type: array, items: {type: string, format: uuid}}
+        source_iterations: {type: array, items: {type: string, format: uuid}}
+        uncertainty: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    VisualDNAProfileList:
+      type: object
+      required: [profiles]
+      properties:
+        profiles: {type: array, items: {$ref: '#/components/schemas/VisualDNAProfile'}}
+    VisualDNAComparison:
+      type: object
+      required: [profile_id, target, comparison, algorithm_version, uncertainty]
+      properties:
+        profile_id: {type: string, format: uuid}
+        target: {type: object, additionalProperties: true}
+        comparison: {type: array, items: {type: object, additionalProperties: true}}
+        algorithm_version: {type: string}
+        uncertainty: {type: string}
+    VisualDNASuggestion:
+      type: object
+      required: [automatic_prompt_mutation, user_must_approve, algorithm_version, suggestion]
+      properties:
+        automatic_prompt_mutation: {type: boolean, enum: [false]}
+        user_must_approve: {type: boolean, enum: [true]}
+        algorithm_version: {type: string}
+        suggestion: {type: object, additionalProperties: true}
     RightsItem:
       type: object
       required: [id, user_id, project_id, target_type, target_id, ownership, license, verification_state, created_at, updated_at]
