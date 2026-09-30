@@ -104,6 +104,7 @@ func BuildProfile(values []AssetAnalysis) (map[string]any, map[string]any) {
 	unc:="Deterministic image descriptors. Depth, material and lighting semantics are proxies; no prompt mutation is performed."
 	if len(values)==1{unc="Single source asset; recurring, emerging and outlier conclusions are not statistically stable."}
 	signals:=map[string]any{
+		"algorithm_version": AlgorithmVersion,
 		"palette":map[string]any{"value":palette,"source_assets":ids,"algorithm":AlgorithmVersion,"confidence":confidence(len(values),0),"uncertainty":unc},
 		"aspect_ratio":aspect,"brightness":brightness,"contrast":contrast,"color_temperature":temp,"saturation":sat,
 		"focal_distribution":map[string]any{"center_x":fx/float64(len(values)),"center_y":fy/float64(len(values)),"algorithm":AlgorithmVersion,"source_assets":ids,"confidence":confidence(len(values),0.1),"uncertainty":uncertainty(len(values))},
