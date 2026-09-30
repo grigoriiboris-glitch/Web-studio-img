@@ -3,6 +3,7 @@ name: debug-frontend-lint
 on:
   push:
     branches: ["feat/18-visual-dna-v2"]
+  pull_request:
 
 permissions:
   contents: read
