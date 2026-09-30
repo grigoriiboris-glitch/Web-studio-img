@@ -2443,6 +2443,8 @@ components:
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string}
         status: {type: string, enum: [active, archived, deleted]}
+        workflow_state: {type: string, enum: [draft, explore, develop, ready_for_review, approved, final]}
+        final_iteration_id: {type: string, format: uuid}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ProjectInput:
