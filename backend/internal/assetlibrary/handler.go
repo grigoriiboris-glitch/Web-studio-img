@@ -218,7 +218,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   if errors.Is(err,sql.ErrNoRows){writeErr(w,404,"library_item_not_found","library item not found");return}
   if err!=nil{writeErr(w,500,"library_update_failed","could not update library asset");return}
   if description.Valid{item.Description=&description.String};_ = json.Unmarshal(raw,&item.Tags)
-  h.event(r.Context(),uid,item.ID,nil,nil,"asset_library.updated",map[string]any{"status":item.Status})
+  h.event(r.Context(), &uid, item.ID,nil,nil,"asset_library.updated",map[string]any{"status":item.Status})
   writeJSON(w,200,item)
 }
 
@@ -228,7 +228,7 @@ func (h *Handler) archive(w http.ResponseWriter,r *http.Request){
   result,err:=h.db.ExecContext(r.Context(),"UPDATE asset_library_items SET status='archived',updated_at=now() WHERE id=$1 AND user_id=$2",itemID,uid)
   if err!=nil{writeErr(w,500,"library_archive_failed","could not archive library asset");return}
   count,_:=result.RowsAffected();if count!=1{writeErr(w,404,"library_item_not_found","library item not found");return}
-  h.event(r.Context(),uid,itemID,nil,nil,"asset_library.archived",nil)
+  h.event(r.Context(), &uid, itemID,nil,nil,"asset_library.archived",nil)
   w.WriteHeader(http.StatusNoContent)
 }
 
@@ -252,6 +252,8 @@ func (h *Handler) create(w http.ResponseWriter,r *http.Request){
     "SELECT v.storage_key,v.preview_key,v.thumbnail_key FROM asset_library_versions v JOIN asset_library_items i ON i.id=v.library_item_id WHERE i.user_id=$1 AND v.checksum=$2 ORDER BY v.created_at LIMIT 1",
     uid,source.Checksum,
   ).Scan(&existing.StorageKey,&existing.PreviewKey,&existing.ThumbnailKey)
+  if dedupeErr != nil && !errors.Is(dedupeErr, sql.ErrNoRows) { writeErr(w, 500, "library_dedupe_lookup_failed", "could not check library deduplication"); return }
+  if dedupeErr != nil && !errors.Is(dedupeErr, sql.ErrNoRows) { writeErr(w, 500, "library_dedupe_lookup_failed", "could not check library deduplication"); return }
   if dedupeErr==nil{reused=true;versionKey=existing.StorageKey;if existing.PreviewKey.Valid{previewKey=existing.PreviewKey.String}else{previewKey=""};if existing.ThumbnailKey.Valid{thumbKey=existing.ThumbnailKey.String}else{thumbKey=""}}
   if !reused{
     if err:=copyObject(r.Context(),h.storage,source.StorageKey,versionKey,source.MIMEType,source.Checksum);err!=nil{writeErr(w,502,"library_copy_failed","could not copy source asset");return}
@@ -264,7 +266,7 @@ func (h *Handler) create(w http.ResponseWriter,r *http.Request){
   if err==nil{_,err=tx.ExecContext(r.Context(),"INSERT INTO asset_library_versions(id,library_item_id,version,source_asset_id,source_project_id,storage_key,preview_key,thumbnail_key,mime_type,size,width,height,checksum,rights_snapshot,provenance) VALUES($1,$2,1,$3,$4,$5,NULLIF($6,''),NULLIF($7,''),$8,$9,$10,$11,$12,$13,$14)",versionID,itemID,source.ID,source.ProjectID,versionKey,previewKey,thumbKey,source.MIMEType,source.Size,source.Width,source.Height,source.Checksum,rightsRaw,provenanceRaw)}
   if err!=nil{_ = tx.Rollback();if !reused{cleanupKeys(h.storage,versionKey,previewKey,thumbKey)};writeErr(w,500,"library_create_failed","could not create library asset");return}
   if err:=tx.Commit();err!=nil{if !reused{cleanupKeys(h.storage,versionKey,previewKey,thumbKey)};writeErr(w,500,"library_create_failed","could not commit library asset");return}
-  h.event(r.Context(),uid,&itemID,&versionID,nil,"asset_library.created",map[string]any{"source_asset_id":source.ID})
+  h.event(r.Context(), &uid, &itemID,&versionID,nil,"asset_library.created",map[string]any{"source_asset_id":source.ID})
   version:=Version{ID:versionID,LibraryItemID:itemID,Version:1,SourceAssetID:&source.ID,SourceProjectID:&source.ProjectID,StorageKey:versionKey,MIMEType:source.MIMEType,Size:source.Size,Width:source.Width,Height:source.Height,Checksum:source.Checksum,RightsSnapshot:rights,Provenance:provenance}
   if previewKey!=""{version.PreviewKey=&previewKey};if thumbKey!=""{version.ThumbnailKey=&thumbKey};_=h.decorateVersion(r.Context(),&version)
   item:=Item{ID:itemID,UserID:uid,Name:in.Name,Description:in.Description,AssetType:in.AssetType,Tags:tags,Status:"active",CurrentVersion:1,Current:&version}
@@ -343,7 +345,7 @@ func (h *Handler) createVersion(w http.ResponseWriter,r *http.Request){
   if err==nil{_,err=tx.ExecContext(r.Context(),"UPDATE asset_library_items SET current_version=$1,updated_at=now() WHERE id=$2 AND user_id=$3",next,itemID,uid)}
   if err!=nil{_ = tx.Rollback();if !reused{cleanupKeys(h.storage,versionKey,previewKey,thumbKey)};writeErr(w,500,"library_version_create_failed","could not create library version");return}
   if err=tx.Commit();err!=nil{if !reused{cleanupKeys(h.storage,versionKey,previewKey,thumbKey)};writeErr(w,500,"library_version_create_failed","could not commit library version");return}
-  h.event(r.Context(),uid,&itemID,&versionID,&source.ProjectID,"asset_library.version_created",map[string]any{"source_asset_id":source.ID,"version":next})
+  h.event(r.Context(), &uid, &itemID,&versionID,&source.ProjectID,"asset_library.version_created",map[string]any{"source_asset_id":source.ID,"version":next})
   v:=Version{ID:versionID,LibraryItemID:itemID,Version:next,SourceAssetID:&source.ID,SourceProjectID:&source.ProjectID,StorageKey:versionKey,MIMEType:source.MIMEType,Size:source.Size,Width:source.Width,Height:source.Height,Checksum:source.Checksum,RightsSnapshot:rights,Provenance:provenance}
   if previewKey!=""{v.PreviewKey=&previewKey};if thumbKey!=""{v.ThumbnailKey=&thumbKey};_=h.decorateVersion(r.Context(),&v);writeJSON(w,201,v)
 }
@@ -363,7 +365,7 @@ func (h *Handler) useInProject(w http.ResponseWriter,r *http.Request){
   var usage Usage
   err=h.db.QueryRowContext(r.Context(),"INSERT INTO asset_library_usages(library_version_id,user_id,project_id,rights_status,rights_notes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(library_version_id,project_id) DO UPDATE SET rights_status=excluded.rights_status,rights_notes=excluded.rights_notes RETURNING id,library_version_id,user_id,project_id,rights_status,rights_notes,created_at",versionID,uid,in.ProjectID,in.RightsStatus,in.RightsNotes).Scan(&usage.ID,&usage.LibraryVersionID,&usage.UserID,&usage.ProjectID,&usage.RightsStatus,&usage.RightsNotes,&usage.CreatedAt)
   if err!=nil{writeErr(w,500,"library_use_failed","could not record project usage");return}
-  h.event(r.Context(),uid,&itemID,&versionID,&in.ProjectID,"asset_library.used_in_project",map[string]any{"version":version,"rights_status":in.RightsStatus})
+  h.event(r.Context(), &uid, &itemID,&versionID,&in.ProjectID,"asset_library.used_in_project",map[string]any{"version":version,"rights_status":in.RightsStatus})
   v:=Version{ID:versionID,LibraryItemID:itemID,Version:version,StorageKey:storageKey,MIMEType:mimeType,Size:size,Width:width,Height:height,Checksum:checksum};if previewKey.Valid{x:=previewKey.String;v.PreviewKey=&x};if thumbKey.Valid{x:=thumbKey.String;v.ThumbnailKey=&x};_=h.decorateVersion(r.Context(),&v)
   writeJSON(w,200,map[string]any{"usage":usage,"version":v})
 }
