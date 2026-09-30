@@ -218,7 +218,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   if errors.Is(err,sql.ErrNoRows){writeErr(w,404,"library_item_not_found","library item not found");return}
   if err!=nil{writeErr(w,500,"library_update_failed","could not update library asset");return}
   if description.Valid{item.Description=&description.String};_ = json.Unmarshal(raw,&item.Tags)
-  h.event(r.Context(), &uid, item.ID,nil,nil,"asset_library.updated",map[string]any{"status":item.Status})
+  h.event(r.Context(), &uid, &item.ID,nil,nil,"asset_library.updated",map[string]any{"status":item.Status})
   writeJSON(w,200,item)
 }
 
@@ -228,7 +228,7 @@ func (h *Handler) archive(w http.ResponseWriter,r *http.Request){
   result,err:=h.db.ExecContext(r.Context(),"UPDATE asset_library_items SET status='archived',updated_at=now() WHERE id=$1 AND user_id=$2",itemID,uid)
   if err!=nil{writeErr(w,500,"library_archive_failed","could not archive library asset");return}
   count,_:=result.RowsAffected();if count!=1{writeErr(w,404,"library_item_not_found","library item not found");return}
-  h.event(r.Context(), &uid, itemID,nil,nil,"asset_library.archived",nil)
+  h.event(r.Context(), &uid, &itemID,nil,nil,"asset_library.archived",nil)
   w.WriteHeader(http.StatusNoContent)
 }
 
