@@ -101,7 +101,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
   uid,pid,ok:=h.auth(w,r); if !ok{return}
-  rows,err:=h.db.QueryContext(r.Context(),`SELECT id,user_id,project_id,name,description,provider,model,COALESCE(model_version,''),scope,tags,published,current_version,created_at,updated_at FROM recipes WHERE (project_id=$2 AND user_id=$1) OR (scope='global' AND published=TRUE) ORDER BY updated_at DESC`,uid,pid)
+  rows,err:=h.db.QueryContext(r.Context(),`SELECT id,user_id,project_id,name,description,provider,model,COALESCE(model_version,''),scope,tags,published,current_version,created_at,updated_at FROM recipes WHERE (user_id=$1 AND project_id=$2) OR (user_id=$1 AND scope='global') OR (scope='global' AND published=TRUE) ORDER BY updated_at DESC`,uid,pid)
   if err!=nil{writeErr(w,500,"recipe_list_failed","could not list recipes");return}
   defer func(){_=rows.Close()}()
   out:=make([]Recipe,0)
@@ -209,8 +209,17 @@ func validateCreate(in CreateInput,pid uuid.UUID)error {
 
 func validateVersion(v VersionInput)error {
   if len(v.Workflow)==0{return errors.New("workflow is required")};if err:=rejectSecrets(v.Workflow);err!=nil{return err}
-  seen:=map[string]bool{};for _,p:=range v.ExposedParameters{if strings.TrimSpace(p.Name)==""||strings.TrimSpace(p.Path)==""{return errors.New("exposed parameters require name and path")};if seen[p.Name]{return errors.New("duplicate exposed parameter "+p.Name)};seen[p.Name]=true;if !map[string]bool{"string":true,"number":true,"integer":true,"boolean":true,"image":true,"mask":true}[p.Type]{return errors.New("unsupported parameter type "+p.Type)}}
-  for name,path:=range v.InputMappings{if strings.TrimSpace(name)==""||!strings.HasPrefix(path,"/"){return errors.New("input mapping paths must be JSON Pointer paths")}}
+  seen:=map[string]bool{}
+  for _,p:=range v.ExposedParameters{
+    if strings.TrimSpace(p.Name)==""||strings.TrimSpace(p.Path)==""{return errors.New("exposed parameters require name and path")}
+    if seen[p.Name]{return errors.New("duplicate exposed parameter "+p.Name)}
+    seen[p.Name]=true
+    if !map[string]bool{"string":true,"number":true,"integer":true,"boolean":true,"image":true,"mask":true}[p.Type]{return errors.New("unsupported parameter type "+p.Type)}
+    mappedPath,ok:=v.InputMappings[p.Name];if !ok{return fmt.Errorf("exposed parameter %s is not mapped",p.Name)}
+    if mappedPath!=p.Path{return fmt.Errorf("exposed parameter %s mapping must match path",p.Name)}
+    if !workflowPathExists(v.Workflow,mappedPath){return fmt.Errorf("exposed parameter %s path %s does not exist in workflow",p.Name,mappedPath)}
+  }
+  for name,path:=range v.InputMappings{if strings.TrimSpace(name)==""||!strings.HasPrefix(path,"/"){return errors.New("input mapping paths must be JSON Pointer paths")};if !workflowPathExists(v.Workflow,path){return fmt.Errorf("input mapping %s points to a missing workflow path",name)}}
   return nil
 }
 
