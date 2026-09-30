@@ -452,7 +452,7 @@ function applyAvoidConstraints() {
 
 async function loadRecipes() {
   try {
-    const result = await recipesApi.list(projectId)
+    const result = await recipesApi.list(projectId())
     recipes.value = result.recipes
   } catch {
     recipes.value = []
@@ -477,13 +477,14 @@ async function createGeneration() {
   error.value = null
   try {
     const generationPayload = {
-    ...generationForm.value,
-    prompt: generationForm.value.prompt.trim(),
-    negative_prompt: generationForm.value.negative_prompt.trim() || undefined,
-    parameters: { ...(generationForm.value.parameters ?? {}), ...recipeParameters.value },
-    recipe_id: selectedRecipeId.value || undefined,
-    recipe_version: selectedRecipe.value?.current_version,
-  }
+      prompt: generationForm.value.prompt.trim(),
+      negative_prompt: generationForm.value.negative_prompt.trim() || undefined,
+      aspect_ratio: generationForm.value.aspect_ratio,
+      seed: generationForm.value.seed,
+      parameters: { ...recipeParameters.value },
+      recipe_id: selectedRecipeId.value || undefined,
+      recipe_version: selectedRecipe.value?.current_version,
+    }
   const created = await generationsApi.create(projectId(), generationPayload, crypto.randomUUID())
     generations.value = [created, ...generations.value.filter(item => item.id !== created.id)]
     generationForm.value = { prompt: '', negative_prompt: '', aspect_ratio: '1:1', seed: undefined }
