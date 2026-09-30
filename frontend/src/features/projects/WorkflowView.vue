@@ -442,7 +442,7 @@ onMounted(load)
         <button v-if="approvalGate?.can_request_review" type="button" :disabled="approvalLoading" @click="requestReview">Request review</button>
         <button v-if="approvalGate?.can_approve" type="button" :disabled="approvalLoading" @click="approveProject">Approve</button>
         <button v-if="approvalGate?.checks.some(check => check.key === 'composition' && check.status === 'blocked')" type="button" :disabled="approvalLoading" @click="approveComposition">Approve composition</button>
-        <button v-if="approvalGate?.can_finalize" type="button" :disabled="approvalLoading || (approvalGate.warnings.length > 0 && !overrideReason.trim()) || overrideChecks.length !== approvalGate.warnings.length" @click="finalizeProject">Finalize</button>
+        <button v-if="approvalGate?.can_finalize" type="button" :disabled="approvalLoading || !allWarningsOverridden(approvalGate.warnings, overrideChecks, overrideReason)" @click="finalizeProject">Finalize</button>
         <button v-if="approvalGate?.workflow_state === 'final'" type="button" :disabled="approvalLoading" @click="createRevision">Create new revision</button>
       </div>
 
