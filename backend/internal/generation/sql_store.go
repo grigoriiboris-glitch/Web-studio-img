@@ -37,23 +37,24 @@ func (s *SQLStore) Create(ctx context.Context, userID uuid.UUID, req Request, pr
 	var refsRaw []byte
 	var workflowRaw []byte
 	var finalParametersRaw []byte
+	var resolvedReferenceRaw []byte
 	err = s.db.QueryRowContext(ctx, `
 		WITH owned_project AS (
 			SELECT id FROM projects WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
 		)
 		INSERT INTO generations
-			(user_id, project_id, iteration_id, provider, model, prompt, negative_prompt, seed, aspect_ratio, parameters, reference_ids, status, idempotency_key, provider_deterministic, determinism_note, recipe_id, recipe_version, resolved_workflow_hash, resolved_workflow, final_parameters)
-		SELECT $2, p.id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, 'Provider determinism is not guaranteed unless explicitly stated.', $15, NULLIF($16,0), NULLIF($17,''), $18, $19
+			(user_id, project_id, iteration_id, provider, model, prompt, negative_prompt, seed, aspect_ratio, parameters, reference_ids, status, idempotency_key, provider_deterministic, determinism_note, recipe_id, recipe_version, resolved_workflow_hash, resolved_workflow, resolved_reference_influence, final_parameters)
+		SELECT $2, p.id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, 'Provider determinism is not guaranteed unless explicitly stated.', $15, NULLIF($16,0), NULLIF($17,''), $18, $20, $19
 		FROM owned_project p
 		WHERE (SELECT count(*) FROM "references" r WHERE r.project_id=p.id AND r.id IN (SELECT value::uuid FROM jsonb_array_elements_text($11::jsonb))) = $14
 		ON CONFLICT (user_id, idempotency_key) DO NOTHING
 		RETURNING id, project_id, iteration_id, user_id, provider, model, model_version, prompt, negative_prompt,
-			seed, aspect_ratio, parameters, reference_ids, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at, provider_deterministic, determinism_note, recipe_id, recipe_version, resolved_workflow_hash, resolved_workflow, final_parameters
-	`, req.ProjectID, userID, req.IterationID, provider, model, req.Prompt, req.NegativePrompt, req.Seed, req.AspectRatio, params, referenceIDs, StatusQueued, req.IdempotencyKey, len(req.ReferenceIDs), req.RecipeID, req.RecipeVersion, req.ResolvedWorkflowHash, mustJSON(req.ResolvedWorkflow), mustJSON(req.FinalParameters)).Scan(
+			seed, aspect_ratio, parameters, reference_ids, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at, provider_deterministic, determinism_note, recipe_id, recipe_version, resolved_workflow_hash, resolved_workflow, resolved_reference_influence, final_parameters
+	`, req.ProjectID, userID, req.IterationID, provider, model, req.Prompt, req.NegativePrompt, req.Seed, req.AspectRatio, params, referenceIDs, StatusQueued, req.IdempotencyKey, len(req.ReferenceIDs), req.RecipeID, req.RecipeVersion, req.ResolvedWorkflowHash, mustJSON(req.ResolvedWorkflow), mustJSON(req.FinalParameters), mustJSON(req.ResolvedReferenceInfluence)).Scan(
 		&item.ID, &item.ProjectID, &item.IterationID, &item.UserID, &item.Provider, &item.Model, &item.ModelVersion,
 		&item.Prompt, &item.NegativePrompt, &item.Seed, &item.AspectRatio, &raw, &refsRaw, &item.Status, &item.ProviderJobID,
 		&item.ErrorCode, &item.ErrorMessage, &item.Cost, &item.CreatedAt, &item.StartedAt, &item.CompletedAt, &item.ProviderDeterministic, &item.DeterminismNote,
-		&item.RecipeID, &item.RecipeVersion, &item.ResolvedWorkflowHash, &workflowRaw, &finalParametersRaw,
+		&item.RecipeID, &item.RecipeVersion, &item.ResolvedWorkflowHash, &workflowRaw, &resolvedReferenceRaw, &finalParametersRaw,
 	)
 	if err == nil {
 		_ = json.Unmarshal(raw, &item.Parameters)
@@ -162,6 +163,9 @@ func (s *SQLStore) scanOne(ctx context.Context, query string, args ...any) (Gene
 	}
 	if len(workflowRaw) > 0 && json.Unmarshal(workflowRaw, &item.ResolvedWorkflow) != nil {
 		return Generation{}, fmt.Errorf("decode generation workflow")
+	}
+	if len(resolvedReferenceRaw) > 0 && json.Unmarshal(resolvedReferenceRaw, &item.ResolvedReferenceInfluence) != nil {
+		return Generation{}, fmt.Errorf("decode resolved reference influence")
 	}
 	if len(finalParametersRaw) > 0 && json.Unmarshal(finalParametersRaw, &item.FinalParameters) != nil {
 		return Generation{}, fmt.Errorf("decode generation final parameters")
