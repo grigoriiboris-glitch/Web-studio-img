@@ -70,7 +70,11 @@ func (p *Provider) Generate(ctx context.Context, req generation.Request) (genera
 		upload,err:=p.client.upload(ctx,"mask-"+safeName(maskKey)+".png",info.ContentType,bytes);if err!=nil{return generation.ProviderResult{},err}
 		maskImage=upload.Name
 	}
-	workflow,err:=mapWorkflow(p.workflow,mapperValues{Prompt:req.Prompt,NegativePrompt:req.NegativePrompt,Seed:req.Seed,AspectRatio:req.AspectRatio,InputImage:inputImage,MaskImage:maskImage,Width:width,Height:height,Operation:operation})
+	workflowSource := p.workflow
+	if req.ResolvedWorkflow != nil {
+		workflowSource = req.ResolvedWorkflow
+	}
+	workflow,err:=mapWorkflow(workflowSource,mapperValues{Prompt:req.Prompt,NegativePrompt:req.NegativePrompt,Seed:req.Seed,AspectRatio:req.AspectRatio,InputImage:inputImage,MaskImage:maskImage,Width:width,Height:height,Operation:operation})
 	if err!=nil{return generation.ProviderResult{},err}
 	clientID:=req.IdempotencyKey
 	response,err:=p.client.submit(ctx,workflow,clientID);if err!=nil{return generation.ProviderResult{},err}
