@@ -79,6 +79,7 @@ type requestPayload struct {
 	AspectRatio    string         `json:"aspect_ratio,omitempty"`
 	Parameters     map[string]any `json:"parameters,omitempty"`
 	ReferenceIDs   []uuid.UUID     `json:"reference_ids,omitempty"`
+	ReferenceInfluence map[string]any `json:"reference_influence,omitempty"`
 	RecipeID       *uuid.UUID      `json:"recipe_id,omitempty"`
 	RecipeVersion  int             `json:"recipe_version,omitempty"`
 }
@@ -114,7 +115,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	req := Request{
 		ProjectID: projectID, IterationID: input.IterationID, Prompt: input.Prompt,
 		NegativePrompt: input.NegativePrompt, Seed: input.Seed, AspectRatio: input.AspectRatio,
-		Parameters: input.Parameters, FinalParameters: input.Parameters, ReferenceIDs: input.ReferenceIDs,
+		Parameters: input.Parameters, FinalParameters: input.Parameters, ReferenceIDs: input.ReferenceIDs, ResolvedReferenceInfluence: input.ReferenceInfluence,
 		IdempotencyKey: r.Header.Get("Idempotency-Key"), RecipeID: input.RecipeID, RecipeVersion: input.RecipeVersion,
 	}
 	if input.RecipeID != nil {
