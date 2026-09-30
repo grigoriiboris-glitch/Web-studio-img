@@ -1,6 +1,7 @@
 package workflow
 
 import (
+    "context"
     "database/sql"
     "encoding/json"
     "errors"
@@ -72,7 +73,7 @@ func (h *Handler) getApprovalGate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) requestReview(w http.ResponseWriter, r *http.Request) {
-    userID, projectID, ok := h.authProject(w, r)
+    userID, projectID, ok := approvalProject(w, r)
     if !ok { return }
     gate, err := h.evaluateApprovalGate(r.Context(), userID, projectID)
     if err != nil { workflowError(w, 500, "approval_gate_failed", "could not evaluate approval checklist"); return }
@@ -99,7 +100,7 @@ func (h *Handler) requestReview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) approveProject(w http.ResponseWriter, r *http.Request) {
-    userID, projectID, ok := h.authProject(w, r)
+    userID, projectID, ok := approvalProject(w, r)
     if !ok { return }
     gate, err := h.evaluateApprovalGate(r.Context(), userID, projectID)
     if err != nil { workflowError(w, 500, "approval_gate_failed", "could not evaluate approval checklist"); return }
@@ -128,7 +129,7 @@ func (h *Handler) approveProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) approveComposition(w http.ResponseWriter, r *http.Request) {
-    userID, projectID, ok := h.authProject(w, r)
+    userID, projectID, ok := approvalProject(w, r)
     if !ok { return }
     var exists bool
     err := h.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM composition_specs WHERE project_id=$1 AND user_id=$2)", projectID, userID).Scan(&exists)
@@ -145,7 +146,7 @@ func (h *Handler) approveComposition(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) finalizeProject(w http.ResponseWriter, r *http.Request) {
-    userID, projectID, ok := h.authProject(w, r)
+    userID, projectID, ok := approvalProject(w, r)
     if !ok { return }
     var in finalizeInput
     if err := decodeWorkflowJSON(r, &in); err != nil { workflowError(w, 400, "invalid_request", "invalid finalize payload"); return }
@@ -199,7 +200,7 @@ func (h *Handler) finalizeProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createRevision(w http.ResponseWriter, r *http.Request) {
-    userID, projectID, ok := h.authProject(w, r)
+    userID, projectID, ok := approvalProject(w, r)
     if !ok { return }
     tx, err := h.db.BeginTx(r.Context(), nil)
     if err != nil { workflowError(w, 500, "revision_failed", "could not start revision"); return }
