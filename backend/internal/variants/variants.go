@@ -8,6 +8,7 @@ import (
   "io"
   "net/http"
   "strconv"
+  "sort"
   "strings"
   "time"
 
@@ -20,6 +21,9 @@ import (
 )
 
 var ErrNotFound = errors.New("variant board resource not found")
+
+var allowedRejectReasons = map[string]bool{"composition":true,"subject":true,"pose":true,"lighting":true,"color":true,"material":true,"background":true,"object":true,"style":true,"prompt":true,"quality":true,"other":true}
+var allowedRejectSeverities = map[string]bool{"low":true,"medium":true,"high":true}
 
 type Handler struct {
   db *sql.DB
@@ -60,6 +64,9 @@ type Variant struct {
   Favorite bool `json:"favorite"`
   CompareSelected bool `json:"compare_selected"`
   RejectReason []string `json:"reject_reason"`
+  RejectComment *string `json:"reject_comment,omitempty"`
+  RejectSeverity *string `json:"reject_severity,omitempty"`
+  RejectReasonSkipped bool `json:"reject_reason_skipped"`
   CreatedAt time.Time `json:"created_at"`
   UpdatedAt time.Time `json:"updated_at"`
   Source *VariantSource `json:"source,omitempty"`
@@ -75,6 +82,9 @@ type VariantPatch struct {
   Favorite *bool `json:"favorite,omitempty"`
   CompareSelected *bool `json:"compare_selected,omitempty"`
   RejectReason []string `json:"reject_reason,omitempty"`
+  RejectComment *string `json:"reject_comment,omitempty"`
+  RejectSeverity *string `json:"reject_severity,omitempty"`
+  SkipReason *bool `json:"skip_reason,omitempty"`
 }
 
 func NewHandler(db *sql.DB, actions *humanactions.Store, provenanceStore *provenance.Store, eventStore *events.Store) (*Handler, error) {
@@ -90,6 +100,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
   mux.HandleFunc("GET /api/v1/projects/{project_id}/variant-sets/{set_id}/compare", h.compare)
   mux.HandleFunc("PATCH /api/v1/projects/{project_id}/variant-sets/{set_id}/variants/{variant_id}", h.patchVariant)
   mux.HandleFunc("POST /api/v1/projects/{project_id}/variant-sets/{set_id}/iterations", h.createIteration)
+  mux.HandleFunc("GET /api/v1/projects/{project_id}/variant-rejection-summary", h.rejectionSummary)
+  mux.HandleFunc("GET /api/v1/projects/{project_id}/variant-rejection-timeline", h.rejectionTimeline)
 }
 
 func (h *Handler) sources(w http.ResponseWriter, r *http.Request) {
@@ -200,30 +212,68 @@ func (h *Handler) compare(w http.ResponseWriter,r *http.Request){
   writeJSON(w,200,map[string]any{"variants":variants})
 }
 
-func (h *Handler) patchVariant(w http.ResponseWriter,r *http.Request){
-  userID,projectID,ok:=h.authProject(w,r);if !ok{return}
-  setID,err:=uuid.Parse(r.PathValue("set_id"));if err!=nil{writeError(w,400,"invalid_variant_set_id","invalid variant set id");return}
-  variantID,err:=uuid.Parse(r.PathValue("variant_id"));if err!=nil{writeError(w,400,"invalid_variant_id","invalid variant id");return}
-  var in VariantPatch;if err:=decode(r,&in);err!=nil{writeError(w,400,"invalid_variant_patch","invalid variant update");return}
-  if in.Decision!=nil&&!map[string]bool{"candidate":true,"kept":true,"rejected":true,"selected":true}[*in.Decision]{writeError(w,400,"invalid_variant_decision","invalid variant decision");return}
-  current,err:=h.loadVariant(r.Context(),userID,projectID,setID,variantID);if errors.Is(err,ErrNotFound){writeError(w,404,"variant_not_found","variant not found");return};if err!=nil{writeError(w,500,"variant_get_failed","could not load variant");return}
-  nextDecision,nextFavorite,nextCompare:=current.Decision,current.Favorite,current.CompareSelected;nextReasons:=current.RejectReason
-  if in.Decision!=nil{nextDecision=*in.Decision};if in.Favorite!=nil{nextFavorite=*in.Favorite};if in.CompareSelected!=nil{nextCompare=*in.CompareSelected};if in.RejectReason!=nil{nextReasons=in.RejectReason}
-  if nextDecision=="rejected"&&len(nextReasons)==0{nextReasons=[]string{"other"}}
+func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
+  userID, projectID, ok := h.authProject(w, r)
+  if !ok { return }
+  setID, err := uuid.Parse(r.PathValue("set_id"))
+  if err != nil { writeError(w, 400, "invalid_variant_set_id", "invalid variant set id"); return }
+  variantID, err := uuid.Parse(r.PathValue("variant_id"))
+  if err != nil { writeError(w, 400, "invalid_variant_id", "invalid variant id"); return }
+  var in VariantPatch
+  if err := decode(r, &in); err != nil { writeError(w, 400, "invalid_variant_patch", "invalid variant update"); return }
+  if in.Decision != nil && !map[string]bool{"candidate":true,"kept":true,"rejected":true,"selected":true}[*in.Decision] { writeError(w,400,"invalid_variant_decision","invalid variant decision"); return }
+  if in.RejectReason != nil {
+    normalized, err := normalizeRejectReasons(in.RejectReason)
+    if err != nil {
+      writeError(w,400,"invalid_reject_reason",err.Error())
+      return
+    }
+    in.RejectReason = normalized
+  }
+  if in.RejectComment != nil && len([]rune(*in.RejectComment)) > 2000 { writeError(w,400,"invalid_reject_comment","reject comment is limited to 2000 characters"); return }
+  if in.RejectSeverity != nil {
+    value := strings.ToLower(strings.TrimSpace(*in.RejectSeverity));
+    if !allowedRejectSeverities[value] { writeError(w,400,"invalid_reject_severity","severity must be low, medium or high"); return };
+    in.RejectSeverity = &value
+  }
+  current, err := h.loadVariant(r.Context(),userID,projectID,setID,variantID)
+  if errors.Is(err,ErrNotFound) { writeError(w,404,"variant_not_found","variant not found"); return }
+  if err != nil { writeError(w,500,"variant_get_failed","could not load variant"); return }
+  nextDecision,nextFavorite,nextCompare := current.Decision,current.Favorite,current.CompareSelected
+  nextReasons := append([]string(nil),current.RejectReason...)
+  nextComment,nextSeverity,nextSkipped := current.RejectComment,current.RejectSeverity,current.RejectReasonSkipped
+  if in.Decision != nil { nextDecision = *in.Decision }
+  if in.Favorite != nil { nextFavorite = *in.Favorite }
+  if in.CompareSelected != nil { nextCompare = *in.CompareSelected }
+  if in.RejectReason != nil { nextReasons = append([]string(nil),in.RejectReason...); nextSkipped = false }
+  if in.RejectComment != nil { value:=strings.TrimSpace(*in.RejectComment); if value=="" { nextComment=nil } else { nextComment=&value } }
+  if in.RejectSeverity != nil { nextSeverity=in.RejectSeverity }
+  if in.SkipReason != nil { nextSkipped=*in.SkipReason; if *in.SkipReason { nextReasons=[]string{} } }
+  if nextDecision=="rejected" {
+    if !nextSkipped && len(nextReasons)==0 { writeError(w,400,"reject_reason_required","choose at least one reject reason or explicitly skip reason"); return }
+  } else {
+    nextReasons=[]string{}; nextComment=nil; nextSeverity=nil; nextSkipped=false
+  }
   reasons,_:=json.Marshal(nextReasons)
-  var v Variant;var raw []byte
-  err=h.db.QueryRowContext(r.Context(), `
-    UPDATE variants SET decision=$1,favorite=$2,compare_selected=$3,reject_reason=$4,updated_at=now()
-    WHERE id=$5 AND variant_set_id=$6 AND project_id=$7 AND user_id=$8
-    RETURNING id,variant_set_id,generation_id,asset_id,ordinal,decision,favorite,compare_selected,reject_reason,created_at,updated_at
-  `,nextDecision,nextFavorite,nextCompare,reasons,variantID,setID,projectID,userID).Scan(&v.ID,&v.VariantSetID,&v.GenerationID,&v.AssetID,&v.Ordinal,&v.Decision,&v.Favorite,&v.CompareSelected,&raw,&v.CreatedAt,&v.UpdatedAt)
-  if err!=nil{writeError(w,500,"variant_update_failed","could not update variant");return}
-  _=json.Unmarshal(raw,&v.RejectReason);if v.RejectReason==nil{v.RejectReason=[]string{}}
-  if in.Decision!=nil{action:="VARIANT_SELECTED";if nextDecision=="rejected"{action="VARIANT_REJECTED"};h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"decision":nextDecision,"reject_reason":nextReasons})}
-  if in.Favorite!=nil{action:="VARIANT_UNFAVORITED";if nextFavorite{action="VARIANT_FAVORITED"};h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"favorite":nextFavorite})}
+  var comment any; if nextComment!=nil { comment=*nextComment }
+  var severity any; if nextSeverity!=nil { severity=*nextSeverity }
+  var v Variant; var raw []byte
+  err=h.db.QueryRowContext(r.Context(), `UPDATE variants
+    SET decision=$1,favorite=$2,compare_selected=$3,reject_reason=$4,reject_comment=$5,reject_severity=$6,reject_reason_skipped=$7,updated_at=now()
+    WHERE id=$8 AND variant_set_id=$9 AND project_id=$10 AND user_id=$11
+    RETURNING id,variant_set_id,generation_id,asset_id,ordinal,decision,favorite,compare_selected,reject_reason,reject_comment,reject_severity,reject_reason_skipped,created_at,updated_at`,
+    nextDecision,nextFavorite,nextCompare,reasons,comment,severity,nextSkipped,variantID,setID,projectID,userID).Scan(
+    &v.ID,&v.VariantSetID,&v.GenerationID,&v.AssetID,&v.Ordinal,&v.Decision,&v.Favorite,&v.CompareSelected,&raw,&v.RejectComment,&v.RejectSeverity,&v.RejectReasonSkipped,&v.CreatedAt,&v.UpdatedAt)
+  if err!=nil { writeError(w,500,"variant_update_failed","could not update variant"); return }
+  _=json.Unmarshal(raw,&v.RejectReason); if v.RejectReason==nil { v.RejectReason=[]string{} }
+  if in.Decision!=nil || in.RejectReason!=nil || in.RejectComment!=nil || in.RejectSeverity!=nil || in.SkipReason!=nil {
+    action:="VARIANT_SELECTED"; if v.Decision=="rejected" { action="VARIANT_REJECTED" }
+    oldState,newState:=variantDecisionState(current),variantDecisionState(v)
+    h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"decision":v.Decision,"reject_reason":v.RejectReason,"reject_comment":v.RejectComment,"reject_severity":v.RejectSeverity,"reject_reason_skipped":v.RejectReasonSkipped},oldState,newState)
+  }
+  if in.Favorite!=nil { action:="VARIANT_UNFAVORITED"; if nextFavorite { action="VARIANT_FAVORITED" }; h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"favorite":nextFavorite}) }
   writeJSON(w,200,v)
 }
-
 func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   userID,projectID,ok:=h.authProject(w,r);if !ok{return}
   setID,err:=uuid.Parse(r.PathValue("set_id"));if err!=nil{writeError(w,400,"invalid_variant_set_id","invalid variant set id");return}
@@ -261,7 +311,7 @@ func (h *Handler) loadVariants(ctx context.Context,userID,projectID,setID uuid.U
   args:=[]any{setID,projectID,userID};where:=""
   if filter!=""{ids:=strings.Split(filter,",");ph:=make([]string,0,len(ids));for i,id:=range ids{parsed,e:=uuid.Parse(strings.TrimSpace(id));if e!=nil{return nil,e};ph=append(ph,"$"+strconv.Itoa(i+4));args=append(args,parsed)};where=" AND v.id IN ("+strings.Join(ph,",")+")"}
   rows,err:=h.db.QueryContext(ctx,`
-    SELECT v.id,v.variant_set_id,v.generation_id,v.asset_id,v.ordinal,v.decision,v.favorite,v.compare_selected,v.reject_reason,v.created_at,v.updated_at,
+    SELECT v.id,v.variant_set_id,v.generation_id,v.asset_id,v.ordinal,v.decision,v.favorite,v.compare_selected,v.reject_reason,v.reject_comment,v.reject_severity,v.reject_reason_skipped,v.created_at,v.updated_at,
            g.iteration_id,g.status,g.prompt,g.provider,g.model,g.created_at,a.width,a.height
     FROM variants v JOIN generations g ON g.id=v.generation_id
     LEFT JOIN assets a ON a.id=v.asset_id AND a.user_id=$3 AND a.lifecycle_status='active'
@@ -269,10 +319,51 @@ func (h *Handler) loadVariants(ctx context.Context,userID,projectID,setID uuid.U
   if err!=nil{return nil,err};defer func(){_=rows.Close()}()
   out:=make([]Variant,0)
   for rows.Next(){var v Variant;var raw []byte;var source VariantSource;var iteration sql.NullString;var width,height sql.NullInt64
-    if err:=rows.Scan(&v.ID,&v.VariantSetID,&v.GenerationID,&v.AssetID,&v.Ordinal,&v.Decision,&v.Favorite,&v.CompareSelected,&raw,&v.CreatedAt,&v.UpdatedAt,&iteration,&source.Status,&source.Prompt,&source.Provider,&source.Model,&source.CreatedAt,&width,&height);err!=nil{return nil,err}
+    if err:=rows.Scan(&v.ID,&v.VariantSetID,&v.GenerationID,&v.AssetID,&v.Ordinal,&v.Decision,&v.Favorite,&v.CompareSelected,&raw,&v.RejectComment,&v.RejectSeverity,&v.RejectReasonSkipped,&v.CreatedAt,&v.UpdatedAt,&iteration,&source.Status,&source.Prompt,&source.Provider,&source.Model,&source.CreatedAt,&width,&height);err!=nil{return nil,err}
     _=json.Unmarshal(raw,&v.RejectReason);if v.RejectReason==nil{v.RejectReason=[]string{}};if iteration.Valid{if id,e:=uuid.Parse(iteration.String);e==nil{source.IterationID=&id}};source.GenerationID=v.GenerationID;source.AssetID=v.AssetID;if width.Valid{v1:=int(width.Int64);source.Width=&v1};if height.Valid{v1:=int(height.Int64);source.Height=&v1};v.Source=&source;out=append(out,v)
   }
   return out,rows.Err()
+}
+
+func normalizeRejectReasons(input []string) ([]string, error) {
+  if len(input) > 12 { return nil, errors.New("at most 12 reject reasons are allowed") }
+  normalized := make([]string, 0, len(input)); seen := map[string]bool{}
+  for _, reason := range input {
+    value := strings.ToLower(strings.TrimSpace(reason))
+    if !allowedRejectReasons[value] { return nil, errors.New("unknown reject reason") }
+    if seen[value] { return nil, errors.New("duplicated reject reason") }
+    seen[value] = true; normalized = append(normalized, value)
+  }
+  sort.Strings(normalized)
+  return normalized, nil
+}
+
+func variantDecisionState(v Variant) map[string]any {
+  return map[string]any{"decision":v.Decision,"reject_reason":append([]string(nil),v.RejectReason...),"reject_comment":v.RejectComment,"reject_severity":v.RejectSeverity,"reject_reason_skipped":v.RejectReasonSkipped}
+}
+
+func (h *Handler) rejectionSummary(w http.ResponseWriter, r *http.Request) {
+  userID,projectID,ok:=h.authProject(w,r); if !ok { return }
+  var rejectedCount int
+  if err:=h.db.QueryRowContext(r.Context(),`SELECT count(*) FROM variants WHERE project_id=$1 AND user_id=$2 AND decision='rejected'`,projectID,userID).Scan(&rejectedCount);err!=nil{writeError(w,500,"variant_rejection_summary_failed","could not calculate rejected count");return}
+  rows,err:=h.db.QueryContext(r.Context(),`SELECT reason,count(*) FROM variants v CROSS JOIN LATERAL jsonb_array_elements_text(v.reject_reason) AS reason WHERE v.project_id=$1 AND v.user_id=$2 AND v.decision='rejected' GROUP BY reason ORDER BY count(*) DESC,reason ASC`,projectID,userID)
+  if err!=nil{writeError(w,500,"variant_rejection_summary_failed","could not calculate rejection reasons");return};defer func(){_=rows.Close()}()
+  type item struct{Reason string `json:"reason"`;Count int `json:"count"`;Percent float64 `json:"percent"`}
+  reasons:=make([]item,0)
+  for rows.Next(){var reason string;var count int;if err:=rows.Scan(&reason,&count);err!=nil{writeError(w,500,"variant_rejection_summary_failed","could not read rejection summary");return};percent:=0.0;if rejectedCount>0{percent=float64(count)*100/float64(rejectedCount)};reasons=append(reasons,item{reason,count,percent})}
+  if err:=rows.Err();err!=nil{writeError(w,500,"variant_rejection_summary_failed","could not read rejection summary");return}
+  writeJSON(w,200,map[string]any{"rejected_count":rejectedCount,"reasons":reasons})
+}
+
+func (h *Handler) rejectionTimeline(w http.ResponseWriter, r *http.Request) {
+  userID,projectID,ok:=h.authProject(w,r); if !ok { return }
+  rows,err:=h.db.QueryContext(r.Context(),`SELECT id,version,action_type,payload,old_state,new_state,created_at FROM human_actions WHERE project_id=$1 AND user_id=$2 AND action_type='VARIANT_REJECTED' ORDER BY version DESC LIMIT 100`,projectID,userID)
+  if err!=nil{writeError(w,500,"variant_rejection_timeline_failed","could not load rejection timeline");return};defer func(){_=rows.Close()}()
+  type item struct{ID uuid.UUID `json:"id"`;Version int64 `json:"version"`;ActionType string `json:"action_type"`;Payload map[string]any `json:"payload,omitempty"`;OldState map[string]any `json:"old_state,omitempty"`;NewState map[string]any `json:"new_state,omitempty"`;CreatedAt time.Time `json:"created_at"`}
+  out:=make([]item,0)
+  for rows.Next(){var x item;var payload,oldState,newState []byte;if err:=rows.Scan(&x.ID,&x.Version,&x.ActionType,&payload,&oldState,&newState,&x.CreatedAt);err!=nil{writeError(w,500,"variant_rejection_timeline_failed","could not read rejection timeline");return};_=json.Unmarshal(payload,&x.Payload);_=json.Unmarshal(oldState,&x.OldState);_=json.Unmarshal(newState,&x.NewState);out=append(out,x)}
+  if err:=rows.Err();err!=nil{writeError(w,500,"variant_rejection_timeline_failed","could not read rejection timeline");return}
+  writeJSON(w,200,map[string]any{"items":out})
 }
 
 func (h *Handler) authProject(w http.ResponseWriter,r *http.Request)(uuid.UUID,uuid.UUID,bool){
@@ -285,9 +376,11 @@ func (h *Handler) authProject(w http.ResponseWriter,r *http.Request)(uuid.UUID,u
 
 func decode(r *http.Request,target any)error{d:=json.NewDecoder(io.LimitReader(r.Body,1<<20));d.DisallowUnknownFields();if err:=d.Decode(target);err!=nil{return err};var extra any;if err:=d.Decode(&extra);err!=io.EOF{return errors.New("multiple JSON values")};return nil}
 
-func (h *Handler) audit(ctx context.Context,userID,projectID,entityID uuid.UUID,action string,payload map[string]any){
-  if h.actions!=nil{_,_=h.actions.Create(ctx,userID,projectID,humanactions.Request{ActionType:action,Payload:payload})}
-  if h.provenance!=nil{_,_=h.provenance.Append(ctx,provenance.Event{UserID:userID,ProjectID:projectID,EntityType:"variant",EntityID:entityID,Action:strings.ToLower(action),Payload:payload})}
+func (h *Handler) audit(ctx context.Context,userID,projectID,entityID uuid.UUID,action string,payload map[string]any,states ...map[string]any){
+  var oldState,newState map[string]any;if len(states)>0{oldState=states[0]};if len(states)>1{newState=states[1]}
+  if h.actions!=nil{_,_=h.actions.Create(ctx,userID,projectID,humanactions.Request{ActionType:action,Payload:payload,OldState:oldState,NewState:newState})}
+  provenancePayload:=map[string]any{"payload":payload};if oldState!=nil{provenancePayload["old_state"]=oldState};if newState!=nil{provenancePayload["new_state"]=newState}
+  if h.provenance!=nil{_,_=h.provenance.Append(ctx,provenance.Event{UserID:userID,ProjectID:projectID,EntityType:"variant",EntityID:entityID,Action:strings.ToLower(action),Payload:provenancePayload})}
   if h.events!=nil{_,_=h.events.Append(ctx,userID,projectID,strings.ToLower(action),"variant",entityID,payload)}
 }
 
