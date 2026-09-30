@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"net/http"
 	"time"
 
@@ -27,6 +28,7 @@ type Handler struct {
 	provider Provider
 	provenance *provenance.Store
 	projectEvents *events.Store
+	recipes RecipeResolver
 }
 
 func NewHandler(store Store, queue Enqueuer, provider Provider) (*Handler, error) {
@@ -42,6 +44,15 @@ func NewHandlerWithDependencies(store Store, queue Enqueuer, provider Provider, 
 		return nil, errors.New("generation handler requires store, queue and provider")
 	}
 	return &Handler{store: store, queue: queue, provider: provider, provenance: provenanceStore, projectEvents: eventStore}, nil
+}
+
+func NewHandlerWithRecipeResolver(store Store, queue Enqueuer, provider Provider, provenanceStore *provenance.Store, eventStore *events.Store, recipes RecipeResolver) (*Handler, error) {
+	h, err := NewHandlerWithDependencies(store, queue, provider, provenanceStore, eventStore)
+	if err != nil {
+		return nil, err
+	}
+	h.recipes = recipes
+	return h, nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -61,6 +72,8 @@ type requestPayload struct {
 	AspectRatio    string         `json:"aspect_ratio,omitempty"`
 	Parameters     map[string]any `json:"parameters,omitempty"`
 	ReferenceIDs   []uuid.UUID     `json:"reference_ids,omitempty"`
+	RecipeID       *uuid.UUID      `json:"recipe_id,omitempty"`
+	RecipeVersion  int             `json:"recipe_version,omitempty"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +95,28 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	req := Request{
 		ProjectID: projectID, IterationID: input.IterationID, Prompt: input.Prompt,
 		NegativePrompt: input.NegativePrompt, Seed: input.Seed, AspectRatio: input.AspectRatio,
-		Parameters: input.Parameters, ReferenceIDs: input.ReferenceIDs, IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		Parameters: input.Parameters, FinalParameters: input.Parameters, ReferenceIDs: input.ReferenceIDs,
+		IdempotencyKey: r.Header.Get("Idempotency-Key"), RecipeID: input.RecipeID, RecipeVersion: input.RecipeVersion,
+	}
+	if input.RecipeID != nil {
+		if h.recipes == nil {
+			writeError(w, http.StatusServiceUnavailable, "recipe_unavailable", "recipe resolver is not configured")
+			return
+		}
+		resolution, err := h.recipes.Resolve(r.Context(), userID, projectID, *input.RecipeID, input.RecipeVersion, input.Parameters)
+		if err != nil {
+			writeError(w, http.StatusConflict, "recipe_resolution_failed", err.Error())
+			return
+		}
+		if !strings.EqualFold(resolution.Provider, h.provider.Name()) {
+			writeError(w, http.StatusConflict, "recipe_provider_mismatch", "recipe provider does not match the active generation provider")
+			return
+		}
+		req.RecipeVersion = resolution.Version
+		req.Parameters = resolution.FinalParameters
+		req.FinalParameters = resolution.FinalParameters
+		req.ResolvedWorkflow = resolution.ResolvedWorkflow
+		req.ResolvedWorkflowHash = resolution.ResolvedWorkflowHash
 	}
 	if req.IdempotencyKey == "" {
 		writeError(w, http.StatusBadRequest, "missing_idempotency_key", "Idempotency-Key header is required")

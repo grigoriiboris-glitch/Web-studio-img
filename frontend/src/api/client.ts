@@ -128,6 +128,87 @@ export const approvalGateApi = {
     apiRequest<ApprovalGate>(`/projects/${projectId}/approval-gate/revision`, { method: 'POST' }),
 }
 
+export interface RecipeParameter {
+  name: string
+  type: 'string' | 'number' | 'integer' | 'boolean' | 'image' | 'mask'
+  required: boolean
+  path: string
+  default?: unknown
+  description?: string
+}
+
+export interface RecipeVersion {
+  id: string
+  recipe_id: string
+  version: number
+  workflow: Record<string, unknown>
+  input_mappings: Record<string, string>
+  exposed_parameters: RecipeParameter[]
+  default_parameters: Record<string, unknown>
+  workflow_hash: string
+  created_by: string
+  created_at: string
+}
+
+export interface Recipe {
+  id: string
+  user_id: string
+  project_id?: string
+  name: string
+  description?: string
+  provider: string
+  model: string
+  model_version?: string
+  scope: 'project' | 'global'
+  tags: string[]
+  preview_asset_id?: string
+  published: boolean
+  current_version: number
+  created_at: string
+  updated_at: string
+  version?: RecipeVersion
+}
+
+export type RecipeVersionInput = {
+  workflow: Record<string, unknown>
+  input_mappings: Record<string, string>
+  exposed_parameters: RecipeParameter[]
+  default_parameters: Record<string, unknown>
+}
+
+export const recipesApi = {
+  list: (projectId: string) =>
+    apiRequest<{ recipes: Recipe[] }>(`/projects/${projectId}/recipes`),
+  get: (projectId: string, recipeId: string) =>
+    apiRequest<Recipe>(`/projects/${projectId}/recipes/${recipeId}`),
+  create: (
+    projectId: string,
+    input: Omit<Recipe, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'current_version' | 'published' | 'version'> & { version: RecipeVersionInput },
+  ) =>
+    apiRequest<Recipe>(`/projects/${projectId}/recipes`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  addVersion: (projectId: string, recipeId: string, input: RecipeVersionInput) =>
+    apiRequest<Recipe>(`/projects/${projectId}/recipes/${recipeId}/versions`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  publish: (projectId: string, recipeId: string) =>
+    apiRequest<Recipe>(`/projects/${projectId}/recipes/${recipeId}/publish`, { method: 'POST' }),
+  unpublish: (projectId: string, recipeId: string) =>
+    apiRequest<Recipe>(`/projects/${projectId}/recipes/${recipeId}/unpublish`, { method: 'POST' }),
+  duplicate: (projectId: string, recipeId: string) =>
+    apiRequest<Recipe>(`/projects/${projectId}/recipes/${recipeId}/duplicate`, { method: 'POST' }),
+  compatibility: (projectId: string, recipeId: string) =>
+    apiRequest<{ compatible: boolean; issues: string[]; provider: string; model: string; version: number }>(
+      `/projects/${projectId}/recipes/${recipeId}/compatibility`,
+      { method: 'POST' },
+    ),
+  fromGeneration: (projectId: string, generationId: string) =>
+    apiRequest<Recipe>(`/projects/${projectId}/recipes/from-generation/${generationId}`, { method: 'POST' }),
+}
+
 export const creativeBriefApi = {
   current: (projectId: string) =>
     apiRequest<CreativeBrief>('/projects/' + projectId + '/brief'),
@@ -214,6 +295,10 @@ export interface Generation {
   created_at: string
   started_at?: string
   completed_at?: string
+  recipe_id?: string
+  recipe_version?: number
+  resolved_workflow_hash?: string
+  final_parameters?: Record<string, unknown>
 }
 
 export const generationsApi = {
@@ -226,6 +311,8 @@ export const generationsApi = {
       seed?: number
       aspect_ratio?: string
       parameters?: Record<string, unknown>
+      recipe_id?: string
+      recipe_version?: number
     },
     idempotencyKey: string,
   ) =>

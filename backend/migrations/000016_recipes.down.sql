@@ -1,0 +1,10 @@
+ALTER TABLE generations DROP COLUMN IF EXISTS final_parameters;
+ALTER TABLE generations DROP COLUMN IF EXISTS resolved_workflow;
+ALTER TABLE generations DROP COLUMN IF EXISTS resolved_workflow_hash;
+ALTER TABLE generations DROP COLUMN IF EXISTS recipe_version;
+ALTER TABLE generations DROP COLUMN IF EXISTS recipe_id;
+DROP INDEX IF EXISTS recipe_versions_recipe_idx;
+DROP TABLE IF EXISTS recipe_versions;
+DROP INDEX IF EXISTS recipes_project_published_idx;
+DROP INDEX IF EXISTS recipes_user_updated_idx;
+DROP TABLE IF EXISTS recipes;

@@ -1940,6 +1940,125 @@ paths:
         '201': {description: New revision, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalGate'}}}}
         '409': {description: Project is not final}
 
+  /projects/{project_id}/recipes:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listRecipes
+      summary: List project and published global recipes
+      responses:
+        '200':
+          description: Recipes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recipes]
+                properties:
+                  recipes:
+                    type: array
+                    items: {$ref: '#/components/schemas/Recipe'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createRecipe
+      summary: Create an immutable versioned ComfyUI recipe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecipeCreate'}
+      responses:
+        '201': {description: Created recipe, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /projects/{project_id}/recipes/{recipe_id}:
+    get:
+      operationId: getRecipe
+      summary: Get a recipe with its current version
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: recipe_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Recipe, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/recipes/{recipe_id}/versions:
+    post:
+      operationId: createRecipeVersion
+      summary: Create a new immutable recipe version
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: recipe_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecipeVersionInput'}
+      responses:
+        '201': {description: Recipe, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/recipes/{recipe_id}/publish:
+    post:
+      operationId: publishRecipe
+      summary: Publish a recipe
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: recipe_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Recipe, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
+  /projects/{project_id}/recipes/{recipe_id}/unpublish:
+    post:
+      operationId: unpublishRecipe
+      summary: Unpublish a recipe
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: recipe_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Recipe, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
+  /projects/{project_id}/recipes/{recipe_id}/duplicate:
+    post:
+      operationId: duplicateRecipe
+      summary: Duplicate the current recipe version
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: recipe_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '201': {description: Recipe, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
+  /projects/{project_id}/recipes/{recipe_id}/compatibility:
+    post:
+      operationId: checkRecipeCompatibility
+      summary: Check recipe compatibility with the active ComfyUI provider
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: recipe_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Compatibility result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [compatible, issues, provider, model, version]
+                properties:
+                  compatible: {type: boolean}
+                  issues: {type: array, items: {type: string}}
+                  provider: {type: string}
+                  model: {type: string}
+                  version: {type: integer}
+  /projects/{project_id}/recipes/from-generation/{generation_id}:
+    post:
+      operationId: saveGenerationAsRecipe
+      summary: Save a successful generation's resolved workflow as a new recipe
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: generation_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '201': {description: Recipe, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+
   /projects/{project_id}/lifecycle:
     get:
       operationId: getProjectLifecycle
@@ -2371,6 +2490,79 @@ components:
           type: object
           additionalProperties: {type: string, maxLength: 4000}
 
+    RecipeParameter:
+      type: object
+      required: [name, type, required, path]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        type: {type: string, enum: [string, number, integer, boolean, image, mask]}
+        required: {type: boolean}
+        path: {type: string, minLength: 1}
+        default: {}
+        description: {type: string, maxLength: 1000}
+    RecipeVersion:
+      type: object
+      required: [id, recipe_id, version, workflow, input_mappings, exposed_parameters, default_parameters, workflow_hash, created_by, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        recipe_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        workflow: {type: object, additionalProperties: true}
+        input_mappings: {type: object, additionalProperties: {type: string}}
+        exposed_parameters:
+          type: array
+          items: {$ref: '#/components/schemas/RecipeParameter'}
+        default_parameters: {type: object, additionalProperties: true}
+        workflow_hash: {type: string, minLength: 64, maxLength: 64}
+        created_by: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+    Recipe:
+      type: object
+      required: [id, user_id, name, provider, model, scope, tags, published, current_version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        provider: {type: string}
+        model: {type: string}
+        model_version: {type: string}
+        scope: {type: string, enum: [project, global]}
+        tags: {type: array, items: {type: string}}
+        preview_asset_id: {type: string, format: uuid}
+        published: {type: boolean}
+        current_version: {type: integer, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        version: {$ref: '#/components/schemas/RecipeVersion'}
+    RecipeVersionInput:
+      type: object
+      additionalProperties: false
+      required: [workflow, input_mappings, exposed_parameters, default_parameters]
+      properties:
+        workflow: {type: object, additionalProperties: true}
+        input_mappings: {type: object, additionalProperties: {type: string}}
+        exposed_parameters:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/RecipeParameter'}
+        default_parameters: {type: object, additionalProperties: true}
+    RecipeCreate:
+      allOf:
+        - $ref: '#/components/schemas/RecipeVersionInput'
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 5000}
+        provider: {type: string, enum: [comfyui]}
+        model: {type: string, minLength: 1, maxLength: 200}
+        model_version: {type: string, maxLength: 200}
+        scope: {type: string, enum: [project, global]}
+        project_id: {type: string, format: uuid}
+        tags: {type: array, maxItems: 30, items: {type: string, maxLength: 100}}
+        preview_asset_id: {type: string, format: uuid}
+    
     Iteration:
     ApprovalCheck:
       type: object
@@ -2529,6 +2721,10 @@ components:
         created_at: {type: string, format: date-time}
         started_at: {type: string, format: date-time}
         completed_at: {type: string, format: date-time}
+        recipe_id: {type: string, format: uuid}
+        recipe_version: {type: integer, minimum: 1}
+        resolved_workflow_hash: {type: string, minLength: 64, maxLength: 64}
+        final_parameters: {type: object, additionalProperties: true}
     GenerationInput:
       type: object
       additionalProperties: false
@@ -2540,6 +2736,8 @@ components:
         seed: {type: integer, format: int64}
         aspect_ratio: {type: string, pattern: '^[0-9]+:[0-9]+$'}
         parameters: {type: object, additionalProperties: true}
+        recipe_id: {type: string, format: uuid}
+        recipe_version: {type: integer, minimum: 1}
         reference_ids:
           type: array
           maxItems: 50

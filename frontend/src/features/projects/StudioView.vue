@@ -1,7 +1,8 @@
-<!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline -->
+<!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/html-indent -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import {
+  RouterLink, useRoute } from 'vue-router'
 import SketchImportZone from '../../components/SketchImportZone.vue'
 import {
   generationsApi,
@@ -35,6 +36,8 @@ import {
   type AssistantAction,
   type AssistantRecommendation,
   type LibraryItem,
+  recipesApi,
+  type Recipe,
 } from '../../api/client'
 
 const route = useRoute()
@@ -104,6 +107,11 @@ const form = ref<{ type: IterationType; title: string; description: string }>({
   title: '',
   description: '',
 })
+const recipes = ref<Recipe[]>([])
+const selectedRecipeId = ref('')
+const recipeParameters = ref<Record<string, unknown>>({})
+const selectedRecipe = computed(() => recipes.value.find(recipe => recipe.id === selectedRecipeId.value) ?? null)
+
 const generationForm = ref({ prompt: '', negative_prompt: '', aspect_ratio: '1:1', seed: undefined as number | undefined })
 const promptForm = ref({
   original_text: '',
@@ -442,16 +450,34 @@ function applyAvoidConstraints() {
     : constraints
 }
 
+async function loadRecipes() {
+  try {
+    const result = await recipesApi.list(projectId())
+    recipes.value = result.recipes
+  } catch {
+    recipes.value = []
+  }
+}
+
+function selectRecipe() {
+  const defaults = selectedRecipe.value?.version?.default_parameters ?? {}
+  recipeParameters.value = { ...defaults }
+}
+
 async function createGeneration() {
   generating.value = true
   error.value = null
   try {
-    const created = await generationsApi.create(projectId(), {
+    const generationPayload = {
       prompt: generationForm.value.prompt.trim(),
       negative_prompt: generationForm.value.negative_prompt.trim() || undefined,
       aspect_ratio: generationForm.value.aspect_ratio,
       seed: generationForm.value.seed,
-    }, crypto.randomUUID())
+      parameters: { ...recipeParameters.value },
+      recipe_id: selectedRecipeId.value || undefined,
+      recipe_version: selectedRecipe.value?.current_version,
+    }
+  const created = await generationsApi.create(projectId(), generationPayload, crypto.randomUUID())
     generations.value = [created, ...generations.value.filter(item => item.id !== created.id)]
     generationForm.value = { prompt: '', negative_prompt: '', aspect_ratio: '1:1', seed: undefined }
   } catch (err) {
@@ -968,6 +994,7 @@ onMounted(async () => {
   try {
     await loadStudio()
     await loadLibraries()
+    await loadRecipes()
     const compositionIteration = iterations.value.find(item => item.type === 'composition')
     if (compositionIteration) await loadComposition(compositionIteration.id)
     void startProjectEvents()
@@ -1012,6 +1039,52 @@ onUnmounted(() => {
             Эти ограничения не изменяют prompt автоматически. Нажми Apply, чтобы явно добавить их в negative prompt.
           </p>
           <el-button @click="applyAvoidConstraints">Apply to negative prompt</el-button>
+        </el-card>
+
+        <el-card class="create-card recipe-card">
+          <template #header>Recipe</template>
+          <label class="recipe-field">
+            Recipe
+            <select v-model="selectedRecipeId" @change="selectRecipe">
+              <option value="">Default generation flow</option>
+              <option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">
+                {{ recipe.name }} · v{{ recipe.current_version }}
+              </option>
+            </select>
+          </label>
+
+          <template v-if="selectedRecipe?.version">
+            <p class="recipe-description">
+              {{ selectedRecipe.description || 'Versioned ComfyUI workflow recipe' }}
+            </p>
+            <div class="recipe-parameters">
+              <label
+                v-for="parameter in selectedRecipe.version.exposed_parameters"
+                :key="parameter.name"
+                class="recipe-field"
+              >
+                {{ parameter.name }}<span v-if="parameter.required"> *</span>
+                <small v-if="parameter.description">{{ parameter.description }}</small>
+                <input
+                  v-if="parameter.type === 'string' || parameter.type === 'image' || parameter.type === 'mask'"
+                  v-model="recipeParameters[parameter.name]"
+                  :required="parameter.required"
+                  :placeholder="String(parameter.default ?? '')"
+                >
+                <input
+                  v-else-if="parameter.type === 'number' || parameter.type === 'integer'"
+                  v-model.number="recipeParameters[parameter.name]"
+                  :required="parameter.required"
+                  type="number"
+                >
+                <input
+                  v-else
+                  v-model="recipeParameters[parameter.name]"
+                  type="checkbox"
+                >
+              </label>
+            </div>
+          </template>
         </el-card>
 
         <el-card class="create-card">
@@ -1620,7 +1693,31 @@ onUnmounted(() => {
   </el-container>
 </template>
 
-<style scoped>
+<style scoped>.recipe-card {
+  margin-bottom: 16px;
+}
+
+.recipe-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.recipe-field small,
+.recipe-description {
+  color: #667085;
+}
+
+.recipe-field select,
+.recipe-field input:not([type='checkbox']) {
+  width: 100%;
+}
+
+.recipe-parameters {
+  display: grid;
+  gap: 8px;
+}
+
 .studio { min-height: 100vh; }
 .header { display: flex; align-items: center; justify-content: space-between; }
 .create-card, .timeline-card { margin-bottom: 16px; }

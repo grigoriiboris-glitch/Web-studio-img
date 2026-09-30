@@ -64,7 +64,9 @@ func (w *Worker) Handle(ctx context.Context, task *asynq.Task) error {
 	result, err := w.Provider.Generate(ctx, Request{
 		ProjectID: item.ProjectID, IterationID: item.IterationID, Prompt: item.Prompt,
 		NegativePrompt: item.NegativePrompt, Seed: item.Seed, AspectRatio: item.AspectRatio,
-		Parameters: item.Parameters, IdempotencyKey: payload.GenerationID.String(),
+		Parameters: item.Parameters, FinalParameters: item.FinalParameters, IdempotencyKey: payload.GenerationID.String(),
+		RecipeID: item.RecipeID, ResolvedWorkflow: item.ResolvedWorkflow, ResolvedWorkflowHash: item.ResolvedWorkflowHash,
+		RecipeVersion: valueOrZero(item.RecipeVersion),
 	})
 	if err != nil {
 		code := "provider_error"
@@ -133,3 +135,5 @@ func isRetryable(err error) bool {
 	var retryable interface{ Retryable() bool }
 	return errors.As(err, &retryable) && retryable.Retryable()
 }
+
+func valueOrZero(v *int) int { if v == nil { return 0 }; return *v }
