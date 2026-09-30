@@ -223,14 +223,12 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   if err := decode(r, &in); err != nil { writeError(w, 400, "invalid_variant_patch", "invalid variant update"); return }
   if in.Decision != nil && !map[string]bool{"candidate":true,"kept":true,"rejected":true,"selected":true}[*in.Decision] { writeError(w,400,"invalid_variant_decision","invalid variant decision"); return }
   if in.RejectReason != nil {
-    if len(in.RejectReason) > 12 { writeError(w,400,"invalid_reject_reason","at most 12 reject reasons are allowed"); return }
-    normalized := make([]string,0,len(in.RejectReason)); seen := map[string]bool{}
-    for _, reason := range in.RejectReason {
-      value := strings.ToLower(strings.TrimSpace(reason))
-      if !allowedRejectReasons[value] || seen[value] { writeError(w,400,"invalid_reject_reason","unknown or duplicated reject reason"); return }
-      seen[value] = true; normalized = append(normalized,value)
+    normalized, err := normalizeRejectReasons(in.RejectReason)
+    if err != nil {
+      writeError(w,400,"invalid_reject_reason",err.Error())
+      return
     }
-    sort.Strings(normalized); in.RejectReason = normalized
+    in.RejectReason = normalized
   }
   if in.RejectComment != nil && len([]rune(*in.RejectComment)) > 2000 { writeError(w,400,"invalid_reject_comment","reject comment is limited to 2000 characters"); return }
   if in.RejectSeverity != nil {
@@ -325,6 +323,19 @@ func (h *Handler) loadVariants(ctx context.Context,userID,projectID,setID uuid.U
     _=json.Unmarshal(raw,&v.RejectReason);if v.RejectReason==nil{v.RejectReason=[]string{}};if iteration.Valid{if id,e:=uuid.Parse(iteration.String);e==nil{source.IterationID=&id}};source.GenerationID=v.GenerationID;source.AssetID=v.AssetID;if width.Valid{v1:=int(width.Int64);source.Width=&v1};if height.Valid{v1:=int(height.Int64);source.Height=&v1};v.Source=&source;out=append(out,v)
   }
   return out,rows.Err()
+}
+
+func normalizeRejectReasons(input []string) ([]string, error) {
+  if len(input) > 12 { return nil, errors.New("at most 12 reject reasons are allowed") }
+  normalized := make([]string, 0, len(input)); seen := map[string]bool{}
+  for _, reason := range input {
+    value := strings.ToLower(strings.TrimSpace(reason))
+    if !allowedRejectReasons[value] { return nil, errors.New("unknown reject reason") }
+    if seen[value] { return nil, errors.New("duplicated reject reason") }
+    seen[value] = true; normalized = append(normalized, value)
+  }
+  sort.Strings(normalized)
+  return normalized, nil
 }
 
 func variantDecisionState(v Variant) map[string]any {
