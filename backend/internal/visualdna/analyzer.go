@@ -20,6 +20,7 @@ type Focal struct { X, Y float64; Grid [9]float64 }
 type AssetAnalysis struct {
 	ID string
 	Width, Height int
+	AspectRatio float64
 	Palette []PaletteColor
 	Brightness, Contrast, Temperature, Saturation float64
 	Focal Focal
@@ -39,17 +40,19 @@ func Analyze(id string, img image.Image) (AssetAnalysis, error) {
 	sat, _ := meanStd(grid.pixels, func(p px) float64 { return p.s })
 	temp, _ := meanStd(grid.pixels, func(p px) float64 { return p.t })
 	focal, edges, geom, texture, light := spatial(grid)
-	return AssetAnalysis{ID:id, Width:b.Dx(), Height:b.Dy(), Palette:palette(grid.pixels), Brightness:bright, Contrast:contrast, Temperature:temp, Saturation:sat, Focal:focal, EdgeDensity:edges, DepthProxy:depth(grid), Geometry:geom, Texture:texture, Lighting:light}, nil
+	return AssetAnalysis{ID:id, Width:b.Dx(), Height:b.Dy(), AspectRatio:float64(b.Dx())/float64(b.Dy()), Palette:palette(grid.pixels), Brightness:bright, Contrast:contrast, Temperature:temp, Saturation:sat, Focal:focal, EdgeDensity:edges, DepthProxy:depth(grid), Geometry:geom, Texture:texture, Lighting:light}, nil
 }
 
 func (a AssetAnalysis) JSON() map[string]any {
+	pal := make([]map[string]any, 0, len(a.Palette))
+	for _, p := range a.Palette { pal = append(pal, map[string]any{"hex": p.Hex, "share": p.Share}) }
 	grid := make([]float64, len(a.Focal.Grid))
 	copy(grid, a.Focal.Grid[:])
 	orient := map[string]float64{}
 	for k,v := range a.Geometry.Orientation { orient[k]=v }
 	return map[string]any{
-		"asset_id":a.ID, "width":a.Width, "height":a.Height,
-		"palette":a.Palette, "brightness":a.Brightness, "contrast":a.Contrast,
+		"asset_id":a.ID, "width":a.Width, "height":a.Height, "aspect_ratio":a.AspectRatio,
+		"palette":pal, "brightness":a.Brightness, "contrast":a.Contrast,
 		"color_temperature":a.Temperature, "saturation":a.Saturation,
 		"focal_distribution":map[string]any{"center_x":a.Focal.X,"center_y":a.Focal.Y,"grid_3x3":grid},
 		"edge_density":a.EdgeDensity, "depth_proxy":a.DepthProxy,
@@ -90,6 +93,7 @@ func BuildProfile(values []AssetAnalysis) (map[string]any, map[string]any) {
 	edges:=agg("edge_density",func(v AssetAnalysis)float64{return v.EdgeDensity})
 	depthP:=agg("depth_proxy",func(v AssetAnalysis)float64{return v.DepthProxy})
 	texture:=agg("material_texture",func(v AssetAnalysis)float64{return v.Texture.HighFrequency})
+	aspect:=agg("aspect_ratio",func(v AssetAnalysis)float64{return v.AspectRatio})
 	recurring:=[]string{}
 	for _,x:=range []struct{name string;signal map[string]any}{
 		{"brightness",brightness},{"contrast",contrast},{"color_temperature",temp},{"saturation",sat},{"edge_density",edges},{"depth_proxy",depthP},{"material_texture",texture},
@@ -101,12 +105,12 @@ func BuildProfile(values []AssetAnalysis) (map[string]any, map[string]any) {
 	if len(values)==1{unc="Single source asset; recurring, emerging and outlier conclusions are not statistically stable."}
 	signals:=map[string]any{
 		"palette":map[string]any{"value":palette,"source_assets":ids,"algorithm":AlgorithmVersion,"confidence":confidence(len(values),0),"uncertainty":unc},
-		"brightness":brightness,"contrast":contrast,"color_temperature":temp,"saturation":sat,
-		"focal_distribution":map[string]any{"center_x":fx/float64(len(values)),"center_y":fy/float64(len(values)),"algorithm":AlgorithmVersion,"source_assets":ids},
+		"aspect_ratio":aspect,"brightness":brightness,"contrast":contrast,"color_temperature":temp,"saturation":sat,
+		"focal_distribution":map[string]any{"center_x":fx/float64(len(values)),"center_y":fy/float64(len(values)),"algorithm":AlgorithmVersion,"source_assets":ids,"confidence":confidence(len(values),0.1),"uncertainty":uncertainty(len(values))},
 		"edge_density":edges,"depth_proxy":depthP,
 		"dominant_geometry":map[string]any{"value":geom,"source_assets":ids,"algorithm":AlgorithmVersion,"confidence":confidence(len(values),0.1),"uncertainty":"Inferred from edge orientations."},
 		"material_texture":texture,
-		"lighting":map[string]any{"highlight_ratio":hl/float64(len(values)),"shadow_ratio":sh/float64(len(values)),"directions":dir,"algorithm":AlgorithmVersion,"source_assets":ids},
+		"lighting":map[string]any{"highlight_ratio":hl/float64(len(values)),"shadow_ratio":sh/float64(len(values)),"directions":dir,"algorithm":AlgorithmVersion,"source_assets":ids,"confidence":confidence(len(values),0.1),"uncertainty":uncertainty(len(values))},
 		"asset_values":func()[]map[string]any{out:=make([]map[string]any,0,len(values));for _,v:=range values{out=append(out,v.JSON())};return out}(),
 	}
 	summary:=map[string]any{"recurring":recurring,"emerging":emerging,"outliers":outliers,"confidence":fc,"uncertainty":unc}
@@ -150,7 +154,7 @@ func outliers(values []AssetAnalysis, aggs map[string]map[string]any) []map[stri
 func metric(a AssetAnalysis,name string)float64{switch name{case "brightness":return a.Brightness;case "contrast":return a.Contrast;case "saturation":return a.Saturation;case "edge_density":return a.EdgeDensity;case "depth_proxy":return a.DepthProxy;case "material_texture":return a.Texture.HighFrequency};return 0}
 
 func sample(img image.Image) grid {
-	b:=img.Bounds();step:=1;maxDim:=256;if b.Dx()>maxDim||b.Dy()>maxDim{step=int(math.Ceil(float64(max(b.Dx(),b.Dy()))/float64(maxDim)))}
+	b:=img.Bounds();step:=1;maxDim:=256;if b.Dx()>maxDim||b.Dy()>maxDim{step=int(math.Ceil(float64(maxInt(b.Dx(),b.Dy()))/float64(maxDim)))}
 	w:=(b.Dx()+step-1)/step;h:=(b.Dy()+step-1)/step;pxs:=make([]px,0,w*h)
 	for y:=b.Min.Y;y<b.Max.Y;y+=step{for x:=b.Min.X;x<b.Max.X;x+=step{c:=color.NRGBAModel.Convert(img.At(x,y)).(color.NRGBA);r,g,bl:=float64(c.R)/255,float64(c.G)/255,float64(c.B)/255;br:=0.2126*r+0.7152*g+0.0722*bl;mx,mn:=max3(r,g,bl),min3(r,g,bl);s:=0.0;if mx>0{s=(mx-mn)/mx};pxs=append(pxs,px{r:r,g:g,b:bl,lum:br,s:s,t:(r-bl)/(r+bl+0.0001)})}}
 	return grid{w:w,h:h,pixels:pxs}
