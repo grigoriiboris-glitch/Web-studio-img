@@ -28,13 +28,13 @@ func (s *SQLStore) Create(ctx context.Context, userID uuid.UUID, name string, de
 	return s.queryOne(ctx, `
 		INSERT INTO projects (user_id, name, description)
 		VALUES ($1, $2, $3)
-		RETURNING id, user_id, name, description, status, created_at, updated_at
+		RETURNING id, user_id, name, description, status, privacy_mode, created_at, updated_at
 	`, userID, name, description)
 }
 
 func (s *SQLStore) Get(ctx context.Context, userID, projectID uuid.UUID) (Project, error) {
 	return s.queryOne(ctx, `
-		SELECT id, user_id, name, description, status, created_at, updated_at
+		SELECT id, user_id, name, description, status, privacy_mode, created_at, updated_at
 		FROM projects
 		WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
 	`, projectID, userID)
@@ -42,7 +42,7 @@ func (s *SQLStore) Get(ctx context.Context, userID, projectID uuid.UUID) (Projec
 
 func (s *SQLStore) List(ctx context.Context, userID uuid.UUID) ([]Project, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, user_id, name, description, status, created_at, updated_at
+		SELECT id, user_id, name, description, status, privacy_mode, created_at, updated_at
 		FROM projects
 		WHERE user_id = $1 AND status <> 'deleted'
 		ORDER BY updated_at DESC, id DESC
@@ -55,7 +55,7 @@ func (s *SQLStore) List(ctx context.Context, userID uuid.UUID) ([]Project, error
 	items := make([]Project, 0)
 	for rows.Next() {
 		var project Project
-		if err := rows.Scan(&project.ID, &project.UserID, &project.Name, &project.Description, &project.Status, &project.CreatedAt, &project.UpdatedAt); err != nil {
+		if err := rows.Scan(&project.ID, &project.UserID, &project.Name, &project.Description, &project.Status, &project.PrivacyMode, &project.CreatedAt, &project.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		items = append(items, project)
@@ -66,20 +66,19 @@ func (s *SQLStore) List(ctx context.Context, userID uuid.UUID) ([]Project, error
 	return items, nil
 }
 
-func (s *SQLStore) Update(ctx context.Context, userID, projectID uuid.UUID, name string, description *string, status Status) (Project, error) {
+func (s *SQLStore) Update(ctx context.Context, userID, projectID uuid.UUID, name string, description *string, status Status, privacyMode PrivacyMode) (Project, error) {
 	name, err := ValidateName(name)
 	if err != nil {
 		return Project{}, err
 	}
-	if err := ValidateStatus(status); err != nil {
-		return Project{}, err
-	}
+	if err := ValidateStatus(status); err != nil { return Project{}, err }
+	if err := ValidatePrivacyMode(privacyMode); err != nil { return Project{}, err }
 	return s.queryOne(ctx, `
 		UPDATE projects
-		SET name = $1, description = $2, status = $3, updated_at = now()
-		WHERE id = $4 AND user_id = $5 AND status <> 'deleted'
-		RETURNING id, user_id, name, description, status, created_at, updated_at
-	`, name, description, status, projectID, userID)
+		SET name = $1, description = $2, status = $3, privacy_mode = $4, updated_at = now()
+		WHERE id = $5 AND user_id = $6 AND status <> 'deleted'
+		RETURNING id, user_id, name, description, status, privacy_mode, created_at, updated_at
+	`, name, description, status, privacyMode, projectID, userID)
 }
 
 func (s *SQLStore) Archive(ctx context.Context, userID, projectID uuid.UUID) (Project, error) {
@@ -87,7 +86,7 @@ func (s *SQLStore) Archive(ctx context.Context, userID, projectID uuid.UUID) (Pr
 		UPDATE projects
 		SET status = 'archived', updated_at = now()
 		WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
-		RETURNING id, user_id, name, description, status, created_at, updated_at
+		RETURNING id, user_id, name, description, status, privacy_mode, created_at, updated_at
 	`, projectID, userID)
 }
 
@@ -95,7 +94,7 @@ func (s *SQLStore) queryOne(ctx context.Context, query string, args ...any) (Pro
 	var project Project
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
 		&project.ID, &project.UserID, &project.Name, &project.Description,
-		&project.Status, &project.CreatedAt, &project.UpdatedAt,
+		&project.Status, &project.PrivacyMode, &project.CreatedAt, &project.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Project{}, ErrProjectNotFound

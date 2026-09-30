@@ -2,12 +2,15 @@ export interface ApiError {
   error: { code: string; message: string; request_id?: string }
 }
 
+export type PrivacyMode = 'local_only' | 'provider_allowed' | 'project_default'
+
 export interface Project {
   id: string
   user_id: string
   name: string
   description?: string
   status: 'active' | 'archived' | 'deleted'
+  privacy_mode: PrivacyMode
   created_at: string
   updated_at: string
 }
@@ -52,7 +55,7 @@ export const projectsApi = {
   get: (id: string) => apiRequest<Project>(`/projects/${id}`),
   create: (input: { name: string; description?: string }) =>
     apiRequest<Project>('/projects', { method: 'POST', body: JSON.stringify(input) }),
-  update: (id: string, input: { name: string; description?: string; status: Project['status'] }) =>
+  update: (id: string, input: { name: string; description?: string; status: Project['status']; privacy_mode?: PrivacyMode }) =>
     apiRequest<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   archive: (id: string) =>
     apiRequest<Project>(`/projects/${id}`, { method: 'DELETE' }),

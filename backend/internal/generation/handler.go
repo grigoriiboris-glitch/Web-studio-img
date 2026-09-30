@@ -22,6 +22,10 @@ type Enqueuer interface {
 	Enqueue(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
+type ProjectPrivacyPolicy interface {
+	AllowsProvider(context.Context, uuid.UUID, uuid.UUID, string) (bool, string, error)
+}
+
 type Handler struct {
 	store Store
 	queue Enqueuer
@@ -29,6 +33,7 @@ type Handler struct {
 	provenance *provenance.Store
 	projectEvents *events.Store
 	recipes RecipeResolver
+	privacy ProjectPrivacyPolicy
 }
 
 func NewHandler(store Store, queue Enqueuer, provider Provider) (*Handler, error) {
@@ -54,6 +59,8 @@ func NewHandlerWithRecipeResolver(store Store, queue Enqueuer, provider Provider
 	h.recipes = recipes
 	return h, nil
 }
+
+func (h *Handler) SetPrivacyPolicy(policy ProjectPrivacyPolicy) { h.privacy = policy }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/generations", h.create)
@@ -91,6 +98,18 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if err := decode(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "invalid generation payload")
 		return
+	}
+	if h.privacy != nil {
+		allowed, mode, policyErr := h.privacy.AllowsProvider(r.Context(), userID, projectID, h.provider.Name())
+		if policyErr != nil {
+			writeError(w, http.StatusInternalServerError, "privacy_policy_failed", "could not evaluate project privacy policy")
+			return
+		}
+		if !allowed {
+			if h.projectEvents != nil { _, _ = h.projectEvents.Append(r.Context(), userID, projectID, "generation.provider_rejected", "project", projectID, map[string]any{"provider": h.provider.Name(), "privacy_mode": mode}) }
+			writeError(w, http.StatusForbidden, "provider_blocked_by_privacy_mode", "selected provider is blocked by project privacy mode")
+			return
+		}
 	}
 	req := Request{
 		ProjectID: projectID, IterationID: input.IterationID, Prompt: input.Prompt,

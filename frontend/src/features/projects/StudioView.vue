@@ -39,6 +39,7 @@ import {
   type LibraryItem,
   recipesApi,
   type Recipe,
+  type PrivacyMode,
 } from '../../api/client'
 
 const route = useRoute()
@@ -53,6 +54,7 @@ const rejectedGenerationIds = ref<string[]>([])
 const selectedReferenceId = ref<string | null>(null)
 const error = ref<string | null>(null)
 const loading = ref(true)
+const privacySaving = ref(false)
 const creating = ref(false)
 const generating = ref(false)
 const savingPrompt = ref(false)
@@ -147,6 +149,23 @@ const builderText = computed(() => {
 })
 
 const projectId = () => String(route.params.projectId)
+
+async function savePrivacyMode(mode: PrivacyMode) {
+  if (!project.value) return
+  privacySaving.value = true
+  try {
+    project.value = await projectsApi.update(project.value.id, {
+      name: project.value.name,
+      description: project.value.description,
+      status: project.value.status,
+      privacy_mode: mode,
+    })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not update privacy mode'
+  } finally {
+    privacySaving.value = false
+  }
+}
 
 async function loadStudio() {
   const id = projectId()
@@ -1029,6 +1048,25 @@ onUnmounted(() => {
       <el-skeleton v-if="loading" :rows="8" animated />
 
       <template v-else>
+        <el-card class="privacy-card">
+          <template #header>Creative privacy</template>
+          <el-space wrap>
+            <el-tag v-if="project?.privacy_mode === 'local_only'" type="success">🔒 Local only</el-tag>
+            <el-tag v-else type="info">{{ project?.privacy_mode === 'provider_allowed' ? 'Provider allowed' : 'Project default' }}</el-tag>
+            <el-select
+              :model-value="project?.privacy_mode"
+              :loading="privacySaving"
+              style="width: 190px"
+              aria-label="Creative privacy mode"
+              @update:model-value="savePrivacyMode"
+            >
+              <el-option value="local_only" label="Local only" />
+              <el-option value="provider_allowed" label="Provider allowed" />
+              <el-option value="project_default" label="Project default" />
+            </el-select>
+          </el-space>
+          <p class="privacy-copy">Local only permits generation only through the local ComfyUI provider and does not silently fall back to an external provider.</p>
+        </el-card>
         <BranchPanel :project-id="projectId()" @merged="loadStudio" />
         <el-card v-if="rejectionSummary?.reasons.length" class="create-card avoid-card">
           <template #header>Avoid based on previous decisions</template>

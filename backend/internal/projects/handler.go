@@ -116,7 +116,13 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusBadRequest, "invalid_request", "invalid project payload")
 		return
 	}
-	project, err := h.store.Update(r.Context(), userID, projectID, input.Name, input.Description, Status(input.Status))
+	privacyMode := PrivacyMode(input.PrivacyMode)
+	if privacyMode == "" {
+		current, getErr := h.store.Get(r.Context(), userID, projectID)
+		if getErr != nil { writeProjectError(w, http.StatusNotFound, "project_not_found", "project not found"); return }
+		privacyMode = current.PrivacyMode
+	}
+	project, err := h.store.Update(r.Context(), userID, projectID, input.Name, input.Description, Status(input.Status), privacyMode)
 	if errors.Is(err, ErrInvalidProject) {
 		writeProjectError(w, http.StatusBadRequest, "invalid_project", "project payload is invalid")
 		return
@@ -129,7 +135,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, http.StatusInternalServerError, "project_update_failed", "could not update project")
 		return
 	}
-	h.recordMutation(r,userID,projectID,project.ID,"project.updated",map[string]any{"name":project.Name,"status":project.Status})
+	h.recordMutation(r,userID,projectID,project.ID,"project.updated",map[string]any{"name":project.Name,"status":project.Status,"privacy_mode":project.PrivacyMode})
 	writeProjectJSON(w, http.StatusOK, project)
 }
 
@@ -161,6 +167,7 @@ type projectInput struct {
 	Name string `json:"name"`
 	Description *string `json:"description"`
 	Status string `json:"status,omitempty"`
+	PrivacyMode string `json:"privacy_mode,omitempty"`
 }
 
 func decodeProjectInput(r *http.Request, input *projectInput) error {
