@@ -292,6 +292,92 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
 
+  /projects/{project_id}/brief:
+    get:
+      summary: Get the latest creative brief
+      operationId: getCreativeBrief
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Creative brief
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreativeBrief'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: Create a new creative brief version
+      operationId: createCreativeBrief
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreativeBriefInput'
+      responses:
+        '201':
+          description: Creative brief
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreativeBrief'
+  /projects/{project_id}/brief/versions:
+    get:
+      summary: List creative brief versions
+      operationId: listCreativeBriefVersions
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Creative brief versions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [briefs]
+                properties:
+                  briefs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CreativeBrief'
+  /projects/{project_id}/brief/approved:
+    get:
+      summary: Get the approved creative brief
+      operationId: getApprovedCreativeBrief
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Approved creative brief
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreativeBrief'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{project_id}/brief/{brief_id}/approve:
+    post:
+      summary: Approve a creative brief version
+      operationId: approveCreativeBrief
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: brief_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Approved creative brief
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreativeBrief'
   /projects/{project_id}/prompts:
     parameters:
       - name: project_id
@@ -2053,6 +2139,519 @@ components:
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string, maxLength: 2000}
         status: {type: string, enum: [active, archived, deleted]}
+    CreativeBrief:
+      type: object
+      required: [id, project_id, user_id, version, title, goal, must_have, avoid, required_elements, constraints, success_criteria, status, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        title: {type: string}
+        goal: {type: string}
+        audience: {type: string}
+        deliverable: {type: string}
+        aspect_ratio: {type: string}
+        target_width: {type: integer, minimum: 1}
+        target_height: {type: integer, minimum: 1}
+        subject: {type: string}
+        must_have: {type: array, items: {type: string}}
+        avoid: {type: array, items: {type: string}}
+        mood: {type: string}
+        required_elements: {type: array, items: {type: string}}
+        constraints: {type: array, items: {type: string}}
+        success_criteria: {type: array, items: {type: string}}
+        deadline: {type: string, format: date-time}
+        status: {type: string, enum: [draft, approved]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CreativeBriefInput:
+      type: object
+      additionalProperties: false
+      required: [title, goal]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        goal: {type: string, minLength: 1, maxLength: 5000}
+        audience: {type: string, maxLength: 1000}
+        deliverable: {type: string, maxLength: 1000}
+        aspect_ratio: {type: string, pattern: '^[0-9]+:[0-9]+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+
+    Generation:
+      type: object
+      required: [id, project_id, user_id, provider, model, prompt, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        provider: {type: string}
+        model: {type: string}
+        model_version: {type: string}
+        prompt: {type: string}
+        negative_prompt: {type: string}
+        seed: {type: integer, format: int64}
+        aspect_ratio: {type: string}
+        parameters: {type: object, additionalProperties: true}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+        provider_job_id: {type: string}
+        error_code: {type: string}
+        error_message: {type: string}
+        cost: {type: number, format: double}
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    GenerationInput:
+      type: object
+      additionalProperties: false
+      required: [prompt]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        prompt: {type: string, minLength: 1, maxLength: 20000}
+        negative_prompt: {type: string, maxLength: 10000}
+        seed: {type: integer, format: int64}
+        aspect_ratio: {type: string, pattern: '^[0-9]+:[0-9]+$'}
+        parameters: {type: object, additionalProperties: true}
+        reference_ids:
+          type: array
+          maxItems: 50
+          items: {type: string, format: uuid}
+
+    Prompt:
+      type: object
+      required: [id, project_id, version, original_text, created_by, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        parent_prompt_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        original_text: {type: string}
+        ai_suggestions:
+          type: array
+          items: {type: string}
+        final_text: {type: string}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+          properties:
+            subject: {type: string}
+            composition: {type: string}
+            camera: {type: string}
+            lighting: {type: string}
+            material: {type: string}
+            texture: {type: string}
+            color: {type: string}
+            atmosphere: {type: string}
+            style: {type: string}
+            depth: {type: string}
+            detail: {type: string}
+            constraints: {type: string}
+            negative_constraints: {type: string}
+        created_by: {type: string, enum: [human, ai, mixed]}
+        created_at: {type: string, format: date-time}
+    PromptInput:
+      type: object
+      additionalProperties: false
+      required: [original_text]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        parent_prompt_id: {type: string, format: uuid}
+        original_text: {type: string, minLength: 1, maxLength: 20000}
+        ai_suggestions:
+          type: array
+          maxItems: 20
+          items: {type: string, maxLength: 4000}
+        final_text: {type: string, maxLength: 20000}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+        created_by: {type: string, enum: [human, ai, mixed]}
+    PromptList:
+      type: object
+      required: [prompts]
+      properties:
+        prompts:
+          type: array
+          items: {$ref: '#/components/schemas/Prompt'}
+    Reference:
+      type: object
+      required: [id, project_id, source_type, license, license_verified, user_owned, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        source_url: {type: string, format: uri}
+        source_type: {type: string, enum: [inspiration, reference, direct_source, user_created, public_domain, unknown]}
+        license: {type: string}
+        license_verified: {type: boolean}
+        user_owned: {type: boolean}
+        sha256: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
+        notes: {type: string}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ReferenceInfluence:
+      type: object
+      required: [composition, semantic, color, style, material, geometry]
+      properties:
+        composition: {type: number, minimum: 0, maximum: 1}
+        semantic: {type: number, minimum: 0, maximum: 1}
+        color: {type: number, minimum: 0, maximum: 1}
+        style: {type: number, minimum: 0, maximum: 1}
+        material: {type: number, minimum: 0, maximum: 1}
+        geometry: {type: number, minimum: 0, maximum: 1}
+        warning: {type: string}
+    ReferenceInput:
+      type: object
+      additionalProperties: false
+      required: [source_type, license]
+      properties:
+        asset_id: {type: string, format: uuid}
+        source_url: {type: string, format: uri}
+        source_type: {type: string, enum: [inspiration, reference, direct_source, user_created, public_domain, unknown]}
+        license: {type: string, minLength: 1, maxLength: 500}
+        license_verified: {type: boolean}
+        user_owned: {type: boolean}
+        sha256: {type: string, pattern: '^[0-9a-fA-F]{64}$'}
+        notes: {type: string, maxLength: 10000}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+    ReferenceUsageInput:
+      type: object
+      additionalProperties: false
+      properties:
+        iteration_id: {type: string, format: uuid}
+        generation_id: {type: string, format: uuid}
+        usage_type: {type: string, minLength: 1, maxLength: 100}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+    ReferenceUsage:
+      type: object
+      required: [id, user_id, project_id, reference_id, usage_type, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        reference_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        generation_id: {type: string, format: uuid}
+        usage_type: {type: string}
+        influence: {$ref: '#/components/schemas/ReferenceInfluence'}
+        created_at: {type: string, format: date-time}
+    ReferenceList:
+      type: object
+      required: [references]
+      properties:
+        references:
+          type: array
+          items: {$ref: '#/components/schemas/Reference'}
+    HumanAction:
+      type: object
+      required: [id, project_id, user_id, action_type, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
+        action_type: {type: string, enum: [IDEA_CREATED, SKETCH_IMPORTED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SELECTED, VARIANT_REJECTED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, COMPOSITION_MUTATION_ACCEPTED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED, MATERIAL_CREATED, MATERIAL_UPDATED, MATERIAL_DELETED, TEXTURE_CREATED, TEXTURE_UPDATED, TEXTURE_DELETED, STYLE_PROFILE_CREATED, STYLE_PROFILE_UPDATED, STYLE_PROFILE_APPLIED, ASSET_DNA_CREATED, VISUAL_LANGUAGE_UPDATED, RIGHTS_UPDATED, DO_NOT_USE_UPDATED, LAYER_CREATED, LAYER_UPDATED, LAYER_DELETED, MASK_CREATED, MANUAL_EDIT_CREATED, MANUAL_EDIT_APPLIED, MANUAL_EDIT_REJECTED, CREATIVE_BRIEF_CREATED, CREATIVE_BRIEF_APPROVED]}
+        payload: {type: object, additionalProperties: true}
+        old_state: {type: object, additionalProperties: true}
+        new_state: {type: object, additionalProperties: true}
+        ai_influence: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    HumanActionInput:
+      type: object
+      additionalProperties: false
+      required: [action_type]
+      properties:
+        iteration_id: {type: string, format: uuid}
+        action_type: {type: string}
+        payload: {type: object, additionalProperties: true}
+        old_state: {type: object, additionalProperties: true}
+        new_state: {type: object, additionalProperties: true}
+        ai_influence: {type: object, additionalProperties: true}
+    HumanActionList:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          items: {$ref: '#/components/schemas/HumanAction'}
+    PromptPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        original_text: {type: string, minLength: 1, maxLength: 20000}
+        ai_suggestions:
+          type: array
+          maxItems: 20
+          items: {type: string, maxLength: 4000}
+        final_text: {type: string, maxLength: 20000}
+        components:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+        created_by: {type: string, enum: [human, ai, mixed]}
+    Asset:
+      type: object
+      required: [id, project_id, user_id, type, storage_key, mime_type, size, checksum, lifecycle_status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        generation_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        type: {type: string}
+        storage_key: {type: string}
+        preview_key: {type: string}
+        thumbnail_key: {type: string}
+        mime_type: {type: string}
+        size: {type: integer, format: int64, minimum: 0}
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+        checksum: {type: string, pattern: '^[0-9a-fA-F]{64}
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+}
+        exif: {type: object, additionalProperties: true}
+        lifecycle_status: {type: string, enum: [pending, active, orphaned, deleted]}
+        expires_at: {type: string, format: date-time}
+        deleted_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    AssetUploadInit:
+      type: object
+      required: [mime_type, size]
+      properties:
+        mime_type: {type: string, enum: [image/jpeg, image/png, image/webp]}
+        size: {type: integer, format: int64, minimum: 1, maximum: 10485760}
+    AssetUpload:
+      type: object
+      required: [upload_id, asset, upload_url, expires_at]
+      properties:
+        upload_id: {type: string, format: uuid}
+        asset: {$ref: '#/components/schemas/Asset'}
+        upload_url: {type: string, format: uri}
+        expires_at: {type: string, format: date-time}
+    SignedURL:
+      type: object
+      required: [asset_id, url, expires_at]
+      properties:
+        asset_id: {type: string, format: uuid}
+        url: {type: string, format: uri}
+        expires_at: {type: string, format: date-time}
+    ProvenanceEvent:
+      type: object
+      required: [id, user_id, project_id, entity_type, entity_id, action, hash, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        iteration_id: {type: string, format: uuid}
+        entity_type: {type: string}
+        entity_id: {type: string, format: uuid}
+        action: {type: string}
+        payload: {type: object, additionalProperties: true}
+        parent_hash: {type: string}
+        hash: {type: string, pattern: '^[0-9a-fA-F]{64}
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+}
+        created_at: {type: string, format: date-time}
+    ProvenanceVerification:
+      type: object
+      required: [valid, events_checked, broken_links, verified_at]
+      properties:
+        valid: {type: boolean}
+        events_checked: {type: integer, minimum: 0}
+        broken_links:
+          type: array
+          items: {type: string}
+        verified_at: {type: string, format: date-time}
+
+    SimilarityCheckInput:
+      type: object
+      additionalProperties: false
+      required: [target_asset_id]
+      properties:
+        target_asset_id: {type: string, format: uuid}
+        reference_ids: {type: array, items: {type: string, format: uuid}}
+        search_scope: {type: string, maxLength: 200}
+    SimilarityCheck:
+      type: object
+      required: [id, project_id, user_id, target_asset_id, visual_score, composition_score, semantic_score, style_score, search_scope, algorithm, algorithm_version, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        target_asset_id: {type: string, format: uuid}
+        visual_score: {type: number, minimum: 0, maximum: 1}
+        composition_score: {type: number, minimum: 0, maximum: 1}
+        semantic_score: {type: number, minimum: 0, maximum: 1}
+        style_score: {type: number, minimum: 0, maximum: 1}
+        search_scope: {type: string}
+        sources: {type: array, items: {type: string}}
+        unavailable_sources: {type: array, items: {type: string}}
+        algorithm: {type: string}
+        algorithm_version: {type: string}
+        metadata: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    Export:
+      type: object
+      required: [id, project_id, user_id, final_asset_id, status, artifacts, manifest, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        final_asset_id: {type: string, format: uuid}
+        status: {type: string, enum: [running, completed, failed]}
+        artifacts: {type: object, additionalProperties: {type: string, format: uri}}
+        manifest: {type: object, additionalProperties: true}
+        error: {type: string}
+        created_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    CompositionSpecInput:
+      type: object
+      additionalProperties: true
+      properties:
+        focal_points: {type: array, items: {}}
+        bounding_boxes: {type: array, items: {}}
+        relative_positions: {type: object, additionalProperties: true}
+        horizon: {type: number, minimum: 0, maximum: 1}
+        camera_elevation: {type: number}
+        perspective: {type: string}
+        hierarchy: {type: array, items: {}}
+        negative_space: {type: object, additionalProperties: true}
+        dominant_geometry: {type: object, additionalProperties: true}
+        object_scale: {type: object, additionalProperties: true}
+        light_direction: {type: object, additionalProperties: true}
+    CompositionSpec:
+      allOf:
+        - $ref: '#/components/schemas/CompositionSpecInput'
+        - type: object
+          required: [id, project_id, iteration_id, user_id, created_at, updated_at]
+          properties:
+            id: {type: string, format: uuid}
+            project_id: {type: string, format: uuid}
+            iteration_id: {type: string, format: uuid}
+            user_id: {type: string, format: uuid}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    CompositionMutationInput:
+      type: object
+      additionalProperties: false
+      required: [source_similarity_check_id]
+      description: The backend derives the authoritative composition score from the persisted similarity check; composition_similarity is accepted only as a client hint.
+      properties:
+        composition_spec_id: {type: string, format: uuid}
+        source_similarity_check_id: {type: string, format: uuid}
+        composition_similarity: {type: number, minimum: 0.8, maximum: 1}
+    CompositionAnalysisResponse:
+      type: object
+      required: [spec, analysis, uncertainty]
+      properties:
+        spec: {$ref: '#/components/schemas/CompositionSpec'}
+        analysis: {type: object, additionalProperties: true}
+        uncertainty: {type: string}
+    CompositionMutation:
+      type: object
+      required: [id, project_id, user_id, suggestions, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        composition_spec_id: {type: string, format: uuid}
+        source_similarity_check_id: {type: string, format: uuid}
+        suggestions: {type: array, items: {type: string}}
+        status: {type: string, enum: [proposed, accepted, rejected]}
+        accepted_iteration_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+    LibraryItemInput:
+      type: object
+      additionalProperties: false
+      required: [category, name, prompt_fragment]
+      properties:
+        category: {type: string, minLength: 1, maxLength: 100}
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string}
+        tags: {type: array, maxItems: 50, items: {type: string}}
+        prompt_fragment: {type: string, minLength: 1, maxLength: 4000}
+        preview_key: {type: string}
+    LibraryItem:
+      type: object
+      required: [id, kind, category, name, tags, prompt_fragment, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        kind: {type: string, enum: [material, texture]}
+        category: {type: string}
+        name: {type: string}
+        description: {type: string}
+        tags: {type: array, items: {type: string}}
+        prompt_fragment: {type: string}
+        preview_key: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    LibraryItemList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/LibraryItem'}}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+}
+        target_width: {type: integer, minimum: 1, maximum: 100000}
+        target_height: {type: integer, minimum: 1, maximum: 100000}
+        subject: {type: string, maxLength: 1000}
+        must_have:
+          type: array
+          maxItems: 50
+          items: {type: string, maxLength: 500}
+        avoid:
+          type: array
+          maxItems: 50
+          items: {type: string, maxLength: 500}
+        mood: {type: string, maxLength: 1000}
+        required_elements:
+          type: array
+          maxItems: 50
+          items: {type: string, maxLength: 500}
+        constraints:
+          type: array
+          maxItems: 50
+          items: {type: string, maxLength: 500}
+        success_criteria:
+          type: array
+          maxItems: 50
+          items: {type: string, maxLength: 500}
+        deadline: {type: string, format: date-time}
     ProjectList:
       type: object
       required: [projects]

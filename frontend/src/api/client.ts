@@ -58,6 +58,51 @@ export const projectsApi = {
     apiRequest<Project>(`/projects/${id}`, { method: 'DELETE' }),
 }
 
+export interface CreativeBrief {
+  id: string
+  project_id: string
+  user_id: string
+  version: number
+  title: string
+  goal: string
+  audience?: string
+  deliverable?: string
+  aspect_ratio?: string
+  target_width?: number
+  target_height?: number
+  subject?: string
+  must_have: string[]
+  avoid: string[]
+  mood?: string
+  required_elements: string[]
+  constraints: string[]
+  success_criteria: string[]
+  deadline?: string
+  status: 'draft' | 'approved'
+  created_at: string
+  updated_at: string
+}
+
+export type CreativeBriefInput = Omit<CreativeBrief, 'id' | 'project_id' | 'user_id' | 'version' | 'status' | 'created_at' | 'updated_at'>
+
+export const creativeBriefApi = {
+  current: (projectId: string) =>
+    apiRequest<CreativeBrief>('/projects/' + projectId + '/brief'),
+  versions: (projectId: string) =>
+    apiRequest<{ briefs: CreativeBrief[] }>('/projects/' + projectId + '/brief/versions'),
+  approved: (projectId: string) =>
+    apiRequest<CreativeBrief>('/projects/' + projectId + '/brief/approved'),
+  create: (projectId: string, input: CreativeBriefInput) =>
+    apiRequest<CreativeBrief>('/projects/' + projectId + '/brief', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  approve: (projectId: string, briefId: string) =>
+    apiRequest<CreativeBrief>('/projects/' + projectId + '/brief/' + briefId + '/approve', {
+      method: 'POST',
+    }),
+}
+
 export type IterationType =
   | 'idea'
   | 'sketch'

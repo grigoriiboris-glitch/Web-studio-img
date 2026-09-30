@@ -13,6 +13,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
+	"github.com/oleg3190/Web-studio-img/backend/internal/brief"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assistant"
 	"github.com/oleg3190/Web-studio-img/backend/internal/composition"
 	"github.com/oleg3190/Web-studio-img/backend/internal/config"
@@ -72,6 +73,7 @@ func main() {
 
 	limiter := security.NewRateLimiter(cfg.RateLimit, cfg.RateWindow)
 	var projectHandler *projects.Handler
+	var briefHandler *brief.Handler
 	var iterationHandler *iterations.Handler
 	var generationHandler *generation.Handler
 	var eventHandler *events.Handler
@@ -146,6 +148,12 @@ func main() {
 		referenceStore, err := references.NewStore(projectDB)
 		if err != nil {
 			logger.Error("reference store initialization failed", "error", err)
+			os.Exit(1)
+		}
+
+		briefHandler, err = brief.NewHandler(projectDB, actionStore, provenanceStore, eventStore)
+		if err != nil {
+			logger.Error("creative brief handler initialization failed", "error", err)
 			os.Exit(1)
 		}
 
@@ -305,7 +313,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservability(
 		logger, cfg.CORSOrigins, limiter, metrics,
 		projectHandler, iterationHandler, generationHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, manualEditHandler, workflowHandler, briefHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
