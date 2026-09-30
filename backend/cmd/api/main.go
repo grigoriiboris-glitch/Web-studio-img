@@ -126,11 +126,6 @@ func main() {
 			logger.Error("project store initialization failed", "error", err)
 			os.Exit(1)
 		}
-		branchStore, err := branches.NewStore(projectDB)
-		if err != nil { logger.Error("branch store initialization failed", "error", err); os.Exit(1) }
-		branchHandler, err = branches.NewHandler(branchStore, eventStore, provenanceStore)
-		if err != nil { logger.Error("branch handler initialization failed", "error", err); os.Exit(1) }
-
 		iterationStore, err := iterations.NewSQLStore(projectDB)
 		if err != nil {
 			logger.Error("iteration store initialization failed", "error", err)
@@ -146,6 +141,12 @@ func main() {
 			logger.Error("provenance store initialization failed", "error", err)
 			os.Exit(1)
 		}
+
+		branchStore, err := branches.NewStore(projectDB)
+		if err != nil { logger.Error("branch store initialization failed", "error", err); os.Exit(1) }
+		branchHandler, err = branches.NewHandler(branchStore, eventStore, provenanceStore)
+		if err != nil { logger.Error("branch handler initialization failed", "error", err); os.Exit(1) }
+
 		actionStore, err := humanactions.NewStore(projectDB)
 		if err != nil {
 			logger.Error("human actions store initialization failed", "error", err)
