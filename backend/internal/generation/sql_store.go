@@ -35,26 +35,31 @@ func (s *SQLStore) Create(ctx context.Context, userID uuid.UUID, req Request, pr
 	var item Generation
 	var raw []byte
 	var refsRaw []byte
+	var workflowRaw []byte
+	var finalParametersRaw []byte
 	err = s.db.QueryRowContext(ctx, `
 		WITH owned_project AS (
 			SELECT id FROM projects WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
 		)
 		INSERT INTO generations
-			(user_id, project_id, iteration_id, provider, model, prompt, negative_prompt, seed, aspect_ratio, parameters, reference_ids, status, idempotency_key, provider_deterministic, determinism_note)
-		SELECT $2, p.id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, 'Provider determinism is not guaranteed unless explicitly stated.'
+			(user_id, project_id, iteration_id, provider, model, prompt, negative_prompt, seed, aspect_ratio, parameters, reference_ids, status, idempotency_key, provider_deterministic, determinism_note, recipe_id, recipe_version, resolved_workflow_hash, resolved_workflow, final_parameters)
+		SELECT $2, p.id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, 'Provider determinism is not guaranteed unless explicitly stated.', $15, NULLIF($16,0), NULLIF($17,''), $18, $19
 		FROM owned_project p
 		WHERE (SELECT count(*) FROM "references" r WHERE r.project_id=p.id AND r.id IN (SELECT value::uuid FROM jsonb_array_elements_text($11::jsonb))) = $14
 		ON CONFLICT (user_id, idempotency_key) DO NOTHING
 		RETURNING id, project_id, iteration_id, user_id, provider, model, model_version, prompt, negative_prompt,
-			seed, aspect_ratio, parameters, reference_ids, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at, provider_deterministic, determinism_note
-	`, req.ProjectID, userID, req.IterationID, provider, model, req.Prompt, req.NegativePrompt, req.Seed, req.AspectRatio, params, referenceIDs, StatusQueued, req.IdempotencyKey, len(req.ReferenceIDs)).Scan(
+			seed, aspect_ratio, parameters, reference_ids, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at, provider_deterministic, determinism_note, recipe_id, recipe_version, resolved_workflow_hash, resolved_workflow, final_parameters
+	`, req.ProjectID, userID, req.IterationID, provider, model, req.Prompt, req.NegativePrompt, req.Seed, req.AspectRatio, params, referenceIDs, StatusQueued, req.IdempotencyKey, len(req.ReferenceIDs), req.RecipeID, req.RecipeVersion, req.ResolvedWorkflowHash, mustJSON(req.ResolvedWorkflow), mustJSON(req.FinalParameters)).Scan(
 		&item.ID, &item.ProjectID, &item.IterationID, &item.UserID, &item.Provider, &item.Model, &item.ModelVersion,
 		&item.Prompt, &item.NegativePrompt, &item.Seed, &item.AspectRatio, &raw, &refsRaw, &item.Status, &item.ProviderJobID,
 		&item.ErrorCode, &item.ErrorMessage, &item.Cost, &item.CreatedAt, &item.StartedAt, &item.CompletedAt, &item.ProviderDeterministic, &item.DeterminismNote,
+		&item.RecipeID, &item.RecipeVersion, &item.ResolvedWorkflowHash, &workflowRaw, &finalParametersRaw,
 	)
 	if err == nil {
 		_ = json.Unmarshal(raw, &item.Parameters)
 		_ = json.Unmarshal(refsRaw, &item.ReferenceIDs)
+		_ = json.Unmarshal(workflowRaw, &item.ResolvedWorkflow)
+		_ = json.Unmarshal(finalParametersRaw, &item.FinalParameters)
 		return item, true, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -73,7 +78,7 @@ func (s *SQLStore) Create(ctx context.Context, userID uuid.UUID, req Request, pr
 func (s *SQLStore) GetByIdempotency(ctx context.Context, userID uuid.UUID, key string) (Generation, error) {
 	return s.scanOne(ctx, `
 		SELECT id, project_id, iteration_id, user_id, provider, model, model_version, prompt, negative_prompt,
-			seed, aspect_ratio, parameters, reference_ids, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at, provider_deterministic, determinism_note
+			seed, aspect_ratio, parameters, reference_ids, status, provider_job_id, error_code, error_message, cost, created_at, started_at, completed_at, provider_deterministic, determinism_note, recipe_id, recipe_version, resolved_workflow_hash, resolved_workflow, final_parameters
 		FROM generations WHERE user_id = $1 AND idempotency_key = $2
 	`, userID, key)
 }
@@ -82,7 +87,7 @@ func (s *SQLStore) GetOwned(ctx context.Context, userID, id uuid.UUID) (Generati
 	return s.scanOne(ctx, `
 		SELECT g.id, g.project_id, g.iteration_id, g.user_id, g.provider, g.model, g.model_version, g.prompt,
 			g.negative_prompt, g.seed, g.aspect_ratio, g.parameters, g.reference_ids, g.status, g.provider_job_id, g.error_code,
-			g.error_message, g.cost, g.created_at, g.started_at, g.completed_at, g.provider_deterministic, g.determinism_note
+			g.error_message, g.cost, g.created_at, g.started_at, g.completed_at, g.provider_deterministic, g.determinism_note, g.recipe_id, g.recipe_version, g.resolved_workflow_hash, g.resolved_workflow, g.final_parameters
 		FROM generations g JOIN projects p ON p.id = g.project_id
 		WHERE g.id = $1 AND g.user_id = $2 AND p.user_id = $2 AND p.status <> 'deleted'
 	`, id, userID)
@@ -135,10 +140,13 @@ func (s *SQLStore) scanOne(ctx context.Context, query string, args ...any) (Gene
 	var item Generation
 	var raw []byte
 	var refsRaw []byte
+	var workflowRaw []byte
+	var finalParametersRaw []byte
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
 		&item.ID, &item.ProjectID, &item.IterationID, &item.UserID, &item.Provider, &item.Model, &item.ModelVersion,
 		&item.Prompt, &item.NegativePrompt, &item.Seed, &item.AspectRatio, &raw, &refsRaw, &item.Status, &item.ProviderJobID,
 		&item.ErrorCode, &item.ErrorMessage, &item.Cost, &item.CreatedAt, &item.StartedAt, &item.CompletedAt, &item.ProviderDeterministic, &item.DeterminismNote,
+		&item.RecipeID, &item.RecipeVersion, &item.ResolvedWorkflowHash, &workflowRaw, &finalParametersRaw,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Generation{}, ErrGenerationNotFound
@@ -152,5 +160,13 @@ func (s *SQLStore) scanOne(ctx context.Context, query string, args ...any) (Gene
 	if len(refsRaw) > 0 && json.Unmarshal(refsRaw, &item.ReferenceIDs) != nil {
 		return Generation{}, fmt.Errorf("decode generation references")
 	}
+	if len(workflowRaw) > 0 && json.Unmarshal(workflowRaw, &item.ResolvedWorkflow) != nil {
+		return Generation{}, fmt.Errorf("decode generation workflow")
+	}
+	if len(finalParametersRaw) > 0 && json.Unmarshal(finalParametersRaw, &item.FinalParameters) != nil {
+		return Generation{}, fmt.Errorf("decode generation final parameters")
+	}
 	return item, nil
 }
+
+func mustJSON(v any) []byte { if v == nil { return []byte(`{}`) }; b, _ := json.Marshal(v); return b }
