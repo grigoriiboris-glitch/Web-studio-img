@@ -298,9 +298,11 @@ export const iterationsApi = {
     projectId: string,
     input: {
       parent_iteration_id?: string
+      branch_id?: string
       type: IterationType
       title?: string
       description?: string
+      decisions?: Record<string, unknown>
     },
   ) =>
     apiRequest<Iteration>(`/projects/${projectId}/iterations`, {
