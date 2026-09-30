@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/singleline-html-element-content-newline, vue/max-attributes-per-line, vue/attributes-order -->
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { branchesApi, iterationsApi, type Branch, type BranchDifference } from '../../api/client'
@@ -39,7 +40,7 @@ watch([sourceId, targetId], async () => {
 })
 
 function latestIteration(branchId: string) {
-  return [...iterations.value].filter(i => i.branch_id === branchId).sort((a,b) => a.created_at.localeCompare(b.created_at))[iterations.value.filter(i => i.branch_id === branchId).length - 1]?.id
+  return [...iterations.value].filter(i => i.branch_id === branchId).sort((a, b) => a.created_at.localeCompare(b.created_at))[iterations.value.filter(i => i.branch_id === branchId).length - 1]?.id
 }
 async function createBranch() {
   if (!newName.value.trim()) return
