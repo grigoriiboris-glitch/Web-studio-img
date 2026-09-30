@@ -448,7 +448,10 @@ onMounted(loadAll)
         <span class="muted">Libraries, Visual DNA, Rights and Layers</span>
       </div>
       <RouterLink :to="`/projects/${projectId()}/studio`">
+        <el-space>
+        <RouterLink :to="`/projects/${projectId()}/visual-dna-v2`"><el-button type="primary">Visual DNA v2</el-button></RouterLink>
         <el-button>Back to Studio</el-button>
+      </el-space>
       </RouterLink>
     </el-header>
 
