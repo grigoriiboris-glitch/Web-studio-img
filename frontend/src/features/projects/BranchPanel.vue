@@ -39,7 +39,7 @@ watch([sourceId, targetId], async () => {
 })
 
 function latestIteration(branchId: string) {
-  return [...iterations.value].filter(i => i.branch_id === branchId).sort((a,b) => a.created_at.localeCompare(b.created_at)).at(-1)?.id
+  return [...iterations.value].filter(i => i.branch_id === branchId).sort((a,b) => a.created_at.localeCompare(b.created_at))[iterations.value.filter(i => i.branch_id === branchId).length - 1]?.id
 }
 async function createBranch() {
   if (!newName.value.trim()) return
@@ -71,7 +71,7 @@ async function merge() {
   if (!targetId.value || !sourceId.value || conflictDimensions.value.some(d => !selections.value[d])) { message.value = 'Resolve every conflicting decision before merge.'; return }
   merging.value = true; message.value = ''
   try {
-    const decisions = Object.fromEntries(conflictDimensions.value.map(d => [d, { source_branch_id: selections.value[d] }]))
+    const decisions = Object.fromEntries(conflictDimensions.value.map(d => [d, { source_branch_id: selections.value[d], value: differences.value.find(x => x.dimension === d)?.source }]))
     await branchesApi.merge(props.projectId, targetId.value, { source_branch_ids: [sourceId.value], decisions })
     message.value = 'Merge created a new immutable iteration.'
     await load(); emit('merged')
