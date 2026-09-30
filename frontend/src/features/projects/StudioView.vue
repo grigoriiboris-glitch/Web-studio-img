@@ -1051,7 +1051,53 @@ onUnmounted(() => {
           <el-button @click="applyAvoidConstraints">Apply to negative prompt</el-button>
         </el-card>
 
-        <el-card class="create-card">
+        <el-card class="create-card recipe-card">
+  <template #header>Recipe</template>
+  <label class="recipe-field">
+    Recipe
+    <select v-model="selectedRecipeId" @change="selectRecipe">
+      <option value="">Default generation flow</option>
+      <option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">
+        {{ recipe.name }} · v{{ recipe.current_version }}
+      </option>
+    </select>
+  </label>
+
+  <template v-if="selectedRecipe?.version">
+    <p class="recipe-description">
+      {{ selectedRecipe.description || 'Versioned ComfyUI workflow recipe' }}
+    </p>
+    <div class="recipe-parameters">
+      <label
+        v-for="parameter in selectedRecipe.version.exposed_parameters"
+        :key="parameter.name"
+        class="recipe-field"
+      >
+        {{ parameter.name }}<span v-if="parameter.required"> *</span>
+        <small v-if="parameter.description">{{ parameter.description }}</small>
+        <input
+          v-if="parameter.type === 'string' || parameter.type === 'image' || parameter.type === 'mask'"
+          v-model="recipeParameters[parameter.name]"
+          :required="parameter.required"
+          :placeholder="String(parameter.default ?? '')"
+        >
+        <input
+          v-else-if="parameter.type === 'number' || parameter.type === 'integer'"
+          v-model.number="recipeParameters[parameter.name]"
+          :required="parameter.required"
+          type="number"
+        >
+        <input
+          v-else
+          v-model="recipeParameters[parameter.name]"
+          type="checkbox"
+        >
+      </label>
+    </div>
+  </template>
+</el-card>
+
+<el-card class="create-card">
           <template #header>Generate image</template>
           <el-form label-position="top" @submit.prevent="createGeneration">
             <el-form-item label="Prompt">
@@ -1657,7 +1703,31 @@ onUnmounted(() => {
   </el-container>
 </template>
 
-<style scoped>
+<style scoped>.recipe-card {
+  margin-bottom: 16px;
+}
+
+.recipe-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.recipe-field small,
+.recipe-description {
+  color: #667085;
+}
+
+.recipe-field select,
+.recipe-field input:not([type='checkbox']) {
+  width: 100%;
+}
+
+.recipe-parameters {
+  display: grid;
+  gap: 8px;
+}
+
 .studio { min-height: 100vh; }
 .header { display: flex; align-items: center; justify-content: space-between; }
 .create-card, .timeline-card { margin-bottom: 16px; }
