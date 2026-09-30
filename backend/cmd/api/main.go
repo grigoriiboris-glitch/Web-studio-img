@@ -238,6 +238,11 @@ func main() {
 				os.Exit(1)
 			}
 		}
+		visualDNAHandler, err = visualdna.NewHandler(projectDB, objectStorage)
+		if err != nil {
+			logger.Error("visual DNA handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 		scanner := assets.SecurityScanner(assets.ImageSecurityScanner{})
 		if cfg.ClamAVAddress != "" {
 			scanner = assets.CompositeScanner{
