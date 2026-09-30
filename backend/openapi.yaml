@@ -278,6 +278,63 @@ paths:
                   iteration_id: {type: string, format: uuid}
                   title: {type: string}
                   description: {type: string}
+  /projects/{project_id}/variant-rejection-summary:
+    get:
+      operationId: getVariantRejectionSummary
+      summary: Get rejection reason analytics for a project
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Rejection summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rejected_count, reasons]
+                properties:
+                  rejected_count: {type: integer, minimum: 0}
+                  reasons:
+                    type: array
+                    items:
+                      type: object
+                      required: [reason, count, percent]
+                      properties:
+                        reason: {type: string}
+                        count: {type: integer, minimum: 0}
+                        percent: {type: number, format: double, minimum: 0}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/variant-rejection-timeline:
+    get:
+      operationId: getVariantRejectionTimeline
+      summary: Get the rejection decision timeline
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Rejection timeline
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, version, action_type, created_at]
+                      properties:
+                        id: {type: string, format: uuid}
+                        version: {type: integer, format: int64}
+                        action_type: {type: string}
+                        payload: {type: object, additionalProperties: true}
+                        old_state: {type: object, additionalProperties: true}
+                        new_state: {type: object, additionalProperties: true}
+                        created_at: {type: string, format: date-time}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /projects/{project_id}/iterations:
     parameters:
       - name: project_id
@@ -2541,7 +2598,7 @@ components:
         height: {type: integer, minimum: 1}
     Variant:
       type: object
-      required: [id, variant_set_id, generation_id, ordinal, decision, favorite, compare_selected, reject_reason, created_at, updated_at]
+      required: [id, variant_set_id, generation_id, ordinal, decision, favorite, compare_selected, reject_reason, reject_reason_skipped, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         variant_set_id: {type: string, format: uuid}
@@ -2552,6 +2609,9 @@ components:
         favorite: {type: boolean}
         compare_selected: {type: boolean}
         reject_reason: {type: array, items: {type: string}}
+        reject_comment: {type: string, maxLength: 2000}
+        reject_severity: {type: string, enum: [low, medium, high]}
+        reject_reason_skipped: {type: boolean}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         source: {$ref: '#/components/schemas/VariantSource'}
@@ -2574,7 +2634,10 @@ components:
         decision: {type: string, enum: [candidate, kept, rejected, selected]}
         favorite: {type: boolean}
         compare_selected: {type: boolean}
-        reject_reason: {type: array, maxItems: 20, items: {type: string, maxLength: 500}}
+        reject_reason: {type: array, maxItems: 12, uniqueItems: true, items: {type: string, enum: [composition, subject, pose, lighting, color, material, background, object, style, prompt, quality, other]}}
+        reject_comment: {type: string, maxLength: 2000}
+        reject_severity: {type: string, enum: [low, medium, high]}
+        skip_reason: {type: boolean}
     CreateVariantIterationInput:
       type: object
       additionalProperties: false
