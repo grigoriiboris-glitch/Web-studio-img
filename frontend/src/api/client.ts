@@ -336,6 +336,8 @@ export interface Generation {
   seed?: number
   aspect_ratio?: string
   parameters?: Record<string, unknown>
+  reference_ids?: string[]
+  resolved_reference_influence?: Record<string, unknown>
   status: GenerationStatus
   provider_job_id?: string
   error_code?: string
@@ -360,6 +362,8 @@ export const generationsApi = {
       seed?: number
       aspect_ratio?: string
       parameters?: Record<string, unknown>
+      reference_ids?: string[]
+      reference_influence?: Record<string, unknown>
       recipe_id?: string
       recipe_version?: number
     },
