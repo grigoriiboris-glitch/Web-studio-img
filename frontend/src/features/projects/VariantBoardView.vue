@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { REJECT_REASONS, canSubmitReject } from './rejectReasons'
+
 import {
   assetsApi,
   variantBoardApi,
@@ -30,7 +32,7 @@ const offsetX = ref(0)
 const offsetY = ref(0)
 const dragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
-const rejectReasonOptions = ['composition', 'subject', 'pose', 'lighting', 'color', 'material', 'background', 'object', 'style', 'prompt', 'quality', 'other'] as const
+const rejectReasonOptions = REJECT_REASONS
 const rejectDialogItem = ref<Variant | null>(null)
 const selectedRejectReasons = ref<string[]>([])
 const rejectComment = ref('')
@@ -121,7 +123,7 @@ function closeReject() {
 async function submitReject() {
   const item = rejectDialogItem.value
   if (!item) return
-  if (!skipRejectReason.value && selectedRejectReasons.value.length === 0) {
+  if (!canSubmitReject(selectedRejectReasons.value, skipRejectReason.value)) {
     error.value = 'Выбери хотя бы одну причину или нажми "Skip reason".'
     return
   }
