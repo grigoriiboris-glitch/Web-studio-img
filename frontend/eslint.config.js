@@ -52,6 +52,7 @@ export default [
       'src/features/projects/DashboardView.vue',
       'src/features/projects/StudioView.vue',
       'src/features/projects/CreativeResourcesView.vue',
+      'src/features/projects/VisualDNAV2View.vue',
     ],
     rules: {
       'vue/max-attributes-per-line': 'off',
