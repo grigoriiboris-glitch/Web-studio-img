@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { REJECT_REASONS, canSubmitReject } from './rejectReasons'
+
 import {
   assetsApi,
   variantBoardApi,
@@ -30,6 +32,15 @@ const offsetX = ref(0)
 const offsetY = ref(0)
 const dragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
+const rejectReasonOptions = REJECT_REASONS
+const rejectDialogItem = ref<Variant | null>(null)
+const selectedRejectReasons = ref<string[]>([])
+const rejectComment = ref('')
+const rejectSeverity = ref<'' | 'low' | 'medium' | 'high'>('')
+const skipRejectReason = ref(false)
+const rejectionSummary = ref<Awaited<ReturnType<typeof variantBoardApi.rejectionSummary>> | null>(null)
+const rejectionTimeline = ref<Awaited<ReturnType<typeof variantBoardApi.rejectionTimeline>>['items']>([])
+
 const selectedVariantIds = computed(() =>
   variants.value
     .filter(item => item.decision === 'selected' || item.decision === 'kept')
@@ -59,6 +70,7 @@ async function openSet(set: VariantSet) {
     .map(item => item.id)
   await preloadImages(variants.value)
   await refreshCompare()
+  await loadRejectionInsights()
 }
 
 async function preloadImages(items: Variant[]) {
@@ -77,6 +89,52 @@ async function preloadImages(items: Variant[]) {
   for (const entry of entries) {
     if (entry) imageUrls.value[entry[0]] = entry[1]
   }
+}
+
+async function loadRejectionInsights() {
+  try {
+    const [summary, timeline] = await Promise.all([
+      variantBoardApi.rejectionSummary(projectId),
+      variantBoardApi.rejectionTimeline(projectId),
+    ])
+    rejectionSummary.value = summary
+    rejectionTimeline.value = timeline.items
+  } catch {
+    // Insights are supplementary; the board remains usable when unavailable.
+  }
+}
+
+function openReject(item: Variant) {
+  rejectDialogItem.value = item
+  selectedRejectReasons.value = [...item.reject_reason]
+  rejectComment.value = item.reject_comment ?? ''
+  rejectSeverity.value = item.reject_severity ?? ''
+  skipRejectReason.value = item.reject_reason_skipped
+}
+
+function closeReject() {
+  rejectDialogItem.value = null
+  selectedRejectReasons.value = []
+  rejectComment.value = ''
+  rejectSeverity.value = ''
+  skipRejectReason.value = false
+}
+
+async function submitReject() {
+  const item = rejectDialogItem.value
+  if (!item) return
+  if (!canSubmitReject(selectedRejectReasons.value, skipRejectReason.value)) {
+    error.value = 'Выбери хотя бы одну причину или нажми "Skip reason".'
+    return
+  }
+  const ok = await patch(item, {
+    decision: 'rejected',
+    reject_reason: skipRejectReason.value ? [] : selectedRejectReasons.value,
+    reject_comment: rejectComment.value.trim(),
+    reject_severity: rejectSeverity.value || undefined,
+    skip_reason: skipRejectReason.value,
+  })
+  if (ok) closeReject()
 }
 
 async function createSet() {
@@ -105,7 +163,7 @@ async function createSet() {
 async function patch(
   item: Variant,
   input: Parameters<typeof variantBoardApi.patchVariant>[3],
-) {
+): Promise<boolean> {
   try {
     const updated = await variantBoardApi.patchVariant(
       projectId,
@@ -130,8 +188,19 @@ async function patch(
     if (input.compare_selected === undefined && input.favorite === undefined) {
       await refreshCompare()
     }
+    if (
+      input.decision !== undefined ||
+      input.reject_reason !== undefined ||
+      input.reject_comment !== undefined ||
+      input.reject_severity !== undefined ||
+      input.skip_reason !== undefined
+    ) {
+      await loadRejectionInsights()
+    }
+    return true
   } catch (e: any) {
     error.value = e.message
+    return false
   }
 }
 
@@ -325,6 +394,17 @@ onMounted(async () => {
                 {{ item.source.prompt }}
               </p>
 
+              <div v-if="item.decision === 'rejected'" class="reject-meta">
+                <div v-if="item.reject_reason.length" class="reason-list">
+                  <span v-for="reason in item.reject_reason" :key="reason" class="reason-chip">
+                    {{ reason }}
+                  </span>
+                </div>
+                <small v-if="item.reject_reason_skipped">Reason skipped explicitly</small>
+                <small v-if="item.reject_severity">Severity: {{ item.reject_severity }}</small>
+                <small v-if="item.reject_comment">{{ item.reject_comment }}</small>
+              </div>
+
               <div class="actions">
                 <button type="button" @click="patch(item, { decision: 'kept' })">
                   Keep
@@ -335,7 +415,7 @@ onMounted(async () => {
                 <button
                   type="button"
                   class="danger"
-                  @click="patch(item, { decision: item.decision === 'rejected' ? 'candidate' : 'rejected', reject_reason: item.decision === 'rejected' ? [] : ['other'] })"
+                  @click="item.decision === 'rejected' ? patch(item, { decision: 'candidate' }) : openReject(item)"
                 >
                   {{ item.decision === 'rejected' ? 'Restore' : 'Reject' }}
                 </button>
@@ -354,6 +434,59 @@ onMounted(async () => {
           </article>
         </div>
       </section>
+    </section>
+
+    <section v-if="rejectionSummary" class="panel">
+      <div class="panel-title">
+        <div>
+          <h2>Reject analytics</h2>
+          <p>Накопленные отрицательные сигналы по текущему проекту.</p>
+        </div>
+        <strong>{{ rejectionSummary.rejected_count }} rejected</strong>
+      </div>
+      <div v-if="rejectionSummary.reasons.length" class="reason-summary">
+        <div v-for="item in rejectionSummary.reasons" :key="item.reason" class="summary-row">
+          <span>{{ item.reason }}</span>
+          <strong>{{ item.count }}</strong>
+          <small>{{ item.percent.toFixed(0) }}%</small>
+        </div>
+      </div>
+      <div v-else class="empty">Пока нет структурированных причин.</div>
+      <div v-if="rejectionSummary.reasons.length" class="avoid-box">
+        <strong>Avoid based on previous decisions</strong>
+        <p>Это явные ограничения для следующей генерации. Они не добавляются в prompt автоматически.</p>
+        <div class="reason-list">
+          <span v-for="item in rejectionSummary.reasons.slice(0, 5)" :key="item.reason" class="reason-chip">
+            avoid {{ item.reason }}
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="rejectionTimeline.length" class="panel">
+      <div class="panel-title">
+        <div>
+          <h2>Reject timeline</h2>
+          <p>История решений с исходным и новым состоянием.</p>
+        </div>
+      </div>
+      <div class="timeline-list">
+        <article v-for="item in rejectionTimeline.slice(0, 20)" :key="item.id" class="timeline-item">
+          <strong>#{{ item.version }}</strong>
+          <span>{{ new Date(item.created_at).toLocaleString() }}</span>
+          <div class="reason-list">
+            <span
+              v-for="reason in ((item.payload?.reject_reason as string[] | undefined) ?? [])"
+              :key="reason"
+              class="reason-chip"
+            >
+              {{ reason }}
+            </span>
+            <span v-if="item.payload?.reject_reason_skipped" class="reason-chip">skipped</span>
+          </div>
+          <small v-if="item.payload?.reject_comment">{{ item.payload.reject_comment }}</small>
+        </article>
+      </div>
     </section>
 
     <section v-if="compareVariants.length >= 2" class="panel compare-panel">
@@ -388,6 +521,54 @@ onMounted(async () => {
         </div>
       </div>
     </section>
+    <div v-if="rejectDialogItem" class="dialog-backdrop" @click.self="closeReject">
+      <section class="reject-dialog" role="dialog" aria-modal="true" aria-labelledby="reject-title">
+        <div class="panel-title">
+          <div>
+            <h2 id="reject-title">Reject variant #{{ rejectDialogItem.ordinal }}</h2>
+            <p>Укажи одну или несколько причин. Причины можно изменить до финального approval.</p>
+          </div>
+          <button type="button" @click="closeReject">Close</button>
+        </div>
+
+        <div class="reason-options">
+          <label v-for="reason in rejectReasonOptions" :key="reason" class="reason-option">
+            <input
+              v-model="selectedRejectReasons"
+              :value="reason"
+              type="checkbox"
+              :disabled="skipRejectReason"
+            >
+            {{ reason }}
+          </label>
+        </div>
+
+        <label class="skip-row">
+          <input v-model="skipRejectReason" type="checkbox" @change="skipRejectReason && (selectedRejectReasons = [])">
+          Skip reason
+        </label>
+
+        <label>
+          Comment
+          <textarea v-model="rejectComment" maxlength="2000" rows="4" placeholder="Например: composition too centered." />
+        </label>
+
+        <label>
+          Severity
+          <select v-model="rejectSeverity">
+            <option value="">Not set</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+
+        <div class="dialog-actions">
+          <button type="button" @click="closeReject">Cancel</button>
+          <button type="button" class="danger" @click="submitReject">Reject variant</button>
+        </div>
+      </section>
+    </div>
   </main>
 </template>
 
@@ -683,4 +864,101 @@ onMounted(async () => {
     width: 100%;
   }
 }
+
+.reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reason-chip {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  font-size: 12px;
+}
+
+.reject-meta {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  color: #667085;
+}
+
+.reason-summary,
+.timeline-list {
+  display: grid;
+  gap: 8px;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+}
+
+.avoid-box {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8f9fb;
+}
+
+.timeline-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-left: 3px solid #d0d5dd;
+  background: #fafafa;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.reject-dialog {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.reason-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.reason-option,
+.skip-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.reject-dialog textarea,
+.reject-dialog select {
+  width: 100%;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 </style>

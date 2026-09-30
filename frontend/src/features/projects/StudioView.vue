@@ -18,6 +18,8 @@ import {
   assistantApi,
   materialsApi,
   texturesApi,
+  variantBoardApi,
+  type RejectReasonSummary,
   type Asset,
   type Generation,
   type HumanAction,
@@ -91,6 +93,7 @@ const factEvidenceJson = ref(JSON.stringify([
 ], null, 2))
 const factResult = ref<Record<string, unknown> | null>(null)
 const factLoading = ref(false)
+const rejectionSummary = ref<RejectReasonSummary | null>(null)
 let eventAbort: AbortController | undefined
 
 const types: IterationType[] = ['idea', 'sketch', 'generation', 'selection', 'composition', 'prompt', 'manual_edit', 'final']
@@ -154,6 +157,11 @@ async function loadStudio() {
   humanActions.value = loadedActions.actions
   assistantTools.value = loadedAssistantTools.tools
   assistantActions.value = loadedAssistantActions.actions
+  try {
+    rejectionSummary.value = await variantBoardApi.rejectionSummary(id)
+  } catch {
+    rejectionSummary.value = null
+  }
   if (timeline.iterations.length >= 2 && !criticAIterationId.value && !criticBIterationId.value) {
     criticAIterationId.value = timeline.iterations[timeline.iterations.length - 2].id
     criticBIterationId.value = timeline.iterations[timeline.iterations.length - 1].id
@@ -420,6 +428,18 @@ async function createIteration() {
   } finally {
     creating.value = false
   }
+}
+
+function applyAvoidConstraints() {
+  if (!rejectionSummary.value?.reasons.length) return
+  const constraints = rejectionSummary.value.reasons
+    .slice(0, 5)
+    .map(item => 'avoid ' + item.reason)
+    .join(', ')
+  const current = generationForm.value.negative_prompt.trim()
+  generationForm.value.negative_prompt = current
+    ? current + ', ' + constraints
+    : constraints
 }
 
 async function createGeneration() {
@@ -981,6 +1001,19 @@ onUnmounted(() => {
       <el-skeleton v-if="loading" :rows="8" animated />
 
       <template v-else>
+        <el-card v-if="rejectionSummary?.reasons.length" class="create-card avoid-card">
+          <template #header>Avoid based on previous decisions</template>
+          <el-space wrap>
+            <el-tag v-for="item in rejectionSummary.reasons.slice(0, 5)" :key="item.reason">
+              {{ item.reason }} · {{ item.count }}
+            </el-tag>
+          </el-space>
+          <p class="avoid-copy">
+            Эти ограничения не изменяют prompt автоматически. Нажми Apply, чтобы явно добавить их в negative prompt.
+          </p>
+          <el-button @click="applyAvoidConstraints">Apply to negative prompt</el-button>
+        </el-card>
+
         <el-card class="create-card">
           <template #header>Generate image</template>
           <el-form label-position="top" @submit.prevent="createGeneration">
