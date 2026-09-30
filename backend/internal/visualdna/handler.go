@@ -318,7 +318,7 @@ func (h *Handler) createProfile(ctx context.Context, userID, projectID uuid.UUID
 		"INSERT INTO visual_dna_profiles(user_id,project_id,name,version,algorithm_version,signals,summary,source_assets,source_iterations,uncertainty) "+
 			"VALUES($1,$2,'Visual DNA',$3,$4,$5,$6,$7,$8,$9) RETURNING id",
 		userID, projectID, version, AlgorithmVersion, rawSignals, rawSummary, rawAssets, rawIterations,
-		json.RawMessage("\"\"")).Scan(&id)
+		rawUncertainty).Scan(&id)
 	if err != nil { return nil, fmt.Errorf("create visual DNA profile: %w", err) }
 	return h.loadProfileByID(ctx, userID, projectID, id)
 }
