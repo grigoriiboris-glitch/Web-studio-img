@@ -2,7 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { RouterLink } from 'vue-router'
-import { assetLibraryApi, projectsApi, type AssetLibraryAssetType, type AssetLibraryItem, type AssetLibrarySource, type Project } from '../../api/client'
+import { assetLibraryApi, projectsApi, type AssetLibraryAssetType, type AssetLibraryItem, type AssetLibrarySource, type AssetLibraryVersion, type Project } from '../../api/client'
 
 const types: AssetLibraryAssetType[] = ['character','object','product','logo','symbol','background','texture','material','mask','image','other']
 const items = ref<AssetLibraryItem[]>([])
@@ -27,7 +27,7 @@ const description = ref('')
 const assetType = ref<AssetLibraryAssetType>('image')
 const tags = ref('')
 const useProjectId = ref('')
-const detailVersions = ref<AssetLibraryItem['current'][]>([])
+const detailVersions = ref<AssetLibraryVersion[]>([])
 const detailUsage = ref<Array<{ project_name?: string; rights_status: string; created_at: string }>>([])
 
 async function load() {
@@ -80,7 +80,7 @@ async function openDetails(item: AssetLibraryItem) {
   try {
     const data = await assetLibraryApi.get(item.id)
     selectedItem.value = data.item
-    detailVersions.value = data.versions as AssetLibraryItem['current'][]
+    detailVersions.value = data.versions
     detailUsage.value = data.usage
     detailsDialog.value = true
   } catch (err) {
@@ -273,13 +273,19 @@ onMounted(async () => {
         <p><strong>Type:</strong> {{ selectedItem.asset_type }}</p>
         <p><strong>Current version:</strong> {{ selectedItem.current_version }}</p>
         <p><strong>Tags:</strong> {{ selectedItem.tags.join(', ') || '—' }}</p>
-        <h4>Version history</h4>
+        <h4>Version history & lineage</h4>
         <el-table :data="detailVersions" stripe>
           <el-table-column prop="version" label="Version" width="90" />
-          <el-table-column prop="checksum" label="Checksum" min-width="190" />
+          <el-table-column prop="source_project_id" label="Source project" min-width="150" />
+          <el-table-column prop="source_asset_id" label="Source asset" min-width="150" />
+          <el-table-column prop="checksum" label="SHA-256" min-width="190" />
           <el-table-column prop="mime_type" label="MIME" width="140" />
           <el-table-column prop="created_at" label="Created" min-width="180" />
         </el-table>
+        <p class="hint">
+          Each version keeps the source project/asset identifiers and rights/provenance snapshot,
+          so the lineage remains visible even after the source project changes.
+        </p>
         <h4>Used in projects</h4>
         <el-table :data="detailUsage" stripe>
           <el-table-column prop="project_name" label="Project" />
