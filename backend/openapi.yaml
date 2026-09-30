@@ -1878,6 +1878,68 @@ paths:
         '200': {description: Mode policy}
         '400': {description: Invalid mode}
         '409': {description: Finalize prerequisites are missing}
+  /projects/{project_id}/approval-gate:
+    get:
+      operationId: getApprovalGate
+      summary: Evaluate project approval and finalize checklist
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Approval gate, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalGate'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /projects/{project_id}/approval-gate/review:
+    post:
+      operationId: requestApprovalReview
+      summary: Request human review after critical checks pass
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Review requested, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalGate'}}}}
+        '409': {description: Critical checklist item is blocked}
+  /projects/{project_id}/approval-gate/approve:
+    post:
+      operationId: approveProject
+      summary: Approve the reviewed project
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Project approved, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalGate'}}}}
+        '409': {description: Review or checklist requirements are not satisfied}
+  /projects/{project_id}/approval-gate/composition/approve:
+    post:
+      operationId: approveComposition
+      summary: Record explicit human approval of the current composition
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Updated approval gate, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalGate'}}}}
+        '409': {description: Composition is not available}
+  /projects/{project_id}/approval-gate/finalize:
+    post:
+      operationId: finalizeProject
+      summary: Create the immutable final iteration
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizeInput'
+      responses:
+        '201': {description: Final project, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalGate'}}}}
+        '409': {description: Approval, final selection or explicit warning override is missing}
+  /projects/{project_id}/approval-gate/revision:
+    post:
+      operationId: createProjectRevision
+      summary: Create a new editable revision from an immutable final
+      parameters:
+        - {name: project_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '201': {description: New revision, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalGate'}}}}
+        '409': {description: Project is not final}
+
   /projects/{project_id}/lifecycle:
     get:
       operationId: getProjectLifecycle
@@ -2310,13 +2372,49 @@ components:
           additionalProperties: {type: string, maxLength: 4000}
 
     Iteration:
+    ApprovalCheck:
+      type: object
+      required: [key, label, status, critical, message]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        status: {type: string, enum: [passed, warning, blocked]}
+        critical: {type: boolean}
+        message: {type: string}
+    ApprovalGate:
+      type: object
+      required: [workflow_state, checks, warnings, blocked, can_request_review, can_approve, can_finalize, override_required]
+      properties:
+        workflow_state: {type: string, enum: [draft, explore, develop, ready_for_review, approved, final]}
+        final_iteration_id: {type: string, format: uuid}
+        final_asset_id: {type: string, format: uuid}
+        checks:
+          type: array
+          items: {$ref: '#/components/schemas/ApprovalCheck'}
+        warnings: {type: array, items: {type: string}}
+        blocked: {type: array, items: {type: string}}
+        can_request_review: {type: boolean}
+        can_approve: {type: boolean}
+        can_finalize: {type: boolean}
+        override_required: {type: boolean}
+        approved_at: {type: string, format: date-time}
+        finalized_at: {type: string, format: date-time}
+    FinalizeInput:
+      type: object
+      additionalProperties: false
+      properties:
+        override_reason: {type: string, maxLength: 2000}
+        override_checks:
+          type: array
+          uniqueItems: true
+          items: {type: string}
       type: object
       required: [id, project_id, type, created_at]
       properties:
         id: {type: string, format: uuid}
         project_id: {type: string, format: uuid}
         parent_iteration_id: {type: string, format: uuid}
-        type: {type: string, enum: [idea, sketch, generation, selection, composition, prompt, manual_edit, final]}
+        type: {type: string, enum: [idea, sketch, generation, selection, composition, prompt, manual_edit]}
         title: {type: string, maxLength: 200}
         description: {type: string, maxLength: 5000}
         created_at: {type: string, format: date-time}
@@ -2326,7 +2424,7 @@ components:
       additionalProperties: false
       properties:
         parent_iteration_id: {type: string, format: uuid}
-        type: {type: string, enum: [idea, sketch, generation, selection, composition, prompt, manual_edit, final]}
+        type: {type: string, enum: [idea, sketch, generation, selection, composition, prompt, manual_edit]}
         title: {type: string, minLength: 1, maxLength: 200}
         description: {type: string, maxLength: 5000}
     IterationList:
@@ -2345,6 +2443,8 @@ components:
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string}
         status: {type: string, enum: [active, archived, deleted]}
+        workflow_state: {type: string, enum: [draft, explore, develop, ready_for_review, approved, final]}
+        final_iteration_id: {type: string, format: uuid}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ProjectInput:
@@ -2835,7 +2935,7 @@ components:
         iteration_id: {type: string, format: uuid}
         user_id: {type: string, format: uuid}
         version: {type: integer, format: int64, minimum: 1}
-        action_type: {type: string, enum: [IDEA_CREATED, SKETCH_IMPORTED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SET_CREATED, VARIANT_SELECTED, VARIANT_REJECTED, VARIANT_FAVORITED, VARIANT_UNFAVORITED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, COMPOSITION_MUTATION_ACCEPTED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED, MATERIAL_CREATED, MATERIAL_UPDATED, MATERIAL_DELETED, TEXTURE_CREATED, TEXTURE_UPDATED, TEXTURE_DELETED, STYLE_PROFILE_CREATED, STYLE_PROFILE_UPDATED, STYLE_PROFILE_APPLIED, ASSET_DNA_CREATED, VISUAL_LANGUAGE_UPDATED, RIGHTS_UPDATED, DO_NOT_USE_UPDATED, LAYER_CREATED, LAYER_UPDATED, LAYER_DELETED, MASK_CREATED, MANUAL_EDIT_CREATED, MANUAL_EDIT_APPLIED, MANUAL_EDIT_REJECTED, CREATIVE_BRIEF_CREATED, CREATIVE_BRIEF_APPROVED]}
+        action_type: {type: string, enum: [IDEA_CREATED, SKETCH_IMPORTED, PROMPT_EDITED, PROMPT_APPROVED, REFERENCE_ADDED, REFERENCE_SELECTED, VARIANT_SET_CREATED, VARIANT_SELECTED, VARIANT_REJECTED, VARIANT_FAVORITED, VARIANT_UNFAVORITED, AI_RECOMMENDATION_REJECTED, COMPOSITION_CHANGED, COMPOSITION_MUTATION_ACCEPTED, MATERIAL_SELECTED, TEXTURE_SELECTED, MANUAL_EDIT, APPROVED, EXPORT_CREATED, MATERIAL_CREATED, MATERIAL_UPDATED, MATERIAL_DELETED, TEXTURE_CREATED, TEXTURE_UPDATED, TEXTURE_DELETED, STYLE_PROFILE_CREATED, STYLE_PROFILE_UPDATED, STYLE_PROFILE_APPLIED, ASSET_DNA_CREATED, VISUAL_LANGUAGE_UPDATED, RIGHTS_UPDATED, DO_NOT_USE_UPDATED, LAYER_CREATED, LAYER_UPDATED, LAYER_DELETED, MASK_CREATED, MANUAL_EDIT_CREATED, MANUAL_EDIT_APPLIED, MANUAL_EDIT_REJECTED, COMPOSITION_APPROVED, APPROVAL_REQUESTED, PROJECT_APPROVED, PROJECT_FINALIZED, FINALIZE_OVERRIDE, PROJECT_REVISION_CREATED, CREATIVE_BRIEF_CREATED, CREATIVE_BRIEF_APPROVED]}
         payload: {type: object, additionalProperties: true}
         old_state: {type: object, additionalProperties: true}
         new_state: {type: object, additionalProperties: true}
@@ -2999,6 +3099,7 @@ components:
         project_id: {type: string, format: uuid}
         user_id: {type: string, format: uuid}
         final_asset_id: {type: string, format: uuid}
+        final_iteration_id: {type: string, format: uuid}
         status: {type: string, enum: [running, completed, failed]}
         artifacts: {type: object, additionalProperties: {type: string, format: uri}}
         manifest: {type: object, additionalProperties: true}

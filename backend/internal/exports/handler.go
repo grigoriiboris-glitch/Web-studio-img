@@ -34,11 +34,12 @@ type Handler struct {
 }
 
 type Export struct {
-	ID           uuid.UUID          `json:"id"`
-	ProjectID    uuid.UUID          `json:"project_id"`
-	UserID       uuid.UUID          `json:"user_id"`
-	FinalAssetID uuid.UUID          `json:"final_asset_id"`
-	Status       string             `json:"status"`
+	ID              uuid.UUID          `json:"id"`
+	ProjectID       uuid.UUID          `json:"project_id"`
+	UserID          uuid.UUID          `json:"user_id"`
+	FinalAssetID    uuid.UUID          `json:"final_asset_id"`
+	FinalIterationID *uuid.UUID        `json:"final_iteration_id,omitempty"`
+	Status          string             `json:"status"`
 	Artifacts   map[string]string  `json:"artifacts"`
 	Manifest     map[string]any    `json:"manifest"`
 	Error        string             `json:"error,omitempty"`
@@ -72,6 +73,22 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil && r.ContentLength != 0 {
 		if err := decodeJSON(r,&in); err != nil { errJSON(w,400,"invalid_request","invalid export payload"); return }
 	}
+	var workflowState string
+	var finalIterationID *uuid.UUID
+	var gateAssetID *uuid.UUID
+	if err := h.db.QueryRowContext(r.Context(), `SELECT workflow_state,final_iteration_id FROM projects WHERE id=$1 AND user_id=$2 AND status<>'deleted'`, projectID, p.UserID).Scan(&workflowState, &finalIterationID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { errJSON(w,404,"project_not_found","project not found"); return }
+		errJSON(w,500,"export_create_failed","could not load project final state"); return
+	}
+	if workflowState == "final" {
+		if err := h.db.QueryRowContext(r.Context(), `SELECT final_asset_id FROM project_approval_gates WHERE project_id=$1 AND user_id=$2`, projectID, p.UserID).Scan(&gateAssetID); err != nil || gateAssetID == nil || *gateAssetID == uuid.Nil {
+			errJSON(w,409,"final_asset_not_recorded","final project has no recorded final asset"); return
+		}
+		if in.FinalAssetID != uuid.Nil && in.FinalAssetID != *gateAssetID {
+			errJSON(w,409,"final_asset_mismatch","export must reference the approved final asset"); return
+		}
+		in.FinalAssetID = *gateAssetID
+	}
 	assetID := in.FinalAssetID
 	if assetID == uuid.Nil {
 		if err := h.db.QueryRowContext(r.Context(), `SELECT id FROM assets WHERE project_id=$1 AND user_id=$2 AND lifecycle_status='active' ORDER BY created_at DESC LIMIT 1`, projectID,p.UserID).Scan(&assetID); err != nil {
@@ -83,7 +100,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var out Export
 	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	var artifactRaw, manifestRaw []byte
-	err = h.db.QueryRowContext(r.Context(), `INSERT INTO export_records(project_id,user_id,final_asset_id,status,idempotency_key) VALUES($1,$2,$3,'running',$4) ON CONFLICT (user_id,idempotency_key) DO NOTHING RETURNING id,project_id,user_id,final_asset_id,status,artifacts,manifest,error,created_at,completed_at`, projectID,p.UserID,asset.ID,idempotencyKey).Scan(&out.ID,&out.ProjectID,&out.UserID,&out.FinalAssetID,&out.Status,&artifactRaw,&manifestRaw,&out.Error,&out.CreatedAt,&out.CompletedAt)
+	err = h.db.QueryRowContext(r.Context(), `INSERT INTO export_records(project_id,user_id,final_asset_id,final_iteration_id,status,idempotency_key) VALUES($1,$2,$3,$4,'running',$5) ON CONFLICT (user_id,idempotency_key) DO NOTHING RETURNING id,project_id,user_id,final_asset_id,final_iteration_id,status,artifacts,manifest,error,created_at,completed_at`, projectID,p.UserID,asset.ID,finalIterationID,idempotencyKey).Scan(&out.ID,&out.ProjectID,&out.UserID,&out.FinalAssetID,&out.FinalIterationID,&out.Status,&artifactRaw,&manifestRaw,&out.Error,&out.CreatedAt,&out.CompletedAt)
 	if errors.Is(err,sql.ErrNoRows) {
 		var existingAsset uuid.UUID
 		if qerr:=h.db.QueryRowContext(r.Context(), `SELECT id,final_asset_id FROM export_records WHERE user_id=$1 AND idempotency_key=$2`,p.UserID,idempotencyKey).Scan(&out.ID,&existingAsset); qerr!=nil { errJSON(w,500,"export_create_failed","could not load idempotent export"); return }
@@ -92,16 +109,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w,200,loaded); return
 	}
 	if err != nil { errJSON(w,500,"export_create_failed","could not create export record"); return }
-	if err := h.build(r.Context(), p.UserID, projectID, out.ID, asset); err != nil {
+	if err := h.build(r.Context(), p.UserID, projectID, out.ID, asset, finalIterationID); err != nil {
 		_,_ = h.db.ExecContext(r.Context(), `UPDATE export_records SET status='failed', error=$2 WHERE id=$1`,out.ID,err.Error())
 		errJSON(w,500,"export_failed","could not build creation report"); return
 	}
 	out, err = h.load(r.Context(),p.UserID,out.ID); if err != nil { errJSON(w,500,"export_load_failed","could not load export"); return }
-	h.writeAction(r,p.UserID,projectID,out.ID,map[string]any{"final_asset_id":asset.ID,"status":out.Status})
+	h.writeAction(r,p.UserID,projectID,out.ID,map[string]any{"final_asset_id":asset.ID,"final_iteration_id":finalIterationID,"status":out.Status})
 	writeJSON(w,201,out)
 }
 
-func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,asset assets.Asset) error {
+func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,asset assets.Asset,finalIterationID *uuid.UUID) error {
 	imageData, _, err := h.storage.Get(ctx,asset.StorageKey); if err != nil { return fmt.Errorf("read final image: %w",err) }
 	defer func() { _ = imageData.Close() }()
 	source, err := io.ReadAll(io.LimitReader(imageData, assets.MaxAssetSize+1)); if err != nil { return fmt.Errorf("read final image: %w",err) }
@@ -122,7 +139,7 @@ func (h *Handler) build(ctx context.Context,userID,projectID,exportID uuid.UUID,
 	generations, err := h.loadJSON(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(g) ORDER BY g.created_at),'[]'::jsonb) FROM generations g WHERE g.project_id=$1`,projectID); if err != nil { return err }
 
 	reportMeta := map[string]any{
-		"export_id": exportID, "project_id": projectID, "final_asset_id": asset.ID,
+		"export_id": exportID, "project_id": projectID, "final_asset_id": asset.ID, "final_iteration_id": finalIterationID,
 		"generated_at": time.Now().UTC(), "legal_note": "Creation Report describes the process and checks; it is not an automatic legal conclusion.",
 		"provenance_verification": verification,
 		"timeline_count": countJSON(timeline), "prompt_count": countJSON(prompts),
@@ -250,7 +267,7 @@ func (h *Handler) legacy(w http.ResponseWriter,r *http.Request){
 
 func (h *Handler) load(ctx context.Context,userID,id uuid.UUID)(Export,error){
 	var out Export;var a,m []byte
-	err:=h.db.QueryRowContext(ctx,`SELECT e.id,e.project_id,e.user_id,e.final_asset_id,e.status,e.artifacts,e.manifest,e.error,e.created_at,e.completed_at FROM export_records e JOIN projects p ON p.id=e.project_id WHERE e.id=$1 AND e.user_id=$2 AND p.user_id=$2 AND p.status <> 'deleted'`,id,userID).Scan(&out.ID,&out.ProjectID,&out.UserID,&out.FinalAssetID,&out.Status,&a,&m,&out.Error,&out.CreatedAt,&out.CompletedAt)
+	err:=h.db.QueryRowContext(ctx,`SELECT e.id,e.project_id,e.user_id,e.final_asset_id,e.final_iteration_id,e.status,e.artifacts,e.manifest,e.error,e.created_at,e.completed_at FROM export_records e JOIN projects p ON p.id=e.project_id WHERE e.id=$1 AND e.user_id=$2 AND p.user_id=$2 AND p.status <> 'deleted'`,id,userID).Scan(&out.ID,&out.ProjectID,&out.UserID,&out.FinalAssetID,&out.FinalIterationID,&out.Status,&a,&m,&out.Error,&out.CreatedAt,&out.CompletedAt)
 	if err!=nil{return out,err};_ = json.Unmarshal(a,&out.Artifacts);_ = json.Unmarshal(m,&out.Manifest);return out,nil
 }
 func(h *Handler)loadJSON(ctx context.Context,q string,args ...any)([]byte,error){var raw []byte;if err:=h.db.QueryRowContext(ctx,q,args...).Scan(&raw);err!=nil{return nil,err};if len(raw)==0{return []byte("[]"),nil};return raw,nil}

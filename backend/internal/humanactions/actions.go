@@ -35,7 +35,7 @@ var ErrInvalidAction = errors.New("invalid human action")
 var allowedActions = map[string]bool{
  "IDEA_CREATED": true, "SKETCH_IMPORTED": true, "PROMPT_EDITED": true, "PROMPT_APPROVED": true,
  "REFERENCE_ADDED": true, "REFERENCE_SELECTED": true, "VARIANT_SET_CREATED": true, "VARIANT_SELECTED": true, "VARIANT_REJECTED": true, "VARIANT_FAVORITED": true, "VARIANT_UNFAVORITED": true,
- "AI_RECOMMENDATION_REJECTED": true, "COMPOSITION_CHANGED": true,
+ "AI_RECOMMENDATION_REJECTED": true, "COMPOSITION_CHANGED": true, "COMPOSITION_APPROVED": true,
  "MATERIAL_SELECTED": true, "TEXTURE_SELECTED": true, "MANUAL_EDIT": true,
  "MATERIAL_CREATED": true, "MATERIAL_UPDATED": true, "MATERIAL_DELETED": true,
  "TEXTURE_CREATED": true, "TEXTURE_UPDATED": true, "TEXTURE_DELETED": true,
@@ -44,7 +44,7 @@ var allowedActions = map[string]bool{
  "RIGHTS_UPDATED": true, "DO_NOT_USE_UPDATED": true,
  "LAYER_CREATED": true, "LAYER_UPDATED": true, "LAYER_DELETED": true,
  "MASK_CREATED": true, "MANUAL_EDIT_CREATED": true, "MANUAL_EDIT_APPLIED": true, "MANUAL_EDIT_REJECTED": true,
- "APPROVED": true, "EXPORT_CREATED": true, "CREATIVE_BRIEF_CREATED": true, "CREATIVE_BRIEF_APPROVED": true,
+ "APPROVED": true, "EXPORT_CREATED": true, "APPROVAL_REQUESTED": true, "PROJECT_APPROVED": true, "PROJECT_FINALIZED": true, "FINALIZE_OVERRIDE": true, "PROJECT_REVISION_CREATED": true, "CREATIVE_BRIEF_CREATED": true, "CREATIVE_BRIEF_APPROVED": true,
 }
 
 func (r Request) Validate(projectID, userID uuid.UUID) error {
