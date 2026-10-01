@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { REJECT_REASONS, canSubmitReject } from './rejectReasons'
+import { REJECT_REASONS, buildRejectConstraints, canSubmitReject } from './rejectReasons'
 
 import {
   assetsApi,
@@ -40,6 +40,8 @@ const rejectSeverity = ref<'' | 'low' | 'medium' | 'high'>('')
 const skipRejectReason = ref(false)
 const rejectionSummary = ref<Awaited<ReturnType<typeof variantBoardApi.rejectionSummary>> | null>(null)
 const rejectionTimeline = ref<Awaited<ReturnType<typeof variantBoardApi.rejectionTimeline>>['items']>([])
+const carryRejectConstraints = ref(true)
+const iterationMessage = ref('')
 
 const selectedVariantIds = computed(() =>
   variants.value
@@ -231,15 +233,24 @@ async function createSelectionIteration() {
     return
   }
   try {
-    await variantBoardApi.createIteration(
+    const decisions = carryRejectConstraints.value && rejectionSummary.value?.reasons.length
+      ? { reject_constraints: buildRejectConstraints(rejectionSummary.value.reasons) }
+      : undefined
+    const created = await variantBoardApi.createIteration(
       projectId,
       activeSet.value.id,
       selectedVariantIds.value,
       activeSet.value.name + ' selection',
+      decisions,
     )
     error.value = ''
+    iterationMessage.value = decisions
+      ? 'Итерация создана: отрицательные сигналы зафиксированы в decisions и доступны как контекст следующего шага.'
+      : 'Итерация создана без reject constraints.'
+    void created
   } catch (e: any) {
     error.value = e.message
+    iterationMessage.value = ''
   }
 }
 
@@ -290,10 +301,24 @@ onMounted(async () => {
         <h1>Variant Board</h1>
         <p>Выбор, сравнение и фиксация решений по результатам генерации.</p>
       </div>
-      <button type="button" class="primary" @click="createSelectionIteration">
-        Create selection iteration
-      </button>
+      <div class="next-iteration-actions">
+        <label class="carry-constraints">
+          <input
+            v-model="carryRejectConstraints"
+            type="checkbox"
+            :disabled="!rejectionSummary?.reasons.length"
+          >
+          <span>
+            <strong>Carry top reject reasons</strong>
+            <small>Явно сохранить аналитику как constraints следующей итерации.</small>
+          </span>
+        </label>
+        <button type="button" class="primary" @click="createSelectionIteration">
+          Create selection iteration
+        </button>
+      </div>
     </header>
+    <p v-if="iterationMessage" class="success">{{ iterationMessage }}</p>
 
     <p v-if="error" class="error">{{ error }}</p>
 
