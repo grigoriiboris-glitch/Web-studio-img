@@ -7,6 +7,7 @@ import (
     "strings"
     "time"
     "github.com/google/uuid"
+    "github.com/oleg3190/Web-studio-img/backend/internal/rejectreasons"
 )
 
 var (
@@ -42,4 +43,4 @@ func ValidateTitle(v *string)error{if v==nil{return nil};if strings.TrimSpace(*v
 func ValidateDescription(v *string)error{if v==nil{return nil};if len([]rune(*v))>5000{return ErrInvalidIteration};return nil}
 func ValidateManualEditDescription(t Type,v *string)error{if t!=TypeManualEdit{return nil};if v==nil||strings.TrimSpace(*v)==""{return ErrInvalidIteration};return ValidateDescription(v)}
 func ValidateDecisions(v map[string]any)error{if v==nil{return nil};for k,value:=range v{switch k{case "subject","composition","prompt","material","texture","references","lighting","selected_asset","manual_edits":continue;case "reject_constraints":var constraints []struct{Reason string `json:"reason"`;Count int `json:"count"`;Percent float64 `json:"percent"`};raw,err:=json.Marshal(value);if err!=nil||json.Unmarshal(raw,&constraints)!=nil||len(constraints)>5{return ErrInvalidIteration};seen:=map[string]struct{}{};for _,constraint:=range constraints{if !rejectReasonAllowed(constraint.Reason)||constraint.Count<0||constraint.Percent<0{return ErrInvalidIteration};if _,exists:=seen[constraint.Reason];exists{return ErrInvalidIteration};seen[constraint.Reason]=struct{}{}};default:return ErrInvalidIteration}};_,err:=json.Marshal(v);return err}
-func rejectReasonAllowed(reason string)bool{switch strings.ToLower(strings.TrimSpace(reason)){case "composition","subject","pose","lighting","color","material","background","object","style","prompt","quality","other":return true;default:return false}}
+func rejectReasonAllowed(reason string)bool{return rejectreasons.IsAllowed(reason)}
