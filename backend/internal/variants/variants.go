@@ -302,7 +302,7 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   title:=strings.TrimSpace(in.Title);if title==""{title="Selection from Variant Board"}
   description:="Created from variant set "+setID.String()+"; selected variants: "+strings.Join(selected,", ")
   var iterationID uuid.UUID
-  if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description) VALUES($1,$2::uuid,$3::uuid,'selection',$4,$5) RETURNING id`,projectID,branchID.String(),parent.String(),title,description).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
+  if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description) VALUES($1,$2::uuid,$3::uuid,'selection',$4,$5) RETURNING id`,projectID,branchID.String,parent.String,title,description).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
   h.audit(r.Context(),userID,projectID,iterationID,"VARIANT_SELECTED",map[string]any{"variant_set_id":setID,"variant_ids":in.VariantIDs,"created_iteration_id":iterationID})
   writeJSON(w,201,map[string]any{"iteration_id":iterationID,"title":title,"description":description})
 }
