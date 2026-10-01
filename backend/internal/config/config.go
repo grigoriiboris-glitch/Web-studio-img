@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Env             string
 	Port            string
+	WebStaticDir    string
 	DatabaseURL     string
 	RedisURL        string
 	S3Endpoint      string
@@ -48,6 +49,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Env:             getenv("APP_ENV", "development"),
 		Port:            getenv("APP_PORT", "8080"),
+		WebStaticDir:    strings.TrimSpace(os.Getenv("WEB_STATIC_DIR")),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		RedisURL:        os.Getenv("REDIS_URL"),
 		S3Endpoint:      os.Getenv("S3_ENDPOINT"),
@@ -97,6 +99,9 @@ func Load() (Config, error) {
 		}
 		if len(cfg.CORSOrigins) == 0 {
 			return Config{}, errors.New("CORS_ORIGINS must not be empty in production")
+		}
+		if cfg.WebStaticDir == "" {
+			return Config{}, errors.New("WEB_STATIC_DIR must not be empty in production")
 		}
 	}
 	return cfg, nil
