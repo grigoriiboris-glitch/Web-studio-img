@@ -133,7 +133,7 @@ async function submitReject() {
     decision: 'rejected',
     reject_reason: skipRejectReason.value ? [] : selectedRejectReasons.value,
     reject_comment: rejectComment.value.trim(),
-    reject_severity: rejectSeverity.value || undefined,
+    reject_severity: rejectSeverity.value,
     skip_reason: skipRejectReason.value,
   })
   if (ok) closeReject()
