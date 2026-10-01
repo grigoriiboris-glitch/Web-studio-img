@@ -60,10 +60,6 @@ func(h *Handler)Register(mux *http.ServeMux){
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/layers",h.createLayer)
 	mux.HandleFunc("PATCH /api/v1/projects/{project_id}/layers/{layer_id}",h.updateLayer)
 	mux.HandleFunc("DELETE /api/v1/projects/{project_id}/layers/{layer_id}",h.deleteLayer)
-	mux.HandleFunc("GET /api/v1/projects/{project_id}/manual-edits",h.listEdits)
-	mux.HandleFunc("POST /api/v1/projects/{project_id}/manual-edits",h.createEdit)
-	mux.HandleFunc("POST /api/v1/projects/{project_id}/manual-edits/{edit_id}/apply",h.applyEdit)
-	mux.HandleFunc("POST /api/v1/projects/{project_id}/manual-edits/{edit_id}/reject",h.rejectEdit)
 }
 type layerInput struct{IterationID *uuid.UUID `json:"iteration_id,omitempty"`;AssetID *uuid.UUID `json:"asset_id,omitempty"`;ParentLayerID *uuid.UUID `json:"parent_layer_id,omitempty"`;Name string `json:"name"`;LayerType string `json:"layer_type"`;OrderIndex int `json:"order_index"`;Visible *bool `json:"visible,omitempty"`;Opacity *float64 `json:"opacity,omitempty"`;BlendMode string `json:"blend_mode"`;SourceKind string `json:"source_kind"`;Metadata map[string]any `json:"metadata,omitempty"`}
 type editInput struct{IterationID *uuid.UUID `json:"iteration_id,omitempty"`;SourceAssetID uuid.UUID `json:"source_asset_id"`;MaskAssetID *uuid.UUID `json:"mask_asset_id,omitempty"`;ResultAssetID *uuid.UUID `json:"result_asset_id,omitempty"`;Operation string `json:"operation"`;Prompt *string `json:"prompt,omitempty"`;Parameters map[string]any `json:"parameters,omitempty"`}
