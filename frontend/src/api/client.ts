@@ -453,7 +453,7 @@ export const variantBoardApi = {
       compare_selected?: boolean
       reject_reason?: string[]
       reject_comment?: string
-      reject_severity?: 'low' | 'medium' | 'high'
+      reject_severity?: '' | 'low' | 'medium' | 'high'
       skip_reason?: boolean
     },
   ) =>
