@@ -344,6 +344,10 @@ func (h *Handler) loadVariants(ctx context.Context,userID,projectID,setID uuid.U
   return out,rows.Err()
 }
 
+func normalizeRejectReasons(input []string) ([]string, error) {
+  return rejectreasons.Normalize(input)
+}
+
 func variantDecisionState(v Variant) map[string]any {
   return map[string]any{"decision":v.Decision,"reject_reason":append([]string(nil),v.RejectReason...),"reject_comment":v.RejectComment,"reject_severity":v.RejectSeverity,"reject_reason_skipped":v.RejectReasonSkipped}
 }
