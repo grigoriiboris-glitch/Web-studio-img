@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -177,7 +178,7 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
 	snapshot,err:=runtime.CapabilitySnapshot(ctx);if err!=nil{return nil,"",0,"",err}
 	if reusable,ok,findErr:=h.findReusableRecipe(ctx,userID,projectID,task,runtime);findErr!=nil{return nil,"",0,"",findErr}else if ok{return reusable,"Reused an existing recipe after validating it against the live ComfyUI runtime.",0.95,"The match is heuristic; a new flow is generated when no compatible recipe matches.",nil}
-	if h.flowPlanner==nil||!h.flowPlanner.Enabled(){return nil,"",0,"","flow planner is not configured; set FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL"}
+	if h.flowPlanner==nil||!h.flowPlanner.Enabled(){return nil,"",0,"",errors.New("flow planner is not configured; set FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL")}
 	var validationErrors []string
 	for attempt:=0;attempt<3;attempt++{
 		plan,planErr:=h.flowPlanner.Plan(ctx,task,snapshot,validationErrors);if planErr!=nil{return nil,"",0,"",planErr}
@@ -197,7 +198,7 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 		}
 		validationErrors=append([]string(nil),validation.Errors...)
 	}
-	return nil,"",0,"","AI could not produce a workflow compatible with the current ComfyUI runtime after three attempts"
+	return nil,"",0,"",errors.New("AI could not produce a workflow compatible with the current ComfyUI runtime after three attempts")
 }
 
 func (h *Handler) validateComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error) {
