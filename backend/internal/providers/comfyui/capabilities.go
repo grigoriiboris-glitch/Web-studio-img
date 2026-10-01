@@ -14,6 +14,7 @@ type NodeCapability struct {
 	Category      string
 	RequiredInputs []string
 	OptionalInputs []string
+	HiddenInputs  []string
 	OutputTypes   []string
 }
 
@@ -76,6 +77,7 @@ func parseNodeCapability(raw map[string]any) NodeCapability {
 	}
 	out.RequiredInputs = keysFromSection(raw["input"], "required")
 	out.OptionalInputs = keysFromSection(raw["input"], "optional")
+	out.HiddenInputs = keysFromSection(raw["input"], "hidden")
 	switch values := raw["output"].(type) {
 	case []any:
 		for _, value := range values {
@@ -145,16 +147,19 @@ func validateWorkflowAgainstSnapshot(workflow map[string]any, snapshot RuntimeCa
 			result.Errors = append(result.Errors, "node "+nodeID+" has no inputs object")
 			continue
 		}
-		allowed := make(map[string]struct{}, len(info.RequiredInputs)+len(info.OptionalInputs))
+		allowed := make(map[string]struct{}, len(info.RequiredInputs)+len(info.OptionalInputs)+len(info.HiddenInputs))
 		for _, name := range info.RequiredInputs {
 			allowed[name] = struct{}{}
 		}
 		for _, name := range info.OptionalInputs {
 			allowed[name] = struct{}{}
 		}
+		for _, name := range info.HiddenInputs {
+			allowed[name] = struct{}{}
+		}
 		for inputName, value := range inputs {
 			if _, known := allowed[inputName]; !known {
-				result.Warnings = append(result.Warnings, "node "+classType+" exposes input "+inputName+" that was not present in /object_info")
+				result.Errors = append(result.Errors, "node "+classType+" contains unknown input "+inputName+" for current ComfyUI")
 			}
 			validateLink(value, nodeID, nodeIDs, &result)
 			if modelName, folder, ok := modelReference(inputName, value); ok {
@@ -166,7 +171,7 @@ func validateWorkflowAgainstSnapshot(workflow map[string]any, snapshot RuntimeCa
 		}
 		for _, required := range info.RequiredInputs {
 			if _, present := inputs[required]; !present {
-				result.Warnings = append(result.Warnings, "node "+nodeID+" may be missing required input "+required)
+				result.Errors = append(result.Errors, "node "+nodeID+" is missing required input "+required)
 			}
 		}
 	}
