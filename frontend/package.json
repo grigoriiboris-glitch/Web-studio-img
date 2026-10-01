@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": {\n    "node": ">=24.0.0"\n  },\n  "scripts": {
+  "engines": {
+    "node": ">=24.0.0"
+  },\n  "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
