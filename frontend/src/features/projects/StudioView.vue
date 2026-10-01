@@ -18,6 +18,7 @@ import {
   exportsApi,
   compositionApi,
   assistantApi,
+  assetsApi,
   materialsApi,
   texturesApi,
   variantBoardApi,
