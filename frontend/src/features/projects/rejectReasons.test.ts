@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { REJECT_REASONS, buildAvoidConstraints, buildRejectConstraints, canSubmitReject } from './rejectReasons'
+import {
+  REJECT_REASONS,
+  buildAvoidConstraints,
+  buildRejectConstraints,
+  canSubmitReject,
+} from './rejectReasons'
 
 describe('reject reason helpers', () => {
   it('contains the complete MVP reason set', () => {
@@ -18,13 +23,11 @@ describe('reject reason helpers', () => {
 
   it('builds explicit avoid constraints without changing the prompt', () => {
     expect(buildAvoidConstraints([
-      { reason: 'composition', count: 3 },
-      { reason: 'lighting', count: 2 },
-      { reason: 'color', count: 1 },
+      { reason: 'composition', count: 3, percent: 50 },
+      { reason: 'lighting', count: 2, percent: 33.3 },
+      { reason: 'color', count: 1, percent: 16.7 },
     ])).toEqual(['avoid composition', 'avoid lighting', 'avoid color'])
   })
-})
-
 
   it('builds a bounded analytics snapshot for the next iteration', () => {
     expect(buildRejectConstraints([
@@ -42,3 +45,4 @@ describe('reject reason helpers', () => {
       { reason: 'pose', count: 1, percent: 10 },
     ])
   })
+})
