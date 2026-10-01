@@ -181,6 +181,11 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 	var validationErrors []string
 	for attempt:=0;attempt<3;attempt++{
 		plan,planErr:=h.flowPlanner.Plan(ctx,task,snapshot,validationErrors);if planErr!=nil{return nil,"",0,"",planErr}
+		assetRefs:=flowAssetRefs(plan.Workflow)
+		declared:=map[string]struct{}{}
+		for _,input:=range plan.Inputs{declared[input.ID]=struct{}{}}
+		for ref:=range assetRefs{if _,ok:=declared[ref];!ok{validationErrors=[]string{"workflow uses undeclared asset input "+ref};continue}}
+		if len(validationErrors)>0{continue}
 		validation,validationErr:=runtime.ValidateWorkflow(ctx,plan.Workflow);if validationErr!=nil{return nil,"",0,"",validationErr}
 		if validation.Compatible{
 			result:=flowPlanMap(plan)
@@ -205,6 +210,9 @@ func (h *Handler) runComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in
 	if h.queue==nil||h.provider==nil{return nil,"",0,"",errors.New("generation provider is not configured")}
 	workflow,_:=in["workflow"].(map[string]any);if len(workflow)==0{return nil,"",0,"",errors.New("workflow is required")}
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
+	assetRefs:=flowAssetRefs(workflow)
+	inputAssets,_:=in["input_assets"].(map[string]any)
+	for ref:=range assetRefs{value,ok:=inputAssets[ref];if !ok||strings.TrimSpace(fmt.Sprint(value))==""{return nil,"",0,"",fmt.Errorf("required flow asset input %s is missing",ref)}}
 	validation,err:=runtime.ValidateWorkflow(ctx,workflow);if err!=nil{return nil,"",0,"",err}
 	if !validation.Compatible{return nil,"",0,"",errors.New(strings.Join(validation.Errors,"; "))}
 	prompt,_:=in["prompt"].(string);prompt=strings.TrimSpace(prompt);if prompt==""{return nil,"",0,"",errors.New("prompt is required")}
@@ -246,6 +254,33 @@ func (h *Handler) findReusableRecipe(ctx context.Context,userID,projectID uuid.U
 		return map[string]any{"name":name,"description":description,"prompt":task,"negative_prompt":"","inputs":[]any{},"parameters":params,"selected_model":map[string]string{"filename":model,"version":modelVersion},"workflow":wf,"reasoning":"Reused an existing recipe after validating it against the current ComfyUI runtime.","source":"existing_recipe","recipe_id":id,"recipe_version":version,"compatibility":map[string]any{"compatible":true,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}},true,nil
 	}
 	return nil,false,rows.Err()
+}
+
+func flowAssetRefs(value any) map[string]struct{} {
+	out:=map[string]struct{}{}
+	var walk func(any)
+	walk=func(current any){
+		switch node:=current.(type){
+		case map[string]any:
+			for _,item:=range node{walk(item)}
+		case []any:
+			for _,item:=range node{walk(item)}
+		case string:
+			rest:=node
+			for {
+				start:=strings.Index(rest,"{{asset:")
+				if start<0{break}
+				rest=rest[start+len("{{asset:"):]
+				end:=strings.Index(rest,"}}")
+				if end<0{break}
+				name:=strings.TrimSpace(rest[:end])
+				if name!=""{out[name]=struct{}{}}
+				rest=rest[end+2:]
+			}
+		}
+	}
+	walk(value)
+	return out
 }
 
 func hashWorkflow(workflow map[string]any) string {data,_:=json.Marshal(workflow);sum:=sha256.Sum256(data);return fmt.Sprintf("%x",sum[:])}
