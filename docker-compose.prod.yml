@@ -10,7 +10,7 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
-      clamav: {condition: service_started}
+      clamav: {condition: service_healthy}
     volumes:
       - assets_data:/data/assets
     healthcheck:
@@ -61,7 +61,10 @@ services:
     volumes: [minio_data:/data]
   clamav:
     image: clamav/clamav:1.5.4
+    volumes:
+      - clamav_data:/var/lib/clamav
 volumes:
+  clamav_data:
   assets_data:
   postgres_data:
   redis_data:
