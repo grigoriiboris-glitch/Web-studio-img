@@ -3,10 +3,11 @@ WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN go mod tidy
 RUN go build -trimpath -ldflags="-s -w" -o /out/worker ./cmd/worker
 FROM alpine:3.22
-RUN addgroup -S app && adduser -S -G app app
+RUN addgroup -S app && adduser -S -G app app \
+    && mkdir -p /data/assets \
+    && chown -R app:app /data/assets
 WORKDIR /app
 COPY --from=build /out/worker /app/worker
 USER app
