@@ -21,6 +21,17 @@ import (
 )
 
 var ErrNotFound = errors.New("variant board resource not found")
+var ErrInvalidSelection = errors.New("invalid variant selection")
+
+func validateSelectionResult(selectedCount, requestedCount, branchCount int, parentValid, branchValid bool) error {
+  if selectedCount != requestedCount {
+    return ErrInvalidSelection
+  }
+  if !parentValid || !branchValid || branchCount != 1 {
+    return ErrInvalidSelection
+  }
+  return nil
+}
 
 var allowedRejectReasons = map[string]bool{"composition":true,"subject":true,"pose":true,"lighting":true,"color":true,"material":true,"background":true,"object":true,"style":true,"prompt":true,"quality":true,"other":true}
 var allowedRejectSeverities = map[string]bool{"low":true,"medium":true,"high":true}
@@ -281,17 +292,17 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   if err:=decode(r,&in);err!=nil||len(in.VariantIDs)<1||len(in.VariantIDs)>50{writeError(w,400,"invalid_selection","variant_ids must contain 1..50 values");return}
   seen:=map[uuid.UUID]bool{};for _,id:=range in.VariantIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_selection","variant_ids must be unique valid UUIDs");return};seen[id]=true}
   tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return};defer func(){_=tx.Rollback()}()
-  var parent sql.NullString;selectedJSON:=[]byte{}
+  var parent sql.NullString;var branchID sql.NullString;var branchCount int;selectedJSON:=[]byte{}
   placeholders:=make([]string,0,len(in.VariantIDs));args:=[]any{projectID,userID,setID}
   for i,id:=range in.VariantIDs{placeholders=append(placeholders,"$"+strconv.Itoa(i+4));args=append(args,id)}
-  query:=`SELECT MIN(g.iteration_id::text), COALESCE(json_agg(v.id::text ORDER BY v.ordinal),'[]'::json) FROM variants v JOIN generations g ON g.id=v.generation_id WHERE v.project_id=$1 AND v.user_id=$2 AND v.variant_set_id=$3 AND v.id IN (`+strings.Join(placeholders,",")+`)`
-  if err:=tx.QueryRowContext(r.Context(),query,args...).Scan(&parent,&selectedJSON);err!=nil{writeError(w,500,"iteration_create_failed","could not load selected variants");return}
-  var selected []string;_=json.Unmarshal(selectedJSON,&selected);if len(selected)!=len(in.VariantIDs){writeError(w,404,"variant_not_found","one or more variants not found");return}
+  query:=`SELECT MIN(g.iteration_id::text), MIN(i.branch_id::text), COUNT(DISTINCT i.branch_id), COALESCE(json_agg(v.id::text ORDER BY v.ordinal),'[]'::json) FROM variants v JOIN generations g ON g.id=v.generation_id JOIN iterations i ON i.id=g.iteration_id WHERE v.project_id=$1 AND v.user_id=$2 AND v.variant_set_id=$3 AND v.id IN (`+strings.Join(placeholders,",")+`) AND v.decision IN ('kept','selected')`
+  if err:=tx.QueryRowContext(r.Context(),query,args...).Scan(&parent,&branchID,&branchCount,&selectedJSON);err!=nil{writeError(w,500,"iteration_create_failed","could not load selected variants");return}
+  var selected []string;_=json.Unmarshal(selectedJSON,&selected);if len(selected)!=len(in.VariantIDs){writeError(w,400,"invalid_selection","all selected variants must be kept or selected and belong to this variant set");return}
+  if !parent.Valid || !branchID.Valid || branchCount != 1 {writeError(w,400,"invalid_selection","selected variants must share one valid iteration branch lineage");return}
   title:=strings.TrimSpace(in.Title);if title==""{title="Selection from Variant Board"}
   description:="Created from variant set "+setID.String()+"; selected variants: "+strings.Join(selected,", ")
   var iterationID uuid.UUID
-  if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,parent_iteration_id,type,title,description) VALUES($1,CASE WHEN $2='' THEN NULL ELSE $2::uuid END,'selection',$3,$4) RETURNING id`,projectID,parent.String,title,description).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
-  if err:=tx.Commit();err!=nil{writeError(w,500,"iteration_create_failed","could not commit selection iteration");return}
+  if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description) VALUES($1,$2::uuid,$3::uuid,'selection',$4,$5) RETURNING id`,projectID,branchID.String,parent.String,title,description).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
   h.audit(r.Context(),userID,projectID,iterationID,"VARIANT_SELECTED",map[string]any{"variant_set_id":setID,"variant_ids":in.VariantIDs,"created_iteration_id":iterationID})
   writeJSON(w,201,map[string]any{"iteration_id":iterationID,"title":title,"description":description})
 }
