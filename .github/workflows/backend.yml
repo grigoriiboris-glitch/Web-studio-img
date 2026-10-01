@@ -57,14 +57,6 @@ jobs:
       - name: Format Go code
         run: gofmt -w .
 
-      - name: Format check
-        run: |
-          files=$(gofmt -l .)
-          if [ -n "$files" ]; then
-            echo "$files"
-            exit 1
-          fi
-
       - name: Vet
         run: go vet ./...
 
@@ -181,7 +173,7 @@ jobs:
       - name: Build frontend image
         run: docker build -f frontend/Dockerfile frontend
       - name: Build production image
-        run: docker build -f Dockerfile.prod .
+        run: docker build -f Dockerfile.prod -t web-studio-img:ci .
       - name: Validate development Compose
         run: |
           cp .env.example .env
@@ -189,3 +181,15 @@ jobs:
       - name: Validate production Compose
         run: |
           docker compose -f docker-compose.prod.yml config
+      - name: Smoke-test production image
+        run: |
+          docker run -d --name web-studio-img-smoke -p 18080:8080             -e APP_ENV=production             -e APP_PORT=8080             -e JWT_SECRET=12345678901234567890123456789012             -e CORS_ORIGINS=http://localhost:8080             -e WEB_STATIC_DIR=/app/web             -e STORAGE_PROVIDER=local             -e STORAGE_LOCAL_DIR=/data/assets             -e STORAGE_SIGNING_SECRET=local-smoke-secret             -e CLAMAV_ADDR=127.0.0.1:3310             web-studio-img:ci
+          trap 'docker rm -f web-studio-img-smoke >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs web-studio-img-smoke
+          exit 1

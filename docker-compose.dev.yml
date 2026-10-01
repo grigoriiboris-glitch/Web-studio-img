@@ -8,6 +8,8 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
+    volumes:
+      - assets_data:/data/assets
   worker:
     build: {context: ./backend, dockerfile: Dockerfile.worker}
     env_file: [.env]
@@ -16,6 +18,8 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
+    volumes:
+      - assets_data:/data/assets
   frontend:
     image: node:22-alpine
     working_dir: /app
@@ -48,7 +52,7 @@ services:
       retries: 10
     volumes: [redis_data:/data]
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     env_file: [.env]
     ports: ["${HOST_MINIO_API_PORT}:9000", "${HOST_MINIO_CONSOLE_PORT}:9001"]
     command: ["server", "/data", "--console-address", ":9001"]
@@ -60,6 +64,7 @@ services:
     volumes: [minio_data:/data]
 volumes:
   frontend_node_modules:
+  assets_data:
   postgres_data:
   redis_data:
   minio_data:

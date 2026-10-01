@@ -66,3 +66,42 @@ func TestProductionRequiresWebStaticDir(t *testing.T) {
 		t.Fatal("expected WEB_STATIC_DIR requirement")
 	}
 }
+
+
+func TestLocalStorageConfiguration(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("STORAGE_PROVIDER", "local")
+	t.Setenv("STORAGE_LOCAL_DIR", "/tmp/web-studio-assets")
+	t.Setenv("STORAGE_SIGNING_SECRET", "local-signing-secret")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if cfg.StorageProvider != "local" || cfg.StorageLocalDir != "/tmp/web-studio-assets" || cfg.StorageSigningSecret != "local-signing-secret" {
+		t.Fatalf("unexpected local storage config: %+v", cfg)
+	}
+}
+
+func TestInvalidStorageProvider(t *testing.T) {
+	t.Setenv("STORAGE_PROVIDER", "filesystem")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected storage provider validation error")
+	}
+}
+
+func TestProductionLocalStorageCanUseJWTSecret(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_PORT", "8080")
+	t.Setenv("JWT_SECRET", "12345678901234567890123456789012")
+	t.Setenv("CORS_ORIGINS", "http://localhost:8080")
+	t.Setenv("WEB_STATIC_DIR", "/app/web")
+	t.Setenv("STORAGE_PROVIDER", "local")
+	t.Setenv("STORAGE_SIGNING_SECRET", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if cfg.StorageSigningSecret != cfg.JWTSecret {
+		t.Fatal("local storage should fall back to JWT secret when explicit signing secret is absent")
+	}
+}

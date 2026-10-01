@@ -21,7 +21,7 @@ import (
 
 type UploadHandler struct{store *Store;processor *Processor;storage storage.StorageProvider;events *events.Store;provenance *provenance.Store}
 func NewUploadHandler(store *Store,processor *Processor,storageProvider storage.StorageProvider,ev *events.Store,pv *provenance.Store)(*UploadHandler,error){if store==nil||processor==nil{return nil,errors.New("asset upload handler requires store and processor")};return &UploadHandler{store:store,processor:processor,storage:storageProvider,events:ev,provenance:pv},nil}
-func(h *UploadHandler)Register(mux *http.ServeMux){mux.HandleFunc("POST /api/v1/projects/{project_id}/assets",h.multipart);mux.HandleFunc("POST /api/v1/projects/{project_id}/assets/import-url",h.importURL);mux.HandleFunc("POST /api/v1/projects/{project_id}/assets/uploads",h.initUpload);mux.HandleFunc("PUT /api/v1/projects/{project_id}/assets/{asset_id}/parts/{part_number}",h.part);mux.HandleFunc("POST /api/v1/projects/{project_id}/assets/{asset_id}/complete",h.complete);mux.HandleFunc("GET /api/v1/projects/{project_id}/assets/{asset_id}",h.get);mux.HandleFunc("GET /api/v1/projects/{project_id}/assets/{asset_id}/download-url",h.downloadURL)}
+func(h *UploadHandler)Register(mux *http.ServeMux){mux.HandleFunc("POST /api/v1/projects/{project_id}/assets",h.multipart);mux.HandleFunc("POST /api/v1/projects/{project_id}/assets/import-url",h.importURL);mux.HandleFunc("POST /api/v1/projects/{project_id}/assets/uploads",h.initUpload);mux.HandleFunc("PUT /api/v1/projects/{project_id}/assets/{asset_id}/parts/{part_number}",h.part);mux.HandleFunc("POST /api/v1/projects/{project_id}/assets/{asset_id}/complete",h.complete);mux.HandleFunc("GET /api/v1/projects/{project_id}/assets/{asset_id}",h.get);mux.HandleFunc("GET /api/v1/projects/{project_id}/assets/{asset_id}/download-url",h.downloadURL);mux.HandleFunc("PUT /api/v1/storage/local",h.localStoragePut);mux.HandleFunc("GET /api/v1/storage/local",h.localStorageGet)}
 func(h *UploadHandler)multipart(w http.ResponseWriter,r *http.Request){u,ok:=uploadUserID(r);if !ok{uploadErr(w,401,"unauthorized","authentication required");return};if h.storage==nil{uploadErr(w,503,"storage_unavailable","object storage is not configured");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{uploadErr(w,400,"invalid_project_id","invalid project id");return};if err:=r.ParseMultipartForm(MaxAssetSize);err!=nil{uploadErr(w,400,"invalid_multipart","invalid multipart upload");return};file,header,err:=r.FormFile("file");if err!=nil{uploadErr(w,400,"file_required","multipart field file is required");return};defer func() { _ = file.Close() }();ext:=strings.ToLower(filepath.Ext(header.Filename))
 	if ext != "" && ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" { uploadErr(w,400,"invalid_extension","only .jpg, .jpeg and .png files, or image blobs without an extension, are supported"); return }
 	data,err:=io.ReadAll(io.LimitReader(file,MaxAssetSize+1));if err!=nil{uploadErr(w,400,"file_read_failed","could not read file");return};if int64(len(data))>MaxAssetSize||header.Size>MaxAssetSize{uploadErr(w,413,"file_too_large","asset exceeds size limit");return};item,err:=h.processor.ProcessUpload(r.Context(),u,pid,data,header.Header.Get("Content-Type"));if err!=nil{uploadErr(w,400,"asset_upload_failed",err.Error());return};h.emit(r,u,pid,item.ID,"asset_created",map[string]any{"type":item.Type,"storage_key":item.StorageKey,"checksum":item.Checksum});uploadJSON(w,201,item)}
@@ -33,6 +33,46 @@ if len(parts)>0{var buf bytes.Buffer;var total int64;for i,p:=range parts{if p.P
 func(h *UploadHandler)get(w http.ResponseWriter,r *http.Request){u,ok:=uploadUserID(r);if !ok{uploadErr(w,401,"unauthorized","authentication required");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{uploadErr(w,400,"invalid_project_id","invalid project id");return};id,err:=uuid.Parse(r.PathValue("asset_id"));if err!=nil{uploadErr(w,400,"invalid_asset_id","invalid asset id");return};item,err:=h.store.GetOwned(r.Context(),u,pid,id);if err!=nil{uploadErr(w,404,"asset_not_found","asset not found");return};uploadJSON(w,200,item)}
 func(h *UploadHandler)downloadURL(w http.ResponseWriter,r *http.Request){u,ok:=uploadUserID(r);if !ok{uploadErr(w,401,"unauthorized","authentication required");return};if h.storage==nil{uploadErr(w,503,"storage_unavailable","object storage is not configured");return};pid,err:=uuid.Parse(r.PathValue("project_id"));if err!=nil{uploadErr(w,400,"invalid_project_id","invalid project id");return};id,err:=uuid.Parse(r.PathValue("asset_id"));if err!=nil{uploadErr(w,400,"invalid_asset_id","invalid asset id");return};item,err:=h.store.GetOwned(r.Context(),u,pid,id);if err!=nil{uploadErr(w,404,"asset_not_found","asset not found");return};url,err:=h.storage.PresignGet(r.Context(),item.StorageKey,10*time.Minute);if err!=nil{uploadErr(w,503,"download_url_failed","could not create signed download URL");return};uploadJSON(w,200,map[string]any{"asset_id":id,"url":url.URL,"expires_at":url.ExpiresAt})}
 func(h *UploadHandler)emit(r *http.Request,u,pid,id uuid.UUID,action string,payload map[string]any){if h.events!=nil{_,_=h.events.Append(r.Context(),u,pid,"asset.created","asset",id,payload)};if h.provenance!=nil{_,_=h.provenance.Append(r.Context(),provenance.Event{UserID:u,ProjectID:pid,EntityType:"asset",EntityID:id,Action:action,Payload:payload});if h.events!=nil{_,_=h.events.Append(r.Context(),u,pid,"provenance.updated","asset",id,map[string]any{"action":action})}}}
+type localPresignValidator interface {
+	ValidatePresignedURL(method, key string, expiresAt int64, signature string) bool
+}
+
+func(h *UploadHandler) localStorageAuthorized(w http.ResponseWriter,r *http.Request,method string) (string,bool) {
+	if _,ok:=uploadUserID(r);!ok {uploadErr(w,http.StatusUnauthorized,"unauthorized","authentication required");return "",false}
+	validator,ok:=h.storage.(localPresignValidator);if !ok {uploadErr(w,http.StatusNotFound,"storage_route_unavailable","local storage is not enabled");return "",false}
+	key:=strings.TrimSpace(r.URL.Query().Get("key"));expiresRaw:=strings.TrimSpace(r.URL.Query().Get("expires"));sig:=strings.TrimSpace(r.URL.Query().Get("sig"))
+	expires,err:=strconv.ParseInt(expiresRaw,10,64);if err!=nil||!validator.ValidatePresignedURL(method,key,expires,sig){uploadErr(w,http.StatusForbidden,"invalid_storage_signature","storage URL is invalid or expired");return "",false}
+	userID,_:=uploadUserID(r);prefix:="users/"+userID.String()+"/";if !strings.HasPrefix(key,prefix){uploadErr(w,http.StatusForbidden,"storage_access_denied","storage object does not belong to the authenticated user");return "",false}
+	return key,true
+}
+
+func(h *UploadHandler) localStoragePut(w http.ResponseWriter,r *http.Request){
+	key,ok:=h.localStorageAuthorized(w,r,http.MethodPut);if !ok{return}
+	defer func(){_ = r.Body.Close()}()
+	if r.ContentLength > MaxAssetSize {
+		uploadErr(w,http.StatusRequestEntityTooLarge,"file_too_large","storage object exceeds size limit");return
+	}
+	body:=http.MaxBytesReader(w,r.Body,MaxAssetSize)
+	if err:=h.storage.Put(r.Context(),key,body,r.ContentLength,storage.PutOptions{ContentType:r.Header.Get("Content-Type")});err!=nil{
+		var maxErr *http.MaxBytesError
+		if errors.As(err,&maxErr) {
+			uploadErr(w,http.StatusRequestEntityTooLarge,"file_too_large","storage object exceeds size limit");return
+		}
+		uploadErr(w,http.StatusInternalServerError,"storage_write_failed","could not store local object");return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+func(h *UploadHandler) localStorageGet(w http.ResponseWriter,r *http.Request){
+	key,ok:=h.localStorageAuthorized(w,r,http.MethodGet);if !ok{return}
+	obj,info,err:=h.storage.Get(r.Context(),key);if err!=nil{uploadErr(w,http.StatusNotFound,"storage_object_not_found","storage object not found");return}
+	defer func(){_ = obj.Close()}()
+	if info.ContentType!=""{w.Header().Set("Content-Type",info.ContentType)}
+	if info.Size>=0{w.Header().Set("Content-Length",strconv.FormatInt(info.Size,10))}
+	if info.ETag!=""{w.Header().Set("ETag",info.ETag)}
+	_,_=io.Copy(w,obj)
+}
+
 func uploadUserID(r *http.Request)(uuid.UUID,bool){p,ok:=auth.PrincipalFromContext(r.Context());if !ok{return uuid.Nil,false};return p.UserID,true}
 func decodeUploadJSON(r *http.Request,v any)error{d:=json.NewDecoder(io.LimitReader(r.Body,1<<20));d.DisallowUnknownFields();if err:=d.Decode(v);err!=nil{return err};var extra any;if err:=d.Decode(&extra);err!=io.EOF{return errors.New("multiple JSON values")};return nil}
 func uploadJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}

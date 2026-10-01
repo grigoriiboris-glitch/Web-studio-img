@@ -2299,7 +2299,7 @@ paths:
                   provider: {type: string}
                   model: {type: string}
                   version: {type: integer}
-  /projects/{project_id}/recipes/from-generation/{generation_id}:
+  /projects/{project_id}/recipes/from-generation/{generation_id}/create:
     post:
       operationId: saveGenerationAsRecipe
       summary: Save a successful generation's resolved workflow as a new recipe
@@ -4863,3 +4863,4 @@ components:
             code: {type: string}
             message: {type: string}
             request_id: {type: string}
+

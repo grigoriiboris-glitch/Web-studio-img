@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -31,10 +32,6 @@ func main() {
 	}
 	if cfg.DatabaseURL == "" || cfg.RedisURL == "" {
 		logger.Error("worker requires DATABASE_URL and REDIS_URL")
-		os.Exit(1)
-	}
-	if cfg.S3Bucket == "" || cfg.S3AccessKey == "" || cfg.S3SecretKey == "" {
-		logger.Error("worker requires S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
 		os.Exit(1)
 	}
 	if cfg.Env == "production" && cfg.ClamAVAddress == "" {
@@ -79,12 +76,23 @@ func main() {
 			assets.ClamAVScanner{Address: cfg.ClamAVAddress, Timeout: 10 * time.Second},
 		}
 	}
-	objectStorage, err := storage.NewS3Storage(context.Background(), storage.S3Config{
-		Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, Bucket: cfg.S3Bucket,
-		AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, UsePathStyle: cfg.S3UsePathStyle,
-	})
+	var objectStorage storage.StorageProvider
+	switch cfg.StorageProvider {
+	case "local":
+		objectStorage, err = storage.NewLocalStorage(storage.LocalConfig{
+			RootDir: cfg.StorageLocalDir,
+			SigningSecret: cfg.StorageSigningSecret,
+		})
+	case "s3":
+		objectStorage, err = storage.NewS3Storage(context.Background(), storage.S3Config{
+			Endpoint: cfg.S3Endpoint, Region: cfg.S3Region, Bucket: cfg.S3Bucket,
+			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, UsePathStyle: cfg.S3UsePathStyle,
+		})
+	default:
+		err = fmt.Errorf("unsupported storage provider %q", cfg.StorageProvider)
+	}
 	if err != nil {
-		logger.Error("object storage initialization failed", "error", err)
+		logger.Error("object storage initialization failed", "provider", cfg.StorageProvider, "error", err)
 		os.Exit(1)
 	}
 

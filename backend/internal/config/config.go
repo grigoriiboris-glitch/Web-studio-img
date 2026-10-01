@@ -13,6 +13,9 @@ type Config struct {
 	Env             string
 	Port            string
 	WebStaticDir    string
+	StorageProvider string
+	StorageLocalDir string
+	StorageSigningSecret string
 	DatabaseURL     string
 	RedisURL        string
 	S3Endpoint      string
@@ -50,6 +53,9 @@ func Load() (Config, error) {
 		Env:             getenv("APP_ENV", "development"),
 		Port:            getenv("APP_PORT", "8080"),
 		WebStaticDir:    strings.TrimSpace(os.Getenv("WEB_STATIC_DIR")),
+		StorageProvider: getenv("STORAGE_PROVIDER", "s3"),
+		StorageLocalDir: getenv("STORAGE_LOCAL_DIR", "/data/assets"),
+		StorageSigningSecret: strings.TrimSpace(os.Getenv("STORAGE_SIGNING_SECRET")),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		RedisURL:        os.Getenv("REDIS_URL"),
 		S3Endpoint:      os.Getenv("S3_ENDPOINT"),
@@ -84,6 +90,12 @@ func Load() (Config, error) {
 	if cfg.ImageProvider != "comfyui" && cfg.ImageProvider != "yandexart" {
 		return Config{}, errors.New("IMAGE_PROVIDER must be comfyui or yandexart")
 	}
+	if cfg.StorageProvider != "s3" && cfg.StorageProvider != "local" {
+		return Config{}, errors.New("STORAGE_PROVIDER must be s3 or local")
+	}
+	if cfg.StorageProvider == "local" && cfg.StorageSigningSecret == "" {
+		cfg.StorageSigningSecret = cfg.JWTSecret
+	}
 	if cfg.Port == "" {
 		return Config{}, errors.New("APP_PORT must not be empty")
 	}
@@ -102,6 +114,13 @@ func Load() (Config, error) {
 		}
 		if cfg.WebStaticDir == "" {
 			return Config{}, errors.New("WEB_STATIC_DIR must not be empty in production")
+		}
+		if cfg.StorageProvider == "s3" {
+			if cfg.S3Bucket == "" || cfg.S3AccessKey == "" || cfg.S3SecretKey == "" {
+				return Config{}, errors.New("production S3 storage requires S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
+			}
+		} else if cfg.StorageSigningSecret == "" {
+			return Config{}, errors.New("production local storage requires STORAGE_SIGNING_SECRET or JWT_SECRET")
 		}
 	}
 	return cfg, nil
