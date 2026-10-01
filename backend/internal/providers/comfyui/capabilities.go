@@ -252,13 +252,6 @@ func modelInstalled(models map[string][]string, folder, name string) bool {
 			return true
 		}
 	}
-	for _, names := range models {
-		for _, candidate := range names {
-			if candidate == name {
-				return true
-			}
-		}
-	}
 	return false
 }
 
