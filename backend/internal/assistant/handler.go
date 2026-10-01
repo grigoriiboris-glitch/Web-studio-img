@@ -239,7 +239,7 @@ func (h *Handler) findReusableRecipe(ctx context.Context,userID,projectID uuid.U
 	for rows.Next(){
 		var id uuid.UUID;var name,description,model,modelVersion string;var version int;var wfRaw,paramRaw []byte
 		if err:=rows.Scan(&id,&name,&description,&model,&modelVersion,&version,&wfRaw,&paramRaw);err!=nil{return nil,false,err}
-		score:=stringScore(name+" "+description,keywords);if score<1{continue}
+		score:=stringScore(name+" "+description,keywords);if score<2{continue}
 		var wf map[string]any;if json.Unmarshal(wfRaw,&wf)!=nil||len(wf)==0{continue}
 		validation,err:=runtime.ValidateWorkflow(ctx,wf);if err!=nil{return nil,false,err};if !validation.Compatible{continue}
 		var params map[string]any;_=json.Unmarshal(paramRaw,&params);if params==nil{params=map[string]any{}}
