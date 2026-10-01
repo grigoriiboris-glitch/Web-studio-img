@@ -465,10 +465,21 @@ export const variantBoardApi = {
     apiRequest<RejectReasonSummary>(`/projects/${projectId}/variant-rejection-summary`),
   rejectionTimeline: (projectId: string) =>
     apiRequest<{ items: RejectTimelineItem[] }>(`/projects/${projectId}/variant-rejection-timeline`),
-  createIteration: (projectId: string, setId: string, variantIds: string[], title?: string) =>
-    apiRequest<{ iteration_id: string; title: string; description: string }>(
+  createIteration: (
+    projectId: string,
+    setId: string,
+    variantIds: string[],
+    title?: string,
+    decisions?: Record<string, unknown>,
+  ) =>
+    apiRequest<{
+      iteration_id: string
+      title: string
+      description: string
+      decisions?: Record<string, unknown>
+    }>(
       `/projects/${projectId}/variant-sets/${setId}/iterations`,
-      { method: 'POST', body: JSON.stringify({ variant_ids: variantIds, title }) },
+      { method: 'POST', body: JSON.stringify({ variant_ids: variantIds, title, decisions }) },
     ),
 }
 
