@@ -26,7 +26,7 @@ STORAGE_PROVIDER=s3
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-Production exposes only the application port. Postgres, Redis and MinIO stay on the internal Compose network. ClamAV runs as an internal service and the backend/worker use `clamav:3310` for malware scanning. The project uses the official ClamAV image and a pinned MinIO release in the production Compose file. citeturn746611search10turn499177search1
+Production exposes only the application port. Postgres, Redis and MinIO stay on the internal Compose network. ClamAV runs as an internal service and the backend/worker use `clamav:3310` for malware scanning. The project uses the official ClamAV image and a pinned MinIO release in the production Compose file.
 
 ### Local filesystem storage
 
