@@ -21,8 +21,9 @@ import (
 )
 
 var ErrNotFound = errors.New("variant board resource not found")
+var ErrInvalidSelection = errors.New("invalid variant selection")
 
-var allowedRejectReasons = map[string]bool{"composition":true,"subject":true,"pose":true,"lighting":true,"color":true,"material":true,"background":true,"object":true,"style":true,"prompt":true,"quality":true,"other":true}
+func validateSelectionResult(selectedCount, requestedCount, branchCount int, parentValid, branchValid bool) error {\n  if selectedCount != requestedCount { return ErrInvalidSelection }\n  if !parentValid || !branchValid || branchCount != 1 { return ErrInvalidSelection }\n  return nil\n}\n\nvar allowedRejectReasons = map[string]bool{"composition":true,"subject":true,"pose":true,"lighting":true,"color":true,"material":true,"background":true,"object":true,"style":true,"prompt":true,"quality":true,"other":true}
 var allowedRejectSeverities = map[string]bool{"low":true,"medium":true,"high":true}
 
 type Handler struct {
