@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   RouterLink, useRoute } from 'vue-router'
 import SketchImportZone from '../../components/SketchImportZone.vue'
+import { buildAvoidConstraints } from './rejectReasons'
 import BranchPanel from './BranchPanel.vue'
 import {
   generationsApi,
@@ -465,14 +466,16 @@ async function createIteration() {
 
 function applyAvoidConstraints() {
   if (!rejectionSummary.value?.reasons.length) return
-  const constraints = rejectionSummary.value.reasons
-    .slice(0, 5)
-    .map(item => 'avoid ' + item.reason)
-    .join(', ')
-  const current = generationForm.value.negative_prompt.trim()
-  generationForm.value.negative_prompt = current
-    ? current + ', ' + constraints
-    : constraints
+  const current = generationForm.value.negative_prompt
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean)
+  const constraints = buildAvoidConstraints(rejectionSummary.value.reasons)
+  const next = [...current]
+  for (const constraint of constraints) {
+    if (!next.includes(constraint)) next.push(constraint)
+  }
+  generationForm.value.negative_prompt = next.join(', ')
 }
 
 async function loadRecipes() {
