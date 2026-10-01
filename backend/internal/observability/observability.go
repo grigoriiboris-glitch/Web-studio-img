@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/exporters/prometheus"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace"
 )
@@ -27,11 +26,7 @@ func Setup(ctx context.Context, cfg Config) (*Providers, error) {
 	if cfg.ServiceName == "" {
 		return nil, errors.New("service name is required")
 	}
-	metricExporter, err := prometheus.New()
-	if err != nil {
-		return nil, err
-	}
-	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricExporter))
+	meterProvider := sdkmetric.NewMeterProvider()
 	tracerProvider := trace.NewTracerProvider()
 	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); endpoint != "" {
 		exporter, err := otlptracehttp.New(ctx)
