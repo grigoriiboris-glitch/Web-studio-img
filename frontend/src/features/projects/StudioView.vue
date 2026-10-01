@@ -565,13 +565,22 @@ async function runComfyFlow() {
 async function saveComfyFlowAsRecipe() {
   const plan = comfyFlowPlan.value
   if (!plan) return
-  if (plan.inputs.some(input => input.required && input.type === 'image' && input.id !== 'sketch')) {
-    error.value = 'This generated flow has multiple dynamic image inputs; run it first. Multi-input Recipe mapping will be added separately.'
-    return
-  }
   comfyFlowSaving.value = true
   error.value = null
   try {
+    const assetInputs = flowInputAssets()
+    const assetEntries = await Promise.all(
+      Object.entries(assetInputs).map(async ([name, assetId]) => {
+        const asset = await assetsApi.get(projectId(), assetId)
+        return [name, asset.storage_key] as const
+      }),
+    )
+    const defaultParameters: Record<string, unknown> = {
+      ...plan.parameters,
+    }
+    if (assetEntries.length) {
+      defaultParameters.asset_storage_keys = Object.fromEntries(assetEntries)
+    }
     const recipe = await recipesApi.create(projectId(), {
       name: plan.name,
       description: plan.description || 'AI-generated ComfyUI flow',
@@ -585,7 +594,7 @@ async function saveComfyFlowAsRecipe() {
         workflow: plan.workflow,
         input_mappings: {},
         exposed_parameters: [],
-        default_parameters: plan.parameters,
+        default_parameters: defaultParameters,
       },
     })
     recipes.value = [recipe, ...recipes.value.filter(item => item.id !== recipe.id)]
