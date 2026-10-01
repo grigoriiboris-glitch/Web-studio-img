@@ -236,7 +236,7 @@ async function createSelectionIteration() {
     const decisions = carryRejectConstraints.value && rejectionSummary.value?.reasons.length
       ? { reject_constraints: buildRejectConstraints(rejectionSummary.value.reasons) }
       : undefined
-    const created = await variantBoardApi.createIteration(
+    await variantBoardApi.createIteration(
       projectId,
       activeSet.value.id,
       selectedVariantIds.value,
@@ -247,7 +247,6 @@ async function createSelectionIteration() {
     iterationMessage.value = decisions
       ? 'Итерация создана: отрицательные сигналы зафиксированы в decisions и доступны как контекст следующего шага.'
       : 'Итерация создана без reject constraints.'
-    void created
   } catch (e: any) {
     error.value = e.message
     iterationMessage.value = ''
