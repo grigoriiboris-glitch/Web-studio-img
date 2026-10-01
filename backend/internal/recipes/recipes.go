@@ -96,7 +96,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
   mux.HandleFunc("POST /api/v1/projects/{project_id}/recipes/{recipe_id}/unpublish", h.unpublish)
   mux.HandleFunc("POST /api/v1/projects/{project_id}/recipes/{recipe_id}/duplicate", h.duplicate)
   mux.HandleFunc("POST /api/v1/projects/{project_id}/recipes/{recipe_id}/compatibility", h.compatibility)
-  mux.HandleFunc("POST /api/v1/projects/{project_id}/recipes/from-generation/{generation_id}", h.fromGeneration)
+  mux.HandleFunc("POST /api/v1/projects/{project_id}/recipes/from-generation/{generation_id}/create", h.fromGeneration)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
