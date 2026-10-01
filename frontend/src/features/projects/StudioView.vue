@@ -39,6 +39,7 @@ import {
   type LibraryItem,
   recipesApi,
   type Recipe,
+  type ComfyFlowPlan,
   type PrivacyMode,
 } from '../../api/client'
 
@@ -118,6 +119,13 @@ const recipes = ref<Recipe[]>([])
 const selectedRecipeId = ref('')
 const recipeParameters = ref<Record<string, unknown>>({})
 const selectedRecipe = computed(() => recipes.value.find(recipe => recipe.id === selectedRecipeId.value) ?? null)
+const comfyFlowTask = ref('Возьми мой скетч и цветной референс. Сохрани композицию и линии скетча, перенеси цвета и материалы с референса и создай полноценную цветную иллюстрацию.')
+const comfyFlowSketchAssetId = ref('')
+const comfyFlowReferenceAssetId = ref('')
+const comfyFlowPlan = ref<ComfyFlowPlan | null>(null)
+const comfyFlowPlanning = ref(false)
+const comfyFlowRunning = ref(false)
+const comfyFlowSaving = ref(false)
 
 const generationForm = ref({ prompt: '', negative_prompt: '', aspect_ratio: '1:1', seed: undefined as number | undefined })
 const promptForm = ref({
@@ -487,6 +495,107 @@ async function loadRecipes() {
 function selectRecipe() {
   const defaults = selectedRecipe.value?.version?.default_parameters ?? {}
   recipeParameters.value = { ...defaults }
+}
+
+function syncComfyFlowAssets() {
+  if (!comfyFlowSketchAssetId.value && lastUploadedAsset.value) comfyFlowSketchAssetId.value = lastUploadedAsset.value
+  if (!comfyFlowReferenceAssetId.value && selectedReferenceId.value) {
+    const reference = references.value.find(item => item.id === selectedReferenceId.value)
+    if (reference?.asset_id) comfyFlowReferenceAssetId.value = reference.asset_id
+  }
+}
+
+async function createComfyFlow() {
+  comfyFlowPlanning.value = true
+  error.value = null
+  try {
+    syncComfyFlowAssets()
+    const response = await assistantApi.execute<ComfyFlowPlan>(projectId(), 'create_comfy_flow', { task: comfyFlowTask.value.trim() }, crypto.randomUUID())
+    comfyFlowPlan.value = response.result
+    assistantActions.value.push(response.action)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not create ComfyUI flow'
+  } finally {
+    comfyFlowPlanning.value = false
+  }
+}
+
+function flowInputAssets(): Record<string, string> {
+  const plan = comfyFlowPlan.value
+  if (!plan) return {}
+  const assets: Record<string, string> = {}
+  for (const input of plan.inputs) {
+    if (input.id === 'sketch' && comfyFlowSketchAssetId.value) assets[input.id] = comfyFlowSketchAssetId.value
+    if ((input.id === 'color_reference' || input.id === 'reference' || input.id === 'color_reference_image') && comfyFlowReferenceAssetId.value) {
+      assets[input.id] = comfyFlowReferenceAssetId.value
+    }
+  }
+  return assets
+}
+
+async function runComfyFlow() {
+  const plan = comfyFlowPlan.value
+  if (!plan) return
+  comfyFlowRunning.value = true
+  error.value = null
+  try {
+    const inputAssets = flowInputAssets()
+    const missing = plan.inputs.filter(input => input.required && !inputAssets[input.id])
+    if (missing.length) throw new Error('Required flow inputs are missing: ' + missing.map(item => item.label || item.id).join(', '))
+    const response = await assistantApi.execute<Record<string, unknown>>(projectId(), 'run_comfy_flow', {
+      workflow: plan.workflow,
+      prompt: plan.prompt || comfyFlowTask.value.trim(),
+      negative_prompt: plan.negative_prompt || undefined,
+      parameters: plan.parameters,
+      input_assets: inputAssets,
+      reference_ids: selectedReferenceId.value ? [selectedReferenceId.value] : undefined,
+      aspect_ratio: String(plan.parameters.aspect_ratio ?? '1:1'),
+      seed: typeof plan.parameters.seed === 'number' ? plan.parameters.seed : undefined,
+    }, crypto.randomUUID())
+    const generation = response.result.generation as Generation
+    generations.value = [generation, ...generations.value.filter(item => item.id !== generation.id)]
+    assistantActions.value.push(response.action)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not run ComfyUI flow'
+  } finally {
+    comfyFlowRunning.value = false
+  }
+}
+
+async function saveComfyFlowAsRecipe() {
+  const plan = comfyFlowPlan.value
+  if (!plan) return
+  if (plan.inputs.some(input => input.required && input.type === 'image' && input.id !== 'sketch')) {
+    error.value = 'This generated flow has multiple dynamic image inputs; run it first. Multi-input Recipe mapping will be added separately.'
+    return
+  }
+  comfyFlowSaving.value = true
+  error.value = null
+  try {
+    const recipe = await recipesApi.create(projectId(), {
+      name: plan.name,
+      description: plan.description || 'AI-generated ComfyUI flow',
+      provider: 'comfyui',
+      model: plan.selected_model?.filename || 'local',
+      model_version: plan.selected_model?.version || '',
+      scope: 'project',
+      tags: ['ai-generated', 'flow-planner'],
+      project_id: projectId(),
+      version: {
+        workflow: plan.workflow,
+        input_mappings: {},
+        exposed_parameters: [],
+        default_parameters: plan.parameters,
+      },
+    })
+    recipes.value = [recipe, ...recipes.value.filter(item => item.id !== recipe.id)]
+    selectedRecipeId.value = recipe.id
+    selectRecipe()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not save flow as Recipe'
+  } finally {
+    comfyFlowSaving.value = false
+  }
 }
 
 async function createGeneration() {
@@ -1168,6 +1277,54 @@ onUnmounted(() => {
                   type="checkbox"
                 >
               </label>
+            </div>
+          </template>
+        </el-card>
+
+        <el-card class="create-card flow-planner-card">
+          <template #header>✨ Create ComfyUI flow with AI</template>
+          <el-form label-position="top" @submit.prevent="createComfyFlow">
+            <el-form-item label="What should the AI flow do?">
+              <el-input v-model="comfyFlowTask" type="textarea" :rows="4" maxlength="12000" show-word-limit />
+            </el-form-item>
+            <el-row :gutter="12">
+              <el-col :span="12">
+                <el-form-item label="Sketch asset ID">
+                  <el-input v-model="comfyFlowSketchAssetId" placeholder="Optional; last imported asset is used by default" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="Color reference asset ID">
+                  <el-input v-model="comfyFlowReferenceAssetId" placeholder="Optional; selected reference asset is used by default" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-space wrap>
+              <el-button type="primary" :loading="comfyFlowPlanning" @click="createComfyFlow">Create compatible flow</el-button>
+              <el-button v-if="comfyFlowPlan" :loading="comfyFlowRunning" @click="runComfyFlow">Create &amp; run</el-button>
+              <el-button v-if="comfyFlowPlan" :loading="comfyFlowSaving" @click="saveComfyFlowAsRecipe">Save as Recipe</el-button>
+            </el-space>
+          </el-form>
+          <template v-if="comfyFlowPlan">
+            <el-divider />
+            <div class="flow-plan">
+              <div class="flow-plan-header">
+                <strong>{{ comfyFlowPlan.name }}</strong>
+                <el-tag :type="comfyFlowPlan.compatibility.compatible ? 'success' : 'danger'">
+                  {{ comfyFlowPlan.compatibility.compatible ? 'Compatible' : 'Blocked' }}
+                </el-tag>
+              </div>
+              <p>{{ comfyFlowPlan.description }}</p>
+              <p v-if="comfyFlowPlan.reasoning"><strong>Plan:</strong> {{ comfyFlowPlan.reasoning }}</p>
+              <p v-if="comfyFlowPlan.source === 'existing_recipe'"><strong>Source:</strong> existing validated Recipe</p>
+              <p v-else><strong>Source:</strong> AI-generated from live ComfyUI capabilities</p>
+              <p v-if="comfyFlowPlan.selected_model?.filename"><strong>Model:</strong> {{ comfyFlowPlan.selected_model.filename }}</p>
+              <el-alert
+                v-if="comfyFlowPlan.compatibility.warnings.length"
+                :title="'Warnings: ' + comfyFlowPlan.compatibility.warnings.join('; ')"
+                type="warning"
+                :closable="false"
+              />
             </div>
           </template>
         </el-card>
@@ -1871,4 +2028,13 @@ onUnmounted(() => {
   padding-inline-start: 12px;
 }
 
+.flow-planner-card {
+  border: 1px solid var(--el-border-color);
+}
+.flow-plan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 </style>
