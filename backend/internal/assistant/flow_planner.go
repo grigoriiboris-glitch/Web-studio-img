@@ -120,7 +120,7 @@ func (p *FlowPlanner) Plan(ctx context.Context, task string, snapshot comfyui.Ru
 
 func decodeFlowPlan(content string) (FlowPlan,error) {
 	content=strings.TrimSpace(content)
-	if strings.HasPrefix(content,"") && strings.HasPrefix(content,"```") {
+	if strings.HasPrefix(content,"```") {
 		content=strings.TrimPrefix(content,"```json")
 		content=strings.TrimPrefix(content,"```JSON")
 		content=strings.TrimPrefix(content,"```")
