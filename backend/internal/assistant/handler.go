@@ -2,6 +2,7 @@ package assistant
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
+	"github.com/oleg3190/Web-studio-img/backend/internal/providers/comfyui"
 	"github.com/oleg3190/Web-studio-img/backend/internal/references"
 	"github.com/oleg3190/Web-studio-img/backend/internal/similarity"
 	"github.com/oleg3190/Web-studio-img/backend/internal/storage"
@@ -44,6 +46,7 @@ type Handler struct {
 	actions *Store
 	queue generation.Enqueuer
 	provider generation.Provider
+	flowPlanner *FlowPlanner
 }
 
 type Config struct {
@@ -68,6 +71,10 @@ type ToolDescriptor struct {
 }
 
 var toolCatalog = []ToolDescriptor{
+	{Name:"inspect_comfyui_capabilities",Description:"Inspect the live ComfyUI runtime: nodes, models, version and devices."},
+	{Name:"create_comfy_flow",Description:"Create a ComfyUI flow from a natural-language task using only live runtime capabilities."},
+	{Name:"validate_comfy_flow",Description:"Validate a ComfyUI API workflow against the live installed node and model catalog."},
+	{Name:"run_comfy_flow",Description:"Validate and queue a generated ComfyUI flow through the normal generation pipeline.",Mutating:true},
 	{Name:"create_iteration",Description:"Create one immutable creative iteration.",Mutating:true},
 	{Name:"get_project_history",Description:"Return the owned project's creative history."},
 	{Name:"analyze_composition",Description:"Analyze an owned image with deterministic composition descriptors.",Recommendation:true},
@@ -83,7 +90,7 @@ var toolCatalog = []ToolDescriptor{
 
 func NewHandler(cfg Config) (*Handler,error) {
 	if cfg.DB==nil||cfg.Iterations==nil||cfg.Actions==nil{return nil,errors.New("assistant requires database, iteration store and action store")}
-	return &Handler{db:cfg.DB,iterations:cfg.Iterations,prompts:cfg.Prompts,refs:cfg.References,assets:cfg.Assets,storage:cfg.Storage,events:cfg.Events,provenance:cfg.Provenance,actions:cfg.Actions,queue:cfg.Queue,provider:cfg.Provider},nil
+	return &Handler{db:cfg.DB,iterations:cfg.Iterations,prompts:cfg.Prompts,refs:cfg.References,assets:cfg.Assets,storage:cfg.Storage,events:cfg.Events,provenance:cfg.Provenance,actions:cfg.Actions,queue:cfg.Queue,provider:cfg.Provider,flowPlanner:NewFlowPlannerFromEnv()},nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -129,6 +136,10 @@ func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 	case "create_generation":result,explanation,confidence,uncertainty,e=h.createGeneration(r.Context(),p.UserID,pid,input,key)
 	case "compare_iterations":result,explanation,confidence,uncertainty,e=h.compareIterations(r.Context(),p.UserID,pid,input)
 	case "verify_provenance":result,explanation,confidence,uncertainty,e=h.verifyProvenance(r.Context(),p.UserID,pid)
+	case "inspect_comfyui_capabilities":result,explanation,confidence,uncertainty,e=h.inspectComfyUICapabilities(r.Context(),p.UserID,pid)
+	case "create_comfy_flow":result,explanation,confidence,uncertainty,e=h.createComfyFlow(r.Context(),p.UserID,pid,input)
+	case "validate_comfy_flow":result,explanation,confidence,uncertainty,e=h.validateComfyFlow(r.Context(),p.UserID,pid,input)
+	case "run_comfy_flow":result,explanation,confidence,uncertainty,e=h.runComfyFlow(r.Context(),p.UserID,pid,input,key)
 	case "fact_check":result,explanation,confidence,uncertainty,e=factCheck(input)
 	default:e=errors.New("unsupported tool")
 	}
@@ -141,6 +152,108 @@ func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 	if h.events!=nil{_,_=h.events.Append(r.Context(),p.UserID,pid,"assistant.tool.completed","assistant_action",action.ID,map[string]any{"tool":tool,"kind":kind})}
 	writeJSON(w,200,map[string]any{"action":action,"result":result,"explanation":explanation,"confidence":confidence,"uncertainty":uncertainty})
 }
+
+
+type comfyFlowRuntime interface {
+	CapabilitySnapshot(context.Context) (comfyui.RuntimeCapabilitySnapshot,error)
+	ValidateWorkflow(context.Context,map[string]any) (comfyui.WorkflowValidation,error)
+}
+
+func (h *Handler) comfyRuntime() (comfyFlowRuntime,error) {
+	if h.provider==nil{return nil,errors.New("ComfyUI provider is not configured")}
+	runtime,ok:=h.provider.(comfyFlowRuntime);if !ok{return nil,errors.New("active provider does not expose ComfyUI runtime capabilities")}
+	return runtime,nil
+}
+
+func (h *Handler) inspectComfyUICapabilities(ctx context.Context,userID,projectID uuid.UUID)(map[string]any,string,float64,string,error) {
+	if !h.ownedProject(ctx,userID,projectID){return nil,"",0,"",errors.New("project not found")}
+	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
+	snapshot,err:=runtime.CapabilitySnapshot(ctx);if err!=nil{return nil,"",0,"",err}
+	return map[string]any{"provider":"comfyui","runtime":compactRuntime("",snapshot),"retrieved_at":snapshot.RetrievedAt},"Live capabilities were read from the configured ComfyUI instance.",0.99,"Runtime data may change when models or custom nodes are installed.",nil
+}
+
+func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error) {
+	task,_:=in["task"].(string);task=strings.TrimSpace(task);if task==""{return nil,"",0,"",errors.New("task is required")}
+	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
+	snapshot,err:=runtime.CapabilitySnapshot(ctx);if err!=nil{return nil,"",0,"",err}
+	if reusable,ok,findErr:=h.findReusableRecipe(ctx,userID,projectID,task,runtime);findErr!=nil{return nil,"",0,"",findErr}else if ok{return reusable,"Reused an existing recipe after validating it against the live ComfyUI runtime.",0.95,"The match is heuristic; a new flow is generated when no compatible recipe matches.",nil}
+	if h.flowPlanner==nil||!h.flowPlanner.Enabled(){return nil,"",0,"","flow planner is not configured; set FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL"}
+	var validationErrors []string
+	for attempt:=0;attempt<3;attempt++{
+		plan,planErr:=h.flowPlanner.Plan(ctx,task,snapshot,validationErrors);if planErr!=nil{return nil,"",0,"",planErr}
+		validation,validationErr:=runtime.ValidateWorkflow(ctx,plan.Workflow);if validationErr!=nil{return nil,"",0,"",validationErr}
+		if validation.Compatible{
+			result:=flowPlanMap(plan)
+			result["source"]="ai_generated"
+			result["compatibility"]=map[string]any{"compatible":true,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}
+			result["runtime_retrieved_at"]=snapshot.RetrievedAt
+			return result,"AI generated a flow constrained to the live ComfyUI node and model catalog.",0.9,"The planner is retried with concrete runtime validation errors when needed.",nil
+		}
+		validationErrors=append([]string(nil),validation.Errors...)
+	}
+	return nil,"",0,"","AI could not produce a workflow compatible with the current ComfyUI runtime after three attempts"
+}
+
+func (h *Handler) validateComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error) {
+	workflow,_:=in["workflow"].(map[string]any);if len(workflow)==0{return nil,"",0,"",errors.New("workflow is required")}
+	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
+	validation,err:=runtime.ValidateWorkflow(ctx,workflow);if err!=nil{return nil,"",0,"",err}
+	return map[string]any{"compatible":validation.Compatible,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels},"Validation used the live ComfyUI node and model catalog.",0.99,"This is runtime catalog and structural validation; queueing remains a separate step.",nil
+}
+
+func (h *Handler) runComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any,key string)(map[string]any,string,float64,string,error) {
+	if h.queue==nil||h.provider==nil{return nil,"",0,"",errors.New("generation provider is not configured")}
+	workflow,_:=in["workflow"].(map[string]any);if len(workflow)==0{return nil,"",0,"",errors.New("workflow is required")}
+	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
+	validation,err:=runtime.ValidateWorkflow(ctx,workflow);if err!=nil{return nil,"",0,"",err}
+	if !validation.Compatible{return nil,"",0,"",errors.New(strings.Join(validation.Errors,"; "))}
+	prompt,_:=in["prompt"].(string);prompt=strings.TrimSpace(prompt);if prompt==""{return nil,"",0,"",errors.New("prompt is required")}
+	params:=assistantCloneMap(in["parameters"])
+	if params==nil{params=map[string]any{}}
+	params["validate_runtime"]=true
+	if inputAssets,ok:=in["input_assets"].(map[string]any);ok&&len(inputAssets)>0{
+		storageKeys:=map[string]any{}
+		for name,value:=range inputAssets{
+			assetID,ok:=value.(string);if !ok||strings.TrimSpace(assetID)==""{return nil,"",0,"",fmt.Errorf("input asset %s must be an asset UUID",name)}
+			id,parseErr:=uuid.Parse(assetID);if parseErr!=nil{return nil,"",0,"",fmt.Errorf("input asset %s has invalid UUID",name)}
+			if h.assets==nil{return nil,"",0,"",errors.New("asset store is not configured")}
+			asset,assetErr:=h.assets.GetOwned(ctx,userID,projectID,id);if assetErr!=nil{return nil,"",0,"",fmt.Errorf("input asset %s is not owned by the project: %w",name,assetErr)}
+			storageKeys[name]=asset.StorageKey
+		}
+		params["asset_storage_keys"]=storageKeys
+	}
+	references:=[]uuid.UUID{}
+	if raw,ok:=in["reference_ids"].([]any);ok{for _,value:=range raw{if text,ok:=value.(string);ok{if id,parseErr:=uuid.Parse(text);parseErr==nil{references=append(references,id)}}}}
+	req:=generation.Request{ProjectID:projectID,Prompt:prompt,NegativePrompt:assistantStringValue(in["negative_prompt"]),AspectRatio:assistantStringValue(in["aspect_ratio"]),Parameters:params,ReferenceIDs:references,IdempotencyKey:key,ResolvedWorkflow:workflow,ResolvedWorkflowHash:hashWorkflow(workflow),FinalParameters:params}
+	if seed,ok:=in["seed"].(float64);ok{n:=int64(seed);req.Seed=&n}
+	store,err:=generation.NewSQLStore(h.db);if err!=nil{return nil,"",0,"",err}
+	item,created,err:=store.Create(ctx,userID,req,h.provider.Name(),h.provider.Model());if err!=nil{return nil,"",0,"",err}
+	if created{task,taskErr:=generation.NewTask(userID,item.ID);if taskErr!=nil{return nil,"",0,"",taskErr};if _,queueErr:=h.queue.Enqueue(ctx,task,asynq.MaxRetry(5),asynq.Timeout(6*time.Minute),asynq.Retention(24*time.Hour));queueErr!=nil{_ = store.MarkFailed(ctx,userID,item.ID,"queue_failed",queueErr.Error(),time.Now());return nil,"",0,"",queueErr}}
+	return map[string]any{"generation":item,"created":created,"compatibility":map[string]any{"compatible":true,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}},"The flow was runtime-validated and queued through the existing generation worker.",0.99,"The generation record stores the resolved workflow and hash.",nil
+}
+
+func (h *Handler) findReusableRecipe(ctx context.Context,userID,projectID uuid.UUID,task string,runtime comfyFlowRuntime)(map[string]any,bool,error){
+	query := "SELECT r.id,r.name,r.description,r.model,r.model_version,r.current_version,rv.workflow,rv.default_parameters FROM recipes r JOIN recipe_versions rv ON rv.recipe_id=r.id AND rv.version=r.current_version WHERE r.provider='comfyui' AND ((r.user_id=$1 AND r.project_id=$2) OR (r.user_id=$1 AND r.scope='global') OR (r.scope='global' AND r.published=TRUE)) ORDER BY r.updated_at DESC LIMIT 50"
+	rows,err:=h.db.QueryContext(ctx,query,userID,projectID);if err!=nil{return nil,false,err};defer func(){_=rows.Close()}()
+	keywords:=taskKeywords(task)
+	for rows.Next(){
+		var id uuid.UUID;var name,description,model,modelVersion string;var version int;var wfRaw,paramRaw []byte
+		if err:=rows.Scan(&id,&name,&description,&model,&modelVersion,&version,&wfRaw,&paramRaw);err!=nil{return nil,false,err}
+		score:=stringScore(name+" "+description,keywords);if score<1{continue}
+		var wf map[string]any;if json.Unmarshal(wfRaw,&wf)!=nil||len(wf)==0{continue}
+		validation,err:=runtime.ValidateWorkflow(ctx,wf);if err!=nil{return nil,false,err};if !validation.Compatible{continue}
+		var params map[string]any;_=json.Unmarshal(paramRaw,&params);if params==nil{params=map[string]any{}}
+		return map[string]any{"name":name,"description":description,"prompt":task,"negative_prompt":"","inputs":[]any{},"parameters":params,"selected_model":map[string]string{"filename":model,"version":modelVersion},"workflow":wf,"reasoning":"Reused an existing recipe after validating it against the current ComfyUI runtime.","source":"existing_recipe","recipe_id":id,"recipe_version":version,"compatibility":map[string]any{"compatible":true,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}},true,nil
+	}
+	return nil,false,rows.Err()
+}
+
+func hashWorkflow(workflow map[string]any) string {data,_:=json.Marshal(workflow);sum:=sha256.Sum256(data);return fmt.Sprintf("%x",sum[:])}
+
+func assistantCloneMap(input any) map[string]any {
+	source,ok:=input.(map[string]any);if !ok{return nil};out:=map[string]any{};for key,value:=range source{out[key]=value};return out
+}
+func assistantStringValue(input any) string {value,_:=input.(string);return strings.TrimSpace(value)}
 
 func (h *Handler) decide(w http.ResponseWriter,r *http.Request){
 	p,ok:=auth.PrincipalFromContext(r.Context());if !ok{errJSON(w,401,"unauthorized","authentication required");return}
