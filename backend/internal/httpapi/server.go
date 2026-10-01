@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
 	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
@@ -24,29 +22,37 @@ type Server struct {
 }
 
 func NewServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter) *Server {
-	return newServer(logger, origins, limiter, nil, nil, nil, nil)
+	return newServer(logger, origins, limiter, nil, nil, nil, nil, "")
 }
 
 func NewServerWithProjects(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler) *Server {
-	return newServer(logger, origins, limiter, projectHandler, nil, nil, nil)
+	return newServer(logger, origins, limiter, projectHandler, nil, nil, nil, "")
 }
 
 func NewServerWithProjectsAndIterations(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler) *Server {
-	return newServer(logger, origins, limiter, projectHandler, iterationHandler, nil, nil)
+	return newServer(logger, origins, limiter, projectHandler, iterationHandler, nil, nil, "")
 }
 
 func NewServerWithProjectsIterationsAndGeneration(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler, generationHandler *generation.Handler) *Server {
-	return newServer(logger, origins, limiter, projectHandler, iterationHandler, generationHandler, nil)
+	return newServer(logger, origins, limiter, projectHandler, iterationHandler, generationHandler, nil, "")
 }
 
-func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimiter, projectHandler *projects.Handler, iterationHandler *iterations.Handler, generationHandler *generation.Handler, metrics *observability.APIMetrics, registrars ...Registrar) *Server {
+func newServer(
+	logger *slog.Logger,
+	origins []string,
+	limiter *security.RateLimiter,
+	projectHandler *projects.Handler,
+	iterationHandler *iterations.Handler,
+	generationHandler *generation.Handler,
+	metrics *observability.APIMetrics,
+	staticDir string,
+	registrars ...Registrar,
+) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
 	mux.HandleFunc("GET /api/v1/health", apiHealthHandler)
-	if metrics != nil {
-		mux.Handle("GET /metrics", promhttp.Handler())
-	}
+
 	if projectHandler != nil {
 		projectHandler.Register(mux)
 	}
@@ -60,6 +66,9 @@ func newServer(logger *slog.Logger, origins []string, limiter *security.RateLimi
 		if registrar != nil {
 			registrar.Register(mux)
 		}
+	}
+	if staticDir != "" {
+		mux.Handle("/", newStaticHandler(staticDir))
 	}
 
 	var handler http.Handler = mux
@@ -109,9 +118,13 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func NewServerWithStudio(logger *slog.Logger, origins []string, limiter *security.RateLimiter, registrars ...Registrar) *Server {
-	return newServer(logger, origins, limiter, nil, nil, nil, nil, registrars...)
+	return newServer(logger, origins, limiter, nil, nil, nil, nil, "", registrars...)
 }
 
 func NewServerWithStudioAndObservability(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics observability.APIMetrics, registrars ...Registrar) *Server {
-	return newServer(logger, origins, limiter, nil, nil, nil, &metrics, registrars...)
+	return newServer(logger, origins, limiter, nil, nil, nil, &metrics, "", registrars...)
+}
+
+func NewServerWithStudioAndObservabilityAndStatic(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics observability.APIMetrics, staticDir string, registrars ...Registrar) *Server {
+	return newServer(logger, origins, limiter, nil, nil, nil, &metrics, staticDir, registrars...)
 }
