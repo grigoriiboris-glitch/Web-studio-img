@@ -9,6 +9,12 @@ export function canSubmitReject(reasons: string[], skipReason: boolean): boolean
   return skipReason || reasons.length > 0
 }
 
-export function buildAvoidConstraints(reasons: Array<{ reason: string; count: number }>): string[] {
+export type RejectAnalyticsItem = { reason: string; count: number; percent: number }
+
+export function buildAvoidConstraints(reasons: RejectAnalyticsItem[]): string[] {
   return reasons.slice(0, 5).map(item => 'avoid ' + item.reason)
+}
+
+export function buildRejectConstraints(reasons: RejectAnalyticsItem[]) {
+  return reasons.slice(0, 5).map(({ reason, count, percent }) => ({ reason, count, percent }))
 }
