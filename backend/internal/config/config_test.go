@@ -55,3 +55,14 @@ func TestLoadS3PathStyle(t *testing.T) {
 		t.Fatal("S3UsePathStyle = false, want true")
 	}
 }
+
+func TestProductionRequiresWebStaticDir(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_PORT", "8080")
+	t.Setenv("JWT_SECRET", "12345678901234567890123456789012")
+	t.Setenv("CORS_ORIGINS", "http://localhost:8080")
+	t.Setenv("WEB_STATIC_DIR", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected WEB_STATIC_DIR requirement")
+	}
+}
