@@ -49,9 +49,16 @@ func(h *UploadHandler) localStorageAuthorized(w http.ResponseWriter,r *http.Requ
 func(h *UploadHandler) localStoragePut(w http.ResponseWriter,r *http.Request){
 	key,ok:=h.localStorageAuthorized(w,r,http.MethodPut);if !ok{return}
 	defer func(){_ = r.Body.Close()}()
+	if r.ContentLength > MaxAssetSize {
+		uploadErr(w,http.StatusRequestEntityTooLarge,"file_too_large","storage object exceeds size limit");return
+	}
 	body:=http.MaxBytesReader(w,r.Body,MaxAssetSize)
 	if err:=h.storage.Put(r.Context(),key,body,r.ContentLength,storage.PutOptions{ContentType:r.Header.Get("Content-Type")});err!=nil{
-		uploadErr(w,http.StatusBadRequest,"storage_write_failed","could not store local object");return
+		var maxErr *http.MaxBytesError
+		if errors.As(err,&maxErr) {
+			uploadErr(w,http.StatusRequestEntityTooLarge,"file_too_large","storage object exceeds size limit");return
+		}
+		uploadErr(w,http.StatusInternalServerError,"storage_write_failed","could not store local object");return
 	}
 	w.WriteHeader(http.StatusCreated)
 }
