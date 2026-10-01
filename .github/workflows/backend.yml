@@ -180,5 +180,12 @@ jobs:
         run: docker build -f backend/Dockerfile backend
       - name: Build frontend image
         run: docker build -f frontend/Dockerfile frontend
-      - name: Validate Compose
-        run: docker compose config
+      - name: Build production image
+        run: docker build -f Dockerfile.prod .
+      - name: Validate development Compose
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.dev.yml config
+      - name: Validate production Compose
+        run: |
+          docker compose -f docker-compose.prod.yml config
