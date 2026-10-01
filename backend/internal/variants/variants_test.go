@@ -64,3 +64,27 @@ func TestVariantDecisionStateIncludesRejectMetadata(t *testing.T) {
     t.Fatalf("unexpected severity: %#v", state["reject_severity"])
   }
 }
+
+
+func TestValidateSelectionResult(t *testing.T) {
+  tests := []struct {
+    name string
+    selected, requested, branches int
+    parentValid, branchValid bool
+    wantErr bool
+  }{
+    {name: "single branch selection", selected: 2, requested: 2, branches: 1, parentValid: true, branchValid: true},
+    {name: "rejects non-kept variant", selected: 1, requested: 2, branches: 1, parentValid: true, branchValid: true, wantErr: true},
+    {name: "rejects mixed branches", selected: 2, requested: 2, branches: 2, parentValid: true, branchValid: true, wantErr: true},
+    {name: "rejects missing parent", selected: 2, requested: 2, branches: 1, parentValid: false, branchValid: true, wantErr: true},
+    {name: "rejects missing branch", selected: 2, requested: 2, branches: 1, parentValid: true, branchValid: false, wantErr: true},
+  }
+  for _, tt := range tests {
+    t.Run(tt.name, func(t *testing.T) {
+      err := validateSelectionResult(tt.selected, tt.requested, tt.branches, tt.parentValid, tt.branchValid)
+      if (err != nil) != tt.wantErr {
+        t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+      }
+    })
+  }
+}
