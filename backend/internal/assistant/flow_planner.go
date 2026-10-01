@@ -119,8 +119,15 @@ func (p *FlowPlanner) Plan(ctx context.Context, task string, snapshot comfyui.Ru
 }
 
 func decodeFlowPlan(content string) (FlowPlan,error) {
+	content=strings.TrimSpace(content)
+	if strings.HasPrefix(content,"") && strings.HasPrefix(content,"```") {
+		content=strings.TrimPrefix(content,"```json")
+		content=strings.TrimPrefix(content,"```JSON")
+		content=strings.TrimPrefix(content,"```")
+		content=strings.TrimSuffix(strings.TrimSpace(content),"```")
+	}
 	var raw map[string]any
-	if err:=json.Unmarshal([]byte(strings.TrimSpace(content)),&raw);err!=nil {
+	if err:=json.Unmarshal([]byte(content),&raw);err!=nil {
 		return FlowPlan{},fmt.Errorf("planner returned invalid JSON: %w",err)
 	}
 	name,_:=raw["name"].(string)
