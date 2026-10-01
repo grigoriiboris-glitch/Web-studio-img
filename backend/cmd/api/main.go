@@ -343,8 +343,8 @@ func main() {
 		}
 	}
 
-	api := httpapi.NewServerWithStudioAndObservability(
-		logger, cfg.CORSOrigins, limiter, metrics,
+	api := httpapi.NewServerWithStudioAndObservabilityAndStatic(
+		logger, cfg.CORSOrigins, limiter, metrics, cfg.WebStaticDir,
 		projectHandler, iterationHandler, generationHandler, branchHandler,
 		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, variantHandler, recipeHandler, assetLibraryHandler,
 	)
