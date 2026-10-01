@@ -224,7 +224,13 @@ func main() {
 			os.Exit(1)
 		}
 		var objectStorage storage.StorageProvider
-		if cfg.S3Bucket != "" && cfg.S3AccessKey != "" && cfg.S3SecretKey != "" {
+		switch cfg.StorageProvider {
+		case "local":
+			objectStorage, assetErr = storage.NewLocalStorage(storage.LocalConfig{
+				RootDir: cfg.StorageLocalDir,
+				SigningSecret: cfg.StorageSigningSecret,
+			})
+		case "s3":
 			objectStorage, assetErr = storage.NewS3Storage(context.Background(), storage.S3Config{
 				Endpoint: cfg.S3Endpoint,
 				Region: cfg.S3Region,
@@ -233,10 +239,12 @@ func main() {
 				SecretKey: cfg.S3SecretKey,
 				UsePathStyle: cfg.S3UsePathStyle,
 			})
-			if assetErr != nil {
-				logger.Error("object storage initialization failed", "error", assetErr)
-				os.Exit(1)
-			}
+		default:
+			assetErr = errors.New("unsupported storage provider")
+		}
+		if assetErr != nil {
+			logger.Error("object storage initialization failed", "provider", cfg.StorageProvider, "error", assetErr)
+			os.Exit(1)
 		}
 		visualDNAHandler, err = visualdna.NewHandler(projectDB, objectStorage)
 		if err != nil {
