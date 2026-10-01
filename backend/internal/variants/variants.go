@@ -281,7 +281,7 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   if err:=decode(r,&in);err!=nil||len(in.VariantIDs)<1||len(in.VariantIDs)>50{writeError(w,400,"invalid_selection","variant_ids must contain 1..50 values");return}
   seen:=map[uuid.UUID]bool{};for _,id:=range in.VariantIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_selection","variant_ids must be unique valid UUIDs");return};seen[id]=true}
   tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return};defer func(){_=tx.Rollback()}()
-  var parent sql.NullString;selectedJSON:=[]byte{}
+  var parent sql.NullString;var branchID sql.NullString;selectedJSON:=[]byte{}
   placeholders:=make([]string,0,len(in.VariantIDs));args:=[]any{projectID,userID,setID}
   for i,id:=range in.VariantIDs{placeholders=append(placeholders,"$"+strconv.Itoa(i+4));args=append(args,id)}
   query:=`SELECT MIN(g.iteration_id::text), MIN(i.branch_id::text), COALESCE(json_agg(v.id::text ORDER BY v.ordinal),'[]'::json) FROM variants v JOIN generations g ON g.id=v.generation_id JOIN iterations i ON i.id=g.iteration_id WHERE v.project_id=$1 AND v.user_id=$2 AND v.variant_set_id=$3 AND v.id IN (`+strings.Join(placeholders,",")+`) AND v.decision IN ('kept','selected')`
