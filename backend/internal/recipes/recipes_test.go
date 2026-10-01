@@ -1,6 +1,7 @@
 package recipes
 
 import (
+  "net/http"
   "testing"
 )
 
@@ -70,4 +71,10 @@ func TestSetPathAndWorkflowHashAreDeterministic(t *testing.T) {
   if len(first) != 64 {
     t.Fatalf("expected sha256 hex length, got %d", len(first))
   }
+}
+
+
+func TestRegisterRoutesHaveNoConflicts(t *testing.T) {
+	mux := http.NewServeMux()
+	NewHandler(nil).Register(mux)
 }
