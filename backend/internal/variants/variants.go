@@ -297,7 +297,7 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   if err:=decode(r,&in);err!=nil||len(in.VariantIDs)<1||len(in.VariantIDs)>50{writeError(w,400,"invalid_selection","variant_ids must contain 1..50 values");return}
   if err:=iterations.ValidateDecisions(in.Decisions);err!=nil{writeError(w,400,"invalid_selection","invalid iteration decisions");return}
   seen:=map[uuid.UUID]bool{};for _,id:=range in.VariantIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_selection","variant_ids must be unique valid UUIDs");return};seen[id]=true}
-  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return};defer func(){_=tx.Rollback()}
+  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return};defer func(){_=tx.Rollback()}()
   var parent sql.NullString;var branchID sql.NullString;var branchCount int;selectedJSON:=[]byte{}
   placeholders:=make([]string,0,len(in.VariantIDs));args:=[]any{projectID,userID,setID}
   for i,id:=range in.VariantIDs{placeholders=append(placeholders,"$"+strconv.Itoa(i+4));args=append(args,id)}
