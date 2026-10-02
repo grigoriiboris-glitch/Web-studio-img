@@ -221,7 +221,7 @@ func (h *Handler) validateComfyFlow(ctx context.Context,userID,projectID uuid.UU
 	validation,err:=runtime.ValidateWorkflow(ctx,workflow);if err!=nil{return nil,"",0,"",err}
 	semanticErrors:=[]string{}
 	if rawSteps,ok:=in["flow_steps"].([]any);ok&&len(rawSteps)>0 {
-		if rawArtist,ok:=in["artist_steps"].([]any);ok { semanticErrors=validateArtistFlowContract(rawSteps,rawArtist,workflow) } else { semanticErrors=append(semanticErrors,"compiled workflow has no Artist Flow evidence") }
+		if rawArtist,ok:=in["artist_steps"].([]any);ok { semanticErrors=validateArtistFlowContract(normalizeFlowSteps(rawSteps),mapSlice(rawArtist),workflow) } else { semanticErrors=append(semanticErrors,"compiled workflow has no Artist Flow evidence") }
 	}
 	allErrors:=append(append([]string{},validation.Errors...),semanticErrors...)
 	return map[string]any{"compatible":validation.Compatible&&len(semanticErrors)==0,"errors":allErrors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels,"artist_flow_errors":semanticErrors},"Validation checks both the live ComfyUI runtime and the Artist Flow semantic contract.",0.99,"Technical and artist-flow validation are reported together; queueing remains a separate step.",nil

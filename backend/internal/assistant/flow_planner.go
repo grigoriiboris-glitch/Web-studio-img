@@ -150,12 +150,12 @@ func decodeFlowPlan(content string) (FlowPlan,error) {
 			inputs=append(inputs,FlowInput{ID:strings.TrimSpace(id),Type:strings.TrimSpace(kind),Label:strings.TrimSpace(label),Required:required})
 		}
 	}
-	artistSteps,_:=raw["artist_steps"].([]any)
+	artistSteps:=mapSlice(raw["artist_steps"])
 	getString:=func(key string) string { value,_:=raw[key].(string);return strings.TrimSpace(value) }
 	return FlowPlan{Name:strings.TrimSpace(name),Description:getString("description"),Prompt:getString("prompt"),NegativePrompt:getString("negative_prompt"),Workflow:workflow,Parameters:parameters,Inputs:inputs,SelectedModel:selected,Reasoning:getString("reasoning"),ArtistSteps:artistSteps},nil
 }
 
-func compactRuntime(task string,snapshot comfyui.RuntimeCapabilitySnapshot) map[string]any {
+func mapSlice(raw any) []map[string]any {\n\titems, _ := raw.([]any)\n\tout := make([]map[string]any, 0, len(items))\n\tfor _, item := range items {\n\t\tif object, ok := item.(map[string]any); ok { out = append(out, object) }\n\t}\n\treturn out\n}\n\nfunc compactRuntime(task string,snapshot comfyui.RuntimeCapabilitySnapshot) map[string]any {
 	keywords:=taskKeywords(task)
 	nodeNames:=make([]string,0,len(snapshot.Nodes))
 	for name:=range snapshot.Nodes { nodeNames=append(nodeNames,name) }
