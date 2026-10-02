@@ -1,7 +1,6 @@
 package variants
 
 import (
-  "context"
   "database/sql"
   "encoding/json"
   "errors"
