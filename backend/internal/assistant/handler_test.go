@@ -181,3 +181,36 @@ func TestFlowFingerprintIsStableAndSensitiveToFlowState(t *testing.T) {
 		t.Fatal("changing enabled state must change the fingerprint")
 	}
 }
+
+
+func TestColorReferenceContractRequiresReferenceInputAndWorkflowEvidence(t *testing.T) {
+	steps := []map[string]any{{"id":"sketch","enabled":true,"order":0},{"id":"reference","enabled":true,"order":1},{"id":"final","enabled":true,"order":2}}
+	inputs := []FlowInput{{ID:"sketch",Type:"image",Label:"Sketch",Required:true}}
+	workflow := map[string]any{"1":map[string]any{"inputs":map[string]any{"image":"{{asset:sketch}}"}}}
+	errors := colorReferenceContractErrors(steps, inputs, workflow)
+	if len(errors) != 2 { t.Fatalf("expected two color-reference contract errors, got %#v", errors) }
+}
+
+func TestColorReferenceContractAcceptsRequiredInputAndEvidence(t *testing.T) {
+	steps := []map[string]any{{"id":"sketch","enabled":true,"order":0},{"id":"reference","enabled":true,"order":1},{"id":"final","enabled":true,"order":2}}
+	inputs := []FlowInput{
+		{ID:"sketch",Type:"image",Label:"Sketch",Required:true},
+		{ID:"color_reference",Type:"image",Label:"Color Reference",Required:true},
+	}
+	workflow := map[string]any{
+		"1":map[string]any{"inputs":map[string]any{"image":"{{asset:sketch}}"}},
+		"2":map[string]any{"inputs":map[string]any{"image":"{{asset:color_reference}}"}},
+	}
+	if errors := colorReferenceContractErrors(steps, inputs, workflow); len(errors) != 0 {
+		t.Fatalf("unexpected color-reference contract errors: %#v", errors)
+	}
+}
+
+func TestColorReferenceContractDoesNotRequireReferenceWhenDisabled(t *testing.T) {
+	steps := []map[string]any{{"id":"sketch","enabled":true,"order":0},{"id":"reference","enabled":false,"order":1},{"id":"final","enabled":true,"order":2}}
+	inputs := []FlowInput{{ID:"sketch",Type:"image",Label:"Sketch",Required:true}}
+	workflow := map[string]any{"1":map[string]any{"inputs":map[string]any{"image":"{{asset:sketch}}"}}}
+	if errors := colorReferenceContractErrors(steps, inputs, workflow); len(errors) != 0 {
+		t.Fatalf("disabled reference step must not require color reference: %#v", errors)
+	}
+}
