@@ -69,11 +69,10 @@ function save() {
   localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
   const batch = activeBatch.value
   if (!batch) return
-  const version = batch.version
-  if (!version) return
+  if (!batch.version) return
   saveQueue = saveQueue.then(async () => {
     const remote = await cardBatchApi.update(routeProjectId.value, batch.id, {
-      version,
+      version: batch.version,
       source_file: batch.sourceFile,
       sheet: batch.sheet,
       mapping: {
