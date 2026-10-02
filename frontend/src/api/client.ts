@@ -1143,10 +1143,12 @@ export const assistantApi = {
     tool: string,
     input: Record<string, unknown> = {},
     idempotencyKey?: string,
+    signal?: AbortSignal,
   ) => apiRequest<AssistantToolResponse<T>>('/projects/' + projectId + '/assistant/tools/' + encodeURIComponent(tool), {
     method: 'POST',
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
     body: JSON.stringify(input),
+    signal,
   }),
   decide: (
     projectId: string,
