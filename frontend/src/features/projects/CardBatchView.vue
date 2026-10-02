@@ -15,24 +15,20 @@ import { parseSpreadsheet, type SpreadsheetRow } from './cardBatchSpreadsheet'
 type CardStatus = 'draft' | 'pending' | 'queued' | 'running' | 'succeeded' | 'needs_revision' | 'failed' | 'finalized'
 type RejectReason = 'wrong_composition' | 'wrong_style' | 'wrong_subject' | 'wrong_color' | 'wrong_detail' | 'technical' | 'other'
 
-type CardTypeKey = 'role' | 'item' | 'world' | 'event' | 'faction' | 'resource' | 'custom'
-
-interface CardTypeDefinition {
-  key: CardTypeKey
-  name: string
-  description: string
-  fields: string[]
-}
-
-const CARD_TYPES: CardTypeDefinition[] = [
-  { key: 'role', name: 'Role / Character', description: 'Персонажи, роли, классы и способности.', fields: ['name', 'description', 'prompt'] },
-  { key: 'item', name: 'Item / Equipment', description: 'Предметы, оружие, экипировка и артефакты.', fields: ['name', 'rarity', 'description', 'prompt'] },
-  { key: 'world', name: 'World / Location', description: 'Локации, места и окружение.', fields: ['name', 'region', 'description', 'prompt'] },
-  { key: 'event', name: 'Event', description: 'События, происшествия и условия раунда.', fields: ['name', 'description', 'effect', 'prompt'] },
-  { key: 'faction', name: 'Faction', description: 'Фракции, группы и стороны.', fields: ['name', 'description', 'ability', 'prompt'] },
-  { key: 'resource', name: 'Resource', description: 'Ресурсы, жетоны и игровые материалы.', fields: ['name', 'rarity', 'description', 'prompt'] },
-  { key: 'custom', name: 'Custom', description: 'Произвольный тип карточек.', fields: ['name', 'description', 'prompt'] },
-]
+import {
+  CARD_TEMPLATES,
+  CARD_TYPES,
+  REJECT_REASONS_BY_TYPE,
+  assembleCardPrompt,
+  cardTypeDefinition,
+  cardTypeSchemaVersion,
+  fieldsFromRow,
+  resolveDefaultRecipeId,
+  suggestColumnMapping,
+  templateForType,
+  validateCardData,
+  type CardTypeKey,
+} from './cardBatchTypes'
 
 interface CardItem {
   id: string
@@ -40,6 +36,8 @@ interface CardItem {
   prompt: string
   typeOverride?: CardTypeKey
   fields?: Record<string, string>
+  templateId?: string
+  cardTypeVersion?: number
   sourceRow: number
   status: CardStatus
   generationIds: string[]
@@ -63,6 +61,8 @@ type BatchState = Record<string, unknown> & {
   targetWidth?: number
   targetHeight?: number
   cardType?: CardTypeKey
+  cardTypeVersion?: number
+  templateId?: string
 }
 
 interface Batch {
@@ -118,6 +118,7 @@ const importedFileName = ref('')
 const rejectedOpen = ref(true)
 const batchTypeFilter = ref<CardTypeKey | 'all'>('all')
 const newBatchType = ref<CardTypeKey>('custom')
+const columnMapping = ref<Record<string, string>>({})
 let saveQueue: Promise<void> = Promise.resolve()
 
 const activeBatch = computed(() => batches.value.find(item => item.id === activeBatchId.value))
@@ -129,6 +130,8 @@ const selectedCount = computed(() => activeCards.value.filter(card => card.selec
 const finalizedCount = computed(() => activeCards.value.filter(card => card.status === 'finalized').length)
 const pendingCards = computed(() => activeCards.value.filter(card => ['pending', 'draft', 'failed', 'needs_revision'].includes(card.status)))
 const rejectedCards = computed(() => activeCards.value.filter(card => card.rejectReason))
+const suggestedMapping = computed(() => mappingFor(newBatchType.value))
+const requiredUnmappedFields = computed(() => typeSchema(newBatchType.value).fields.filter(field => field.required && !columnMapping.value[field.key]).map(field => field.label))
 
 const importDiff = computed<ImportDiff | null>(() => {
   const batch = activeBatch.value
@@ -156,32 +159,32 @@ function now() { return new Date().toISOString() }
 function uid(prefix: string) { return prefix + '_' + crypto.randomUUID() }
 function parsedReferenceIds(text: string) { return text.split(/[\s,]+/).map(x => x.trim()).filter(Boolean) }
 
-function cardTypeDefinition(key?: CardTypeKey) {
-  return CARD_TYPES.find(type => type.key === key) || CARD_TYPES.find(type => type.key === 'custom')!
-}
-
-function fieldsFromRow(row: SpreadsheetRow): Record<string, string> {
-  const result: Record<string, string> = {}
-  const type = cardTypeDefinition(newBatchType.value)
-  for (const field of type.fields) {
-    if (field === 'prompt' || field === 'name') continue
-    const column = Object.keys(row).find(key => key.trim().toLowerCase() === field.toLowerCase())
-    const value = column ? String(row[column] ?? '').trim() : ''
-    if (value) result[field] = value
-  }
-  return result
-}
-
 function fieldsFromRowForCard(row: SpreadsheetRow, card: CardItem): Record<string, string> {
-  const result: Record<string, string> = {}
-  const type = cardTypeDefinition(resolvedCardType(card))
-  for (const field of type.fields) {
-    if (field === 'prompt' || field === 'name') continue
-    const column = Object.keys(row).find(key => key.trim().toLowerCase() === field.toLowerCase())
-    const value = column ? String(row[column] ?? '').trim() : ''
-    if (value) result[field] = value
-  }
-  return result
+  return fieldsFromRow(row, resolvedCardType(card))
+}
+
+function typeSchema(type: CardTypeKey) {
+  return cardTypeDefinition(type)
+}
+
+function mappingFor(type: CardTypeKey) {
+  return suggestColumnMapping(columns.value, type)
+}
+
+function cardValidation(card: CardItem) {
+  return validateCardData(card.cardNumber, card.prompt, card.fields, resolvedCardType(card))
+}
+
+function resolvedTemplate(card: CardItem) {
+  return templateForType(resolvedCardType(card), card.templateId)
+}
+
+function typeRecipe(type: CardTypeKey) {
+  return resolveDefaultRecipeId(recipes.value, type)
+}
+
+function effectiveRecipe(card: CardItem) {
+  return card.recipeId || activeBatch.value?.recipeId || typeRecipe(resolvedCardType(card)) || recipeId.value || undefined
 }
 
 function resolvedCardType(card: CardItem): CardTypeKey {
@@ -196,6 +199,8 @@ function batchState(batch: Batch): BatchState {
     targetWidth: batch.targetWidth,
     targetHeight: batch.targetHeight,
     cardType: batch.cardType || 'custom',
+    cardTypeVersion: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
+    templateId: batch.templateId || templateForType(batch.cardType || 'custom').id,
   }
 }
 
@@ -289,10 +294,12 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
   card.error = undefined
   persistCard(card)
   const version = card.generationIds.length + 1
-  const selectedRecipe = card.recipeId || activeBatch.value?.recipeId || recipeId.value || undefined
+  const selectedRecipe = effectiveRecipe(card)
   const refs = card.referenceIds?.length ? card.referenceIds : activeBatch.value?.referenceIds
+  const resolvedType = resolvedCardType(card)
+  const assembledPrompt = assembleCardPrompt(prompt, resolvedType, card.fields)
   const generation = await generationsApi.create(routeProjectId.value, {
-    prompt,
+    prompt: assembledPrompt,
     recipe_id: selectedRecipe,
     reference_ids: refs,
     parameters: {
@@ -303,8 +310,12 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       prompt_revision: card.promptRevision,
       asset_filename: filenameFor(card, 'pending', false, version),
       batch_name: activeBatch.value?.name,
-      card_type: resolvedCardType(card),
-      card_type_fields: cardTypeDefinition(resolvedCardType(card)).fields,
+      card_type: resolvedType,
+      card_type_schema_version: cardTypeSchemaVersion(resolvedType),
+      card_type_fields: cardTypeDefinition(resolvedType).fields.map(field => field.key),
+      card_template_id: resolvedTemplate(card).id,
+      card_template_name: resolvedTemplate(card).name,
+      original_prompt: prompt,
       version,
       target_width: activeBatch.value?.targetWidth,
       target_height: activeBatch.value?.targetHeight,
@@ -312,6 +323,7 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       rejection_reason: card.rejectReason,
       rejection_comment: card.rejectComment,
       card_fields: card.fields || {},
+      assembled_prompt: assembledPrompt,
     },
   }, 'card-batch-' + activeBatch.value?.id + '-' + card.id + '-v' + version)
   card.generationIds.push(generation.id)
@@ -475,7 +487,9 @@ function cardFromRow(row: SpreadsheetRow, sourceRow: number): CardItem {
     id: uid('card'),
     cardNumber: String(row[cardColumn.value] ?? '').trim(),
     prompt: String(row[promptColumn.value] ?? '').trim(),
-    fields: fieldsFromRow(row),
+    fields: fieldsFromRow(row, newBatchType.value),
+    templateId: templateForType(newBatchType.value).id,
+    cardTypeVersion: cardTypeDefinition(newBatchType.value).version,
     sourceRow,
     status: 'pending',
     generationIds: [],
@@ -495,6 +509,8 @@ async function createBatch() {
     const card = cardFromRow(rows.value[i], i + 2)
     if (!card.cardNumber && !card.prompt) continue
     if (!card.cardNumber || !card.prompt) throw new Error('Row ' + (i + 2) + ' must contain both card number and prompt')
+    const validation = cardValidation(card)
+    if (validation.length) throw new Error('Row ' + (i + 2) + ': ' + validation.map(item => item.message).join(' '))
     if (seen.has(card.cardNumber)) throw new Error('Duplicate card number: ' + card.cardNumber)
     seen.add(card.cardNumber)
     cards.push(card)
@@ -512,6 +528,8 @@ async function createBatch() {
     targetWidth: targetWidth.value,
     targetHeight: targetHeight.value,
     cardType: newBatchType.value,
+    cardTypeVersion: cardTypeDefinition(newBatchType.value).version,
+    templateId: templateForType(newBatchType.value).id,
   }
   try {
     const remote = await cardBatchApi.create(routeProjectId.value, {
@@ -570,6 +588,8 @@ function selectBatch(id: string) {
   referenceIdsText.value = (batch.referenceIds || []).join(', ')
   targetWidth.value = batch.targetWidth
   targetHeight.value = batch.targetHeight
+  columnMapping.value = batch ? { ...columnMapping.value } : {}
+  newBatchType.value = batch.cardType || 'custom'
 }
 
 function restoreArchived(card: CardItem) {
@@ -584,18 +604,32 @@ function updateBatchSettings() {
   activeBatch.value.referenceIds = parsedReferenceIds(referenceIdsText.value)
   activeBatch.value.targetWidth = targetWidth.value
   activeBatch.value.targetHeight = targetHeight.value
+  activeBatch.value.cardTypeVersion = cardTypeDefinition(activeBatch.value.cardType || 'custom').version
+  activeBatch.value.templateId = activeBatch.value.templateId || templateForType(activeBatch.value.cardType || 'custom').id
   save()
 }
 
 function setBatchType(value: CardTypeKey) {
   if (!activeBatch.value) return
   activeBatch.value.cardType = value
+  activeBatch.value.cardTypeVersion = cardTypeDefinition(value).version
+  activeBatch.value.templateId = templateForType(value).id
   newBatchType.value = value
+  for (const card of activeBatch.value.cards) {
+    if (!card.typeOverride) {
+      card.cardTypeVersion = cardTypeDefinition(value).version
+      card.templateId = templateForType(value).id
+      card.fields = card.fields || {}
+    }
+  }
   save()
 }
 
 function setCardType(card: CardItem, value: CardTypeKey) {
   card.typeOverride = value === (activeBatch.value?.cardType || 'custom') ? undefined : value
+  const type = resolvedCardType(card)
+  card.cardTypeVersion = cardTypeDefinition(type).version
+  card.templateId = templateForType(type).id
   persistCard(card)
 }
 
@@ -622,7 +656,7 @@ function manifest() {
   const batch = activeBatch.value
   if (!batch) return null
   return {
-    schema: 'web-studio/card-batch-manifest/v1',
+    schema: 'web-studio/card-batch-manifest/v2',
     batchId: batch.id,
     projectId: routeProjectId.value,
     name: batch.name,
@@ -642,6 +676,9 @@ function manifest() {
       sourceRow: c.sourceRow,
       rejectReason: c.rejectReason,
       cardFields: c.fields || {},
+      cardType: resolvedCardType(c),
+      cardTypeSchemaVersion: cardTypeSchemaVersion(resolvedCardType(c)),
+      templateId: resolvedTemplate(c).id,
     })),
   }
 }
@@ -694,6 +731,8 @@ onMounted(async () => {
         targetWidth: state.targetWidth,
         targetHeight: state.targetHeight,
         cardType: state.cardType || 'custom',
+        cardTypeVersion: state.cardTypeVersion || cardTypeDefinition(state.cardType || 'custom').version,
+        templateId: state.templateId || templateForType(state.cardType || 'custom').id,
       }
     })
     if (!batches.value.length) {
@@ -720,6 +759,7 @@ onMounted(async () => {
       referenceIdsText.value = (first.referenceIds || []).join(', ')
       targetWidth.value = first.targetWidth
       targetHeight.value = first.targetHeight
+      columnMapping.value = first ? { ...columnMapping.value } : {}
       if (!first.cardType) first.cardType = 'custom'
       newBatchType.value = first.cardType
     }
