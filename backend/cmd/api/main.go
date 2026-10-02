@@ -331,6 +331,7 @@ func main() {
 			privacyPolicy, privacyErr := privacy.NewPolicy(projectDB)
 			if privacyErr != nil { logger.Error("privacy policy initialization failed", "error", privacyErr); os.Exit(1) }
 			generationHandler.SetPrivacyPolicy(privacyPolicy)
+			variantHandler.SetGenerationCreator(generationHandler)
 			if err != nil {
 				logger.Error("generation handler initialization failed", "error", err)
 				os.Exit(1)
