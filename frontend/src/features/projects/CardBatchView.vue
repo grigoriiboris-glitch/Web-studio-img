@@ -290,9 +290,7 @@ async function regenerate(card: CardItem, fromReject = false) {
   error.value = ''
   try {
     const prompt = fromReject && card.nextIterationReason
-      ? card.prompt + '
-
-Revision requirement: ' + card.nextIterationReason
+      ? card.prompt + '\n\nRevision requirement: ' + card.nextIterationReason
       : card.prompt
     await generateCard(card, prompt)
   } catch (e) {
