@@ -403,9 +403,9 @@ function editPrompt(card: CardItem) {
 }
 
 function rejectCard(card: CardItem) {
-  const reason = window.prompt('Reject reason: wrong_composition | wrong_style | wrong_subject | wrong_color | wrong_detail | technical | other', card.rejectReason || '')
+  const allowed = REJECT_REASONS_BY_TYPE[resolvedCardType(card)] as RejectReason[]
+  const reason = window.prompt('Reject reason for ' + cardTypeDefinition(resolvedCardType(card)).name + ': ' + allowed.join(' | '), card.rejectReason || '')
   if (!reason) return
-  const allowed: RejectReason[] = ['wrong_composition','wrong_style','wrong_subject','wrong_color','wrong_detail','technical','other']
   if (!allowed.includes(reason as RejectReason)) {
     error.value = 'Unknown reject reason'
     return
@@ -552,6 +552,7 @@ async function createBatch() {
     cardType: newBatchType.value,
     cardTypeVersion: cardTypeDefinition(newBatchType.value).version,
     templateId: templateForType(newBatchType.value).id,
+    mapping: { ...columnMapping.value, card_number: cardColumn.value, prompt: promptColumn.value },
   }
   try {
     const remote = await cardBatchApi.create(routeProjectId.value, {
@@ -659,6 +660,10 @@ function setCardType(card: CardItem, value: CardTypeKey) {
 function setCardRecipe(card: CardItem, value: string) {
   card.recipeId = value || undefined
   persistCard(card)
+}
+
+function templatesFor(type: CardTypeKey) {
+  return CARD_TEMPLATES.filter(template => template.typeKeys.includes(type) || template.id === 'custom')
 }
 
 function setCardTemplate(card: CardItem, value: string) {
@@ -886,7 +891,7 @@ onMounted(async () => {
       <h2>2. Production settings</h2>
       <div class="settings">
         <label>Card type<select :value="activeBatch.cardType || 'custom'" @change="setBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
-        <label>Batch Template<select :value="activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="activeBatch.templateId = ($event.target as HTMLSelectElement).value; save()"><option v-for="template in CARD_TEMPLATES" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+        <label>Batch Template<select :value="activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="activeBatch.templateId = ($event.target as HTMLSelectElement).value; save()"><option v-for="template in templatesFor(activeBatch.cardType || 'custom')" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
         <label>Batch Recipe<select v-model="recipeId" @change="updateBatchSettings"><option value="">Type default (auto)</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
         <label>Reference asset IDs<input :value="referenceIdsText" placeholder="asset/reference IDs, comma separated" @change="referenceIdsText = ($event.target as HTMLInputElement).value; updateBatchSettings"></label>
         <label>Target width<input v-model.number="targetWidth" type="number" min="1" @change="updateBatchSettings"></label>
@@ -931,14 +936,11 @@ onMounted(async () => {
           <textarea v-else-if="field.type === 'textarea'" :value="card.fields?.[field.key] || ''" rows="3" @change="card.fields = { ...(card.fields || {}), [field.key]: ($event.target as HTMLTextAreaElement).value }; persistCard(card)">
           <input v-else :value="card.fields?.[field.key] || ''" :placeholder="field.key + ' from spreadsheet'" @change="card.fields = { ...(card.fields || {}), [field.key]: ($event.target as HTMLInputElement).value }; persistCard(card)">
         </label>
-          {{ field }}
-          <input :value="card.fields?.[field] || ''" :placeholder="field + ' from spreadsheet'" @change="card.fields = { ...(card.fields || {}), [field]: ($event.target as HTMLInputElement).value }; persistCard(card)">
-        </label>
       </div>
 
       <div class="card-settings">
             <label>Card type<select :value="card.typeOverride || activeBatch.cardType || 'custom'" @change="setCardType(card, ($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
-            <label>Template<select :value="card.templateOverrideId || activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="setCardTemplate(card, ($event.target as HTMLSelectElement).value)"><option v-for="template in CARD_TEMPLATES" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+            <label>Template<select :value="card.templateOverrideId || activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="setCardTemplate(card, ($event.target as HTMLSelectElement).value)"><option v-for="template in templatesFor(resolvedCardType(card))" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
             <label>Recipe<select :value="card.recipeId || ''" @change="setCardRecipe(card, ($event.target as HTMLSelectElement).value)"><option value="">Batch/type default</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
             <label>References<input :value="(card.referenceIds || []).join(', ')" placeholder="override reference IDs" @change="setCardReferences(card, ($event.target as HTMLInputElement).value)"></label>
           </div>
