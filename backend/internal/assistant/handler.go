@@ -73,7 +73,7 @@ type ToolDescriptor struct {
 
 var toolCatalog = []ToolDescriptor{
 	{Name:"inspect_comfyui_capabilities",Description:"Inspect the live ComfyUI runtime: nodes, models, version and devices."},
-	{Name:"create_comfy_flow",Description:"Create a ComfyUI flow from a natural-language task using only live runtime capabilities."},
+	{Name:"create_comfy_flow",Description:"Create or repair a ComfyUI flow from a natural-language task using only live runtime capabilities."},
 	{Name:"validate_comfy_flow",Description:"Validate a ComfyUI API workflow against the live installed node and model catalog."},
 	{Name:"run_comfy_flow",Description:"Validate and queue a generated ComfyUI flow through the normal generation pipeline.",Mutating:true},
 	{Name:"create_iteration",Description:"Create one immutable creative iteration.",Mutating:true},
@@ -177,9 +177,12 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 	task,_:=in["task"].(string);task=strings.TrimSpace(task);if task==""{return nil,"",0,"",errors.New("task is required")}
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
 	snapshot,err:=runtime.CapabilitySnapshot(ctx);if err!=nil{return nil,"",0,"",err}
-	if reusable,ok,findErr:=h.findReusableRecipe(ctx,userID,projectID,task,runtime);findErr!=nil{return nil,"",0,"",findErr}else if ok{return reusable,"Reused an existing recipe after validating it against the live ComfyUI runtime.",0.95,"The match is heuristic; a new flow is generated when no compatible recipe matches.",nil}
+	currentWorkflow,_:=in["current_workflow"].(map[string]any)
+	if len(currentWorkflow)==0 {
+		if reusable,ok,findErr:=h.findReusableRecipe(ctx,userID,projectID,task,runtime);findErr!=nil{return nil,"",0,"",findErr}else if ok{return reusable,"Reused an existing recipe after validating it against the live ComfyUI runtime.",0.95,"The match is heuristic; a new flow is generated when no compatible recipe matches.",nil}
+	}
 	if h.flowPlanner==nil||!h.flowPlanner.Enabled(){return nil,"",0,"",errors.New("flow planner is not configured; set FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL")}
-	var validationErrors []string
+	validationErrors:=stringSlice(in["validation_errors"])
 	for attempt:=0;attempt<3;attempt++{
 		plan,planErr:=h.flowPlanner.Plan(ctx,task,snapshot,validationErrors);if planErr!=nil{return nil,"",0,"",planErr}
 		assetRefs:=flowAssetRefs(plan.Workflow)
@@ -256,6 +259,12 @@ func (h *Handler) findReusableRecipe(ctx context.Context,userID,projectID uuid.U
 		return map[string]any{"name":name,"description":description,"prompt":task,"negative_prompt":"","inputs":[]any{},"parameters":params,"selected_model":map[string]string{"filename":model,"version":modelVersion},"workflow":wf,"reasoning":"Reused an existing recipe after validating it against the current ComfyUI runtime.","source":"existing_recipe","recipe_id":id,"recipe_version":version,"compatibility":map[string]any{"compatible":true,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}},true,nil
 	}
 	return nil,false,rows.Err()
+}
+
+func stringSlice(value any) []string {
+	raw,ok:=value.([]any);if !ok{return nil}
+	out:=make([]string,0,len(raw));for _,item:=range raw{if s,ok:=item.(string);ok&&strings.TrimSpace(s)!=""{out=append(out,strings.TrimSpace(s))}}
+	return out
 }
 
 func flowAssetRefs(value any) map[string]struct{} {
