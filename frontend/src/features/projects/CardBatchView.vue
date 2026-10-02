@@ -271,7 +271,9 @@ function checklist(card: CardItem) {
   const params = generation?.final_parameters || generation?.parameters || {}
   const width = Number(params.width ?? params.target_width ?? params['output_width'] ?? 0)
   const height = Number(params.height ?? params.target_height ?? params['output_height'] ?? 0)
+  const validation = cardValidation(card)
   return [
+    { key: 'schema', label: 'Card type schema', status: validation.length ? 'blocked' : 'passed' },
     { key: 'selected', label: 'Selected generation', status: card.selectedGenerationId ? 'passed' : 'blocked' },
     { key: 'success', label: 'Generation succeeded', status: generation?.status === 'succeeded' ? 'passed' : 'blocked' },
     { key: 'prompt', label: 'Prompt revision recorded', status: card.promptRevision > 0 ? 'passed' : 'blocked' },
@@ -379,6 +381,13 @@ async function runBatch() {
       if (stopRequested.value) break
       if (card.archived || card.status === 'finalized') continue
       if (card.status === 'succeeded' && card.selectedGenerationId) continue
+      const validation = cardValidation(card)
+      if (validation.length) {
+        card.status = 'needs_revision'
+        card.error = validation.map(item => item.message).join(' ')
+        persistCard(card)
+        continue
+      }
       try {
         card.status = 'queued'
         persistCard(card)
