@@ -189,7 +189,7 @@ func (h *Handler) createSet(w http.ResponseWriter, r *http.Request) {
   for _,id:=range in.GenerationIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_variant_set","generation_ids must be unique valid UUIDs");return};seen[id]=true}
   requestHash:=mutationRequestHash("create_set", map[string]any{"project_id":projectID,"name":strings.TrimSpace(in.Name),"generation_ids":in.GenerationIDs})
   tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"variant_set_create_failed","could not start transaction");return}
-  defer tx.Rollback()
+  defer func() { _ = tx.Rollback() }()
   replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,"create_set",key,requestHash)
   if err!=nil { if errors.Is(err,ErrIdempotencyConflict) { writeError(w,409,"idempotency_conflict",err.Error()) } else { writeError(w,500,"variant_idempotency_failed","could not claim idempotency key") }; return }
   if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }
@@ -278,7 +278,7 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   requestHash:=mutationRequestHash("patch_variant", map[string]any{"project_id":projectID,"variant_set_id":setID,"variant_id":variantID,"patch":in})
   operation:=fmt.Sprintf("patch_variant:%s:%s",setID,variantID)
   tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"variant_update_failed","could not start transaction");return}
-  defer tx.Rollback()
+  defer func() { _ = tx.Rollback() }()
   replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,operation,key,requestHash)
   if err!=nil { if errors.Is(err,ErrIdempotencyConflict){writeError(w,409,"idempotency_conflict",err.Error())}else{writeError(w,500,"variant_idempotency_failed","could not claim idempotency key")};return }
   if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(200); _,_=w.Write(response); return }
@@ -333,7 +333,7 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   seen:=map[uuid.UUID]bool{};for _,id:=range in.VariantIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_selection","variant_ids must be unique valid UUIDs");return};seen[id]=true}
   requestHash:=mutationRequestHash("create_iteration", map[string]any{"project_id":projectID,"variant_set_id":setID,"variant_ids":in.VariantIDs,"title":strings.TrimSpace(in.Title),"decisions":in.Decisions})
   tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return}
-  defer tx.Rollback()
+  defer func() { _ = tx.Rollback() }()
   operation:="create_iteration:"+setID.String()
   replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,operation,key,requestHash)
   if err!=nil { if errors.Is(err,ErrIdempotencyConflict){writeError(w,409,"idempotency_conflict",err.Error())}else{writeError(w,500,"variant_idempotency_failed","could not claim idempotency key")};return }
