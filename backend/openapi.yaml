@@ -135,6 +135,73 @@ paths:
                 properties:
                   sources: {type: array, items: {$ref: '#/components/schemas/AssetLibrarySource'}}
 
+  /projects/{project_id}/card-batches:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: listCardBatches
+      summary: List persistent Card Batch workspaces
+      responses:
+        '200':
+          description: Card batches
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [batches]
+                properties:
+                  batches:
+                    type: array
+                    items: {$ref: '#/components/schemas/CardBatch'}
+    post:
+      operationId: createCardBatch
+      summary: Create a persistent Card Batch workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CardBatchInput'}
+      responses:
+        '201':
+          description: Card batch
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CardBatch'}
+  /projects/{project_id}/card-batches/{batch_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: batch_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getCardBatch
+      summary: Get a Card Batch workspace
+      responses:
+        '200':
+          description: Card batch
+          content: {application/json: {schema: {$ref: '#/components/schemas/CardBatch'}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateCardBatch
+      summary: Update Card Batch JSON state using optimistic concurrency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CardBatchUpdate'}
+      responses:
+        '200':
+          description: Updated Card batch
+          content: {application/json: {schema: {$ref: '#/components/schemas/CardBatch'}}}
+        '409':
+          description: Card batch version conflict
+    delete:
+      operationId: deleteCardBatch
+      summary: Delete a Card Batch workspace
+      responses:
+        '204': {description: Deleted}
+
   /projects:
     get:
       operationId: listProjects
@@ -3008,6 +3075,42 @@ components:
         iterations:
           type: array
           items: {$ref: '#/components/schemas/Iteration'}
+    CardBatch:
+      type: object
+      required: [id, project_id, user_id, name, source_file, sheet, mapping, state, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 200}
+        source_file: {type: string, maxLength: 1000}
+        sheet: {type: string, maxLength: 200}
+        mapping: {type: object, additionalProperties: true}
+        state: {type: object, additionalProperties: true}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CardBatchInput:
+      type: object
+      additionalProperties: false
+      required: [name, state]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        source_file: {type: string, maxLength: 1000}
+        sheet: {type: string, maxLength: 200}
+        mapping: {type: object, additionalProperties: true}
+        state: {type: object, additionalProperties: true}
+    CardBatchUpdate:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: {type: integer, format: int64, minimum: 1}
+        source_file: {type: string, maxLength: 1000}
+        sheet: {type: string, maxLength: 200}
+        mapping: {type: object, additionalProperties: true}
+        state: {type: object, additionalProperties: true}
+
     Project:
       type: object
       required: [id, user_id, name, status, privacy_mode, created_at, updated_at]
