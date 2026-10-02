@@ -189,7 +189,7 @@ export function suggestColumnMapping(columns: string[], type: CardTypeKey): Reco
 export function fieldsFromRow(row: Record<string, string>, type: CardTypeKey, mapping?: Record<string, string>): Record<string, string> {
   const result: Record<string, string> = {}
   for (const field of cardTypeDefinition(type).fields) {
-    if (field.key === 'prompt' || field.key === 'name') continue
+    if (field.key === 'prompt') continue
     const column = mapping?.[field.key] || suggestColumnMapping(Object.keys(row), type)[field.key]
     const value = column ? String(row[column] ?? '').trim() : ''
     if (value) result[field.key] = value
