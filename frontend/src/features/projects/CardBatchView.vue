@@ -69,9 +69,9 @@ function uid(prefix: string) {
   return prefix + '_' + crypto.randomUUID()
 }
 function now() { return new Date().toISOString() }
-function filenameFor(card: CardItem, generation: Generation, final = false) {
+function filenameFor(card: CardItem, generation: Generation, final = false, explicitVersion?: number) {
   const safe = card.cardNumber.replace(/[^a-zA-Z0-9._-]+/g, '_')
-  const version = Math.max(1, card.generationIds.indexOf(generation.id) + 1).toString().padStart(3, '0')
+  const version = (explicitVersion ?? Math.max(1, card.generationIds.indexOf(generation.id) + 1)).toString().padStart(3, '0')
   return safe + '__card__v' + version + (final ? '__selected' : '') + '.png'
 }
 function persistCard(card: CardItem) {
@@ -135,7 +135,7 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
         card_number: card.cardNumber,
         source_row: card.sourceRow,
         prompt_revision: card.promptRevision,
-        asset_filename: filenameFor(card, { id: 'pending' } as Generation),
+        asset_filename: filenameFor(card, { id: 'pending' } as Generation, false, version),
         batch_name: activeBatch.value?.name,
         version,
       },
