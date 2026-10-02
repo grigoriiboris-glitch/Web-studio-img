@@ -63,6 +63,7 @@ type BatchState = Record<string, unknown> & {
   cardType?: CardTypeKey
   cardTypeVersion?: number
   templateId?: string
+  mapping?: Record<string, string>
 }
 
 interface Batch {
@@ -215,6 +216,7 @@ function batchState(batch: Batch): BatchState {
     cardType: batch.cardType || 'custom',
     cardTypeVersion: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
     templateId: batch.templateId || templateForType(batch.cardType || 'custom').id,
+    mapping: batch.mapping,
   }
 }
 
@@ -555,7 +557,7 @@ async function createBatch() {
       name: batch.name,
       source_file: batch.sourceFile,
       sheet: batch.sheet,
-      mapping: { card_number_column: cardColumn.value, prompt_column: promptColumn.value },
+      mapping: { card_number_column: cardColumn.value, prompt_column: promptColumn.value, ...columnMapping.value },
       state: batchState(batch),
     })
     batch.id = remote.id
@@ -589,7 +591,7 @@ function applyImportDiff() {
     const number = String(row[cardColumn.value] ?? '').trim()
     const prompt = String(row[promptColumn.value] ?? '').trim()
     if (!number || !prompt) continue
-    batch.cards.push(cardFromRow(row, rows.value.indexOf(row) + 2))
+    batch.cards.push(cardFromRow(row, importedRows.value.indexOf(row) + 2))
   }
   for (const card of diff.removed) card.archived = true
   batch.sourceFile = importedFileName.value
@@ -623,6 +625,7 @@ function updateBatchSettings() {
   activeBatch.value.referenceIds = parsedReferenceIds(referenceIdsText.value)
   activeBatch.value.targetWidth = targetWidth.value
   activeBatch.value.targetHeight = targetHeight.value
+  activeBatch.value.mapping = { ...columnMapping.value, card_number: cardColumn.value, prompt: promptColumn.value }
   activeBatch.value.cardTypeVersion = cardTypeDefinition(activeBatch.value.cardType || 'custom').version
   activeBatch.value.templateId = activeBatch.value.templateId || templateForType(activeBatch.value.cardType || 'custom').id
   save()
@@ -758,8 +761,7 @@ onMounted(async () => {
         cardType: state.cardType || 'custom',
         cardTypeVersion: state.cardTypeVersion || cardTypeDefinition(state.cardType || 'custom').version,
         templateId: state.templateId || templateForType(state.cardType || 'custom').id,
-        cardTypeVersion: state.cardTypeVersion || cardTypeDefinition(state.cardType || 'custom').version,
-        templateId: state.templateId || templateForType(state.cardType || 'custom').id,
+        mapping: item.mapping || {},
       }
     })
     if (!batches.value.length) {
@@ -786,7 +788,7 @@ onMounted(async () => {
       referenceIdsText.value = (first.referenceIds || []).join(', ')
       targetWidth.value = first.targetWidth
       targetHeight.value = first.targetHeight
-      columnMapping.value = { ...columnMapping.value }
+      columnMapping.value = first.mapping || { ...columnMapping.value }
       if (!first.cardType) first.cardType = 'custom'
       newBatchType.value = first.cardType
     }
