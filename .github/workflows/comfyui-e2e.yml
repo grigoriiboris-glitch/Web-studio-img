@@ -7,13 +7,21 @@ on:
         description: "ComfyUI Docker image"
         required: true
         default: "comfyanonymous/comfyui:latest"
+      workflow_json:
+        description: "ComfyUI API-format workflow JSON (paste exported API workflow)"
+        required: true
+        type: string
+      timeout_seconds:
+        description: "Maximum execution wait"
+        required: true
+        default: "180"
 
 permissions:
   contents: read
 
 jobs:
   comfyui-e2e:
-    name: Real ComfyUI runtime smoke test
+    name: Real ComfyUI prompt → history → view
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -34,11 +42,103 @@ jobs:
           docker logs comfyui-e2e
           exit 1
 
-      - name: Verify live ComfyUI API
+      - name: Verify runtime contract
         run: |
           curl -fsS http://127.0.0.1:8188/system_stats
           curl -fsS http://127.0.0.1:8188/object_info >/dev/null
           curl -fsS http://127.0.0.1:8188/models >/dev/null
+
+      - name: Submit workflow
+        env:
+          WORKFLOW_JSON: ${{ inputs.workflow_json }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          workflow = json.loads(os.environ["WORKFLOW_JSON"])
+          payload = json.dumps({"prompt": workflow}).encode()
+          req = urllib.request.Request(
+              "http://127.0.0.1:8188/prompt",
+              data=payload,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req) as response:
+              result = json.load(response)
+          prompt_id = result.get("prompt_id")
+          if not prompt_id:
+              raise SystemExit(f"ComfyUI did not return prompt_id: {result}")
+          with open("/tmp/prompt_id", "w", encoding="utf-8") as handle:
+              handle.write(prompt_id)
+          print(f"prompt_id={prompt_id}")
+          PY
+
+      - name: Wait for history completion
+        env:
+          TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request
+
+          prompt_id = open("/tmp/prompt_id", encoding="utf-8").read().strip()
+          deadline = time.time() + int(os.environ["TIMEOUT_SECONDS"])
+          while time.time() < deadline:
+              with urllib.request.urlopen(
+                  f"http://127.0.0.1:8188/history/{prompt_id}"
+              ) as response:
+                  history = json.load(response)
+              item = history.get(prompt_id)
+              if item:
+                  status = item.get("status", {})
+                  if status.get("status_str") == "error":
+                      raise SystemExit(f"ComfyUI execution failed: {json.dumps(item)}")
+                  if status.get("completed") or item.get("outputs"):
+                      with open("/tmp/history.json", "w", encoding="utf-8") as handle:
+                          json.dump(item, handle)
+                      print("history completed")
+                      break
+              time.sleep(2)
+          else:
+              raise SystemExit("ComfyUI execution timed out")
+          PY
+
+      - name: Verify output via /view
+        run: |
+          python3 - <<'PY'
+          import json, urllib.parse, urllib.request
+
+          item = json.load(open("/tmp/history.json", encoding="utf-8"))
+          outputs = item.get("outputs", {})
+          images = []
+          for node_output in outputs.values():
+              for image in node_output.get("images", []):
+                  images.append(image)
+          if not images:
+              raise SystemExit(
+                  "Workflow completed but produced no image output; "
+                  "provide a workflow with an image output for /view verification"
+              )
+
+          image = images[0]
+          query = urllib.parse.urlencode({
+              "filename": image["filename"],
+              "subfolder": image.get("subfolder", ""),
+              "type": image.get("type", "output"),
+          })
+          request = urllib.request.Request(
+              f"http://127.0.0.1:8188/view?{query}",
+              method="GET",
+          )
+          with urllib.request.urlopen(request) as response:
+              body = response.read(16)
+              if not body:
+                  raise SystemExit("/view returned an empty response")
+              print(f"/view verified: {image['filename']}")
+          PY
+
+      - name: Collect ComfyUI logs on failure
+        if: failure()
+        run: docker logs comfyui-e2e
 
       - name: Cleanup
         if: always()
