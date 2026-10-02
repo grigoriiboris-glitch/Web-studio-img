@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { REJECT_REASONS, buildRejectConstraints, canSubmitReject } from './rejectReasons'
-import { CARD_TYPES, cardTypeDefinition, type CardTypeKey } from './cardBatchTypes'
+import { CARD_TYPES, REJECT_REASONS_BY_TYPE, cardTypeDefinition, type CardTypeKey } from './cardBatchTypes'
 
 import {
   assetsApi,
@@ -35,7 +35,10 @@ const offsetX = ref(0)
 const offsetY = ref(0)
 const dragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
-const rejectReasonOptions = REJECT_REASONS
+const rejectReasonOptions = computed(() => {
+  const type = rejectDialogItem.value ? sourceCardType(rejectDialogItem.value.source as VariantSource) : 'custom'
+  return type === 'unknown' ? REJECT_REASONS : REJECT_REASONS_BY_TYPE[type]
+})
 const rejectDialogItem = ref<Variant | null>(null)
 const selectedRejectReasons = ref<string[]>([])
 const rejectComment = ref('')
@@ -47,7 +50,7 @@ const carryRejectConstraints = ref(true)
 const iterationMessage = ref('')
 
 function sourceCardType(source: VariantSource): CardTypeKey | 'unknown' {
-  const value = source.context?.final_parameters?.card_type
+  const value = source.context?.card_type || source.context?.final_parameters?.card_type || (typeof source.context?.final_parameters?.parameters === 'object' && source.context.final_parameters.parameters ? (source.context.final_parameters.parameters as Record<string, unknown>).card_type : undefined)
   return typeof value === 'string' && CARD_TYPES.some(type => type.key === value) ? value as CardTypeKey : 'unknown'
 }
 
