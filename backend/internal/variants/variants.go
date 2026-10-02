@@ -218,7 +218,7 @@ func (h *Handler) createSet(w http.ResponseWriter, r *http.Request) {
     `,v.ID,set.ID,projectID,userID,v.GenerationID,v.AssetID,v.Ordinal);err!=nil{writeError(w,500,"variant_set_create_failed","could not create variant");return}
     variants=append(variants,v)
   }
-  response,_:=json.Marshal(map[string]any{"variant_set":set,"variants":variants})
+  response,_=json.Marshal(map[string]any{"variant_set":set,"variants":variants})
   if err=storeVariantMutationResponse(r.Context(),tx,userID,"create_set",key,set.ID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
   if err:=tx.Commit();err!=nil{writeError(w,500,"variant_set_create_failed","could not commit variant set");return}
   h.audit(r.Context(),userID,projectID,set.ID,"VARIANT_SET_CREATED",map[string]any{"variant_set_id":set.ID,"generation_ids":in.GenerationIDs,"variant_count":len(variants)})
@@ -318,7 +318,7 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
     h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"decision":v.Decision,"reject_reason":v.RejectReason,"reject_comment":v.RejectComment,"reject_severity":v.RejectSeverity,"reject_reason_skipped":v.RejectReasonSkipped},oldState,newState)
   }
   if in.Favorite!=nil { action:="VARIANT_UNFAVORITED"; if nextFavorite { action="VARIANT_FAVORITED" }; h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"favorite":nextFavorite}) }
-  response,_:=json.Marshal(v)
+  response,_=json.Marshal(v)
   if err=storeVariantMutationResponse(r.Context(),tx,userID,operation,key,v.ID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
   if err:=tx.Commit();err!=nil{writeError(w,500,"variant_update_failed","could not commit variant update");return}
   w.Header().Set("Content-Type","application/json"); w.WriteHeader(200); _,_=w.Write(response)
@@ -351,7 +351,7 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   rawDecisions,_:=json.Marshal(decisions)
   var iterationID uuid.UUID
   if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description,decisions) VALUES($1,$2::uuid,$3::uuid,'selection',$4,$5,$6) RETURNING id`,projectID,branchID.String,parent.String,title,description,rawDecisions).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
-  response,_:=json.Marshal(map[string]any{"iteration_id":iterationID,"title":title,"description":description,"decisions":decisions})
+  response,_=json.Marshal(map[string]any{"iteration_id":iterationID,"title":title,"description":description,"decisions":decisions})
   if err=storeVariantMutationResponse(r.Context(),tx,userID,operation,key,iterationID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
   if err:=tx.Commit();err!=nil{writeError(w,500,"iteration_create_failed","could not commit selection iteration");return}
   h.audit(r.Context(),userID,projectID,iterationID,"VARIANT_SELECTED",map[string]any{"variant_set_id":setID,"variant_ids":in.VariantIDs,"created_iteration_id":iterationID,"decisions":decisions})
