@@ -59,7 +59,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     key: 'item', name: 'Item / Equipment', version: 1,
     description: 'Предметы, оружие, экипировка и артефакты.',
     fields: [
-      { key: 'name', label: 'Name', type: 'text', required: true, aliases: ['card name', 'название', 'имя'] },
+      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'rarity', label: 'Rarity', type: 'select', options: ['common', 'uncommon', 'rare', 'epic', 'legendary'], aliases: ['редкость', 'уровень'] },
       { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
@@ -72,7 +72,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     key: 'world', name: 'World / Location', version: 1,
     description: 'Локации, места и окружение.',
     fields: [
-      { key: 'name', label: 'Name', type: 'text', required: true, aliases: ['card name', 'название', 'имя'] },
+      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'region', label: 'Region', type: 'text', aliases: ['район', 'регион', 'местность'] },
       { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
@@ -85,7 +85,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     key: 'event', name: 'Event', version: 1,
     description: 'События, происшествия и условия раунда.',
     fields: [
-      { key: 'name', label: 'Name', type: 'text', required: true, aliases: ['card name', 'название', 'имя'] },
+      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
       { key: 'effect', label: 'Effect', type: 'textarea', aliases: ['эффект', 'effect text'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
@@ -98,7 +98,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     key: 'faction', name: 'Faction', version: 1,
     description: 'Фракции, группы и стороны.',
     fields: [
-      { key: 'name', label: 'Name', type: 'text', required: true, aliases: ['card name', 'название', 'имя'] },
+      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
       { key: 'ability', label: 'Ability', type: 'textarea', aliases: ['способность', 'ability text'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
@@ -111,7 +111,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     key: 'resource', name: 'Resource', version: 1,
     description: 'Ресурсы, жетоны и игровые материалы.',
     fields: [
-      { key: 'name', label: 'Name', type: 'text', required: true, aliases: ['card name', 'название', 'имя'] },
+      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'rarity', label: 'Rarity', type: 'select', options: ['common', 'uncommon', 'rare', 'epic', 'legendary'], aliases: ['редкость', 'уровень'] },
       { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
