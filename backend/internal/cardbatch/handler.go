@@ -137,6 +137,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   if in.State != nil { state = mustJSON(in.State) }
   var mappingBytes, stateBytes []byte
   err = tx.QueryRowContext(r.Context(), query, id, projectID, in.Version, nullableString(in.SourceFile), nullableString(in.Sheet), nullableJSON(mapping), nullableJSON(state)).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
+  if err == nil { _ = json.Unmarshal(mappingBytes, &item.Mapping); _ = json.Unmarshal(stateBytes, &item.State) }
   if errors.Is(err, sql.ErrNoRows) {
     var current int64
     e := tx.QueryRowContext(r.Context(), "SELECT version FROM card_batches WHERE id=$1 AND project_id=$2", id, projectID).Scan(&current)
