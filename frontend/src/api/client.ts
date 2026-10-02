@@ -131,6 +131,31 @@ export const approvalGateApi = {
     apiRequest<ApprovalGate>(`/projects/${projectId}/approval-gate/revision`, { method: 'POST' }),
 }
 
+
+export interface CardBatch {
+  id: string
+  project_id: string
+  user_id: string
+  name: string
+  source_file: string
+  sheet: string
+  mapping: Record<string, unknown>
+  state: Record<string, unknown>
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export const cardBatchApi = {
+  list: (projectId: string) => apiRequest<{ batches: CardBatch[] }>(`/projects/${projectId}/card-batches`),
+  get: (projectId: string, batchId: string) => apiRequest<CardBatch>(`/projects/${projectId}/card-batches/${batchId}`),
+  create: (projectId: string, input: { name: string; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state: Record<string, unknown> }) =>
+    apiRequest<CardBatch>(`/projects/${projectId}/card-batches`, { method: 'POST', body: JSON.stringify(input) }),
+  update: (projectId: string, batchId: string, input: { version: number; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state?: Record<string, unknown> }) =>
+    apiRequest<CardBatch>(`/projects/${projectId}/card-batches/${batchId}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  remove: (projectId: string, batchId: string) => apiRequest<void>(`/projects/${projectId}/card-batches/${batchId}`, { method: 'DELETE' }),
+}
+
 export interface RecipeParameter {
   name: string
   type: 'string' | 'number' | 'integer' | 'boolean' | 'image' | 'mask'
