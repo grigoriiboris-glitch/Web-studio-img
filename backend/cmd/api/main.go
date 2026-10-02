@@ -335,10 +335,12 @@ func main() {
 			logger.Error("assistant action store initialization failed", "error", err)
 			os.Exit(1)
 		}
+		assistantPrivacyPolicy, privacyErr := privacy.NewPolicy(projectDB)
+		if privacyErr != nil { logger.Error("assistant privacy policy initialization failed", "error", privacyErr); os.Exit(1) }
 		assistantHandler, err = assistant.NewHandler(assistant.Config{
 			DB: projectDB, Iterations: iterationStore, Prompts: promptStore, References: referenceStore,
 			Assets: assetStore, Storage: objectStorage, Events: eventStore, Provenance: provenanceStore,
-			Actions: assistantActionStore, Queue: generationQueue, Provider: generationProvider,
+			Actions: assistantActionStore, Queue: generationQueue, Provider: generationProvider, Privacy: assistantPrivacyPolicy,
 		})
 		if err != nil {
 			logger.Error("assistant handler initialization failed", "error", err)
