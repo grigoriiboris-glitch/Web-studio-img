@@ -34,7 +34,7 @@ interface CardItem {
   updatedAt: string
 }
 
-interface BatchState {
+type BatchState = Record<string, unknown> & {
   cards: CardItem[]
   recipeId?: string
   referenceIds?: string[]
@@ -165,9 +165,9 @@ function persistCard(card: CardItem) {
   save()
 }
 
-function filenameFor(card: CardItem, generationId: string, final = false) {
+function filenameFor(card: CardItem, generationId: string, final = false, explicitVersion?: number) {
   const safe = card.cardNumber.replace(/[^a-zA-Z0-9._-]+/g, '_')
-  const version = Math.max(1, card.generationIds.indexOf(generationId) + 1).toString().padStart(3, '0')
+  const version = Math.max(1, explicitVersion ?? card.generationIds.indexOf(generationId) + 1).toString().padStart(3, '0')
   return safe + '__card__v' + version + (final ? '__selected' : '') + '.png'
 }
 
