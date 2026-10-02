@@ -160,7 +160,7 @@ function uid(prefix: string) { return prefix + '_' + crypto.randomUUID() }
 function parsedReferenceIds(text: string) { return text.split(/[\s,]+/).map(x => x.trim()).filter(Boolean) }
 
 function fieldsFromRowForCard(row: SpreadsheetRow, card: CardItem): Record<string, string> {
-  return fieldsFromRow(row, resolvedCardType(card))
+  return fieldsFromRow(row, resolvedCardType(card), columnMapping.value)
 }
 
 function typeSchema(type: CardTypeKey) {
@@ -213,7 +213,7 @@ function save() {
       version: batch.version!,
       source_file: batch.sourceFile,
       sheet: batch.sheet,
-      mapping: { card_number_column: cardColumn.value, prompt_column: promptColumn.value },
+      mapping: { card_number_column: cardColumn.value, prompt_column: promptColumn.value, ...columnMapping.value },
       state: batchState(batch),
     })
     batch.version = remote.version
@@ -462,6 +462,7 @@ async function importFile(event: Event) {
     fileName.value = file.name
     cardColumn.value = columns.value.find(c => /card|number|номер/i.test(c)) || columns.value[0] || ''
     promptColumn.value = columns.value.find(c => /prompt|промт/i.test(c)) || columns.value.find(c => c !== cardColumn.value) || ''
+    columnMapping.value = { ...suggestColumnMapping(columns.value, newBatchType.value), card_number: cardColumn.value, prompt: promptColumn.value }
     importedRows.value = rows.value
     importedFileName.value = file.name
     importMode.value = activeBatch.value ? 'diff' : 'new'
@@ -480,6 +481,7 @@ function changeSheet() {
   const cols = columns.value
   if (!cols.includes(cardColumn.value)) cardColumn.value = cols[0] || ''
   if (!cols.includes(promptColumn.value)) promptColumn.value = cols.find(c => c !== cardColumn.value) || ''
+  columnMapping.value = { ...suggestColumnMapping(cols, newBatchType.value), card_number: cardColumn.value, prompt: promptColumn.value }
 }
 
 function cardFromRow(row: SpreadsheetRow, sourceRow: number): CardItem {
@@ -487,7 +489,7 @@ function cardFromRow(row: SpreadsheetRow, sourceRow: number): CardItem {
     id: uid('card'),
     cardNumber: String(row[cardColumn.value] ?? '').trim(),
     prompt: String(row[promptColumn.value] ?? '').trim(),
-    fields: fieldsFromRow(row, newBatchType.value),
+    fields: fieldsFromRow(row, newBatchType.value, columnMapping.value),
     templateId: templateForType(newBatchType.value).id,
     cardTypeVersion: cardTypeDefinition(newBatchType.value).version,
     sourceRow,
@@ -759,13 +761,14 @@ onMounted(async () => {
       referenceIdsText.value = (first.referenceIds || []).join(', ')
       targetWidth.value = first.targetWidth
       targetHeight.value = first.targetHeight
-      columnMapping.value = first ? { ...columnMapping.value } : {}
+      columnMapping.value = { ...columnMapping.value }
       if (!first.cardType) first.cardType = 'custom'
       newBatchType.value = first.cardType
     }
     const remoteFirst = remote.batches[0]
     cardColumn.value = String(remoteFirst?.mapping.card_number_column ?? '')
     promptColumn.value = String(remoteFirst?.mapping.prompt_column ?? '')
+    columnMapping.value = { ...((remoteFirst?.mapping || {}) as Record<string, string>) }
     localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
     recipes.value = (await recipesApi.list(routeProjectId.value)).recipes
     await refreshBatch()
