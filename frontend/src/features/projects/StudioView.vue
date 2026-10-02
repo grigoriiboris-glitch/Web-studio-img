@@ -574,8 +574,12 @@ async function runComfyFlow() {
   comfyFlowRunning.value = true
   error.value = null
   try {
-    plan = await compileComfyFlow(plan)
-    comfyFlowPlan.value = plan
+    const requestedSteps = JSON.stringify(plan.flow_steps ?? defaultComfyFlowSteps())
+    const compiledSteps = JSON.stringify(plan.compiled_flow_steps ?? [])
+    if (requestedSteps !== compiledSteps) {
+      plan = await compileComfyFlow(plan)
+      comfyFlowPlan.value = plan
+    }
     const inputAssets = flowInputAssets()
     const missing = plan.inputs.filter(input => input.required && !inputAssets[input.id])
     if (missing.length) throw new Error('Required flow inputs are missing: ' + missing.map(item => item.label || item.id).join(', '))
@@ -601,11 +605,17 @@ async function runComfyFlow() {
 }
 
 async function saveComfyFlowAsRecipe() {
-  const plan = comfyFlowPlan.value
+  let plan = comfyFlowPlan.value
   if (!plan) return
   comfyFlowSaving.value = true
   error.value = null
   try {
+    const requestedSteps = JSON.stringify(plan.flow_steps ?? defaultComfyFlowSteps())
+    const compiledSteps = JSON.stringify(plan.compiled_flow_steps ?? [])
+    if (requestedSteps !== compiledSteps) {
+      plan = await compileComfyFlow(plan)
+      comfyFlowPlan.value = plan
+    }
     const assetInputs = flowInputAssets()
     const assetEntries = await Promise.all(
       Object.entries(assetInputs).map(async ([name, assetId]) => {
