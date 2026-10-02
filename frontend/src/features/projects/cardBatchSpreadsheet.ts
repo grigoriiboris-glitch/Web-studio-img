@@ -7,7 +7,8 @@ function u32(view: DataView, offset: number) { return view.getUint32(offset, tru
 
 async function inflate(data: Uint8Array): Promise<Uint8Array> {
   if (typeof DecompressionStream === 'undefined') throw new Error('This browser does not support XLSX decompression. Use CSV export.')
-  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+  const safeBuffer = data.slice().buffer as ArrayBuffer
+  const stream = new Blob([safeBuffer]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
