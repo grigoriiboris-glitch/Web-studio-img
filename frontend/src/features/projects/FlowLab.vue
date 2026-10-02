@@ -30,7 +30,7 @@ type RepairHistoryItem = {
 
 type Validation = {
   compatible: boolean
-  errors: string[]
+  errors: TestError[]
   warnings: string[]
   referenced_nodes: string[]
   referenced_models: string[]
@@ -190,12 +190,12 @@ async function validateFlow() {
         },
       )
       const result = response.result
-      const messages = result.errors.map(item => item.message)
+      const messages = result.errors
       repairHistory.value[repairHistory.value.length - 1] = {
         attempt,
         status: result.ok ? 'passed' : 'failed',
         category: result.category,
-        errors: messages,
+        errors: messages.map(item => item.message),
       }
       validation.value = {
         compatible: result.ok,
@@ -218,7 +218,7 @@ async function validateFlow() {
         status: 'repairing',
         category: result.category,
         action: 'AI исправляет только техническую часть workflow',
-        errors: messages,
+        errors: messages.map(item => item.message),
       })
       const repair = await assistantApi.execute<ComfyFlowPlan>(
         props.projectId,
@@ -231,7 +231,7 @@ async function validateFlow() {
             ...messages,
           ].join('\n'),
           current_workflow: currentPlan.workflow,
-          validation_errors: messages,
+          validation_errors: messages.map(item => item.message),
           inputs: currentPlan.inputs,
           parameters: currentPlan.parameters,
           flow_steps: currentPlan.flow_steps,
@@ -320,10 +320,10 @@ async function fixWithAI() {
           'Repair the supplied workflow instead of redesigning it.',
           'Keep the artist intent and current flow. Only fix what is necessary.',
           'Validation errors:',
-          ...errors,
+          ...errors.map(item => item.message),
         ].join('\n'),
         current_workflow: props.plan.workflow,
-        validation_errors: errors,
+        validation_errors: errors.map(item => item.message),
         inputs: props.plan.inputs,
         parameters: props.plan.parameters,
         flow_steps: props.plan.flow_steps,
@@ -391,7 +391,7 @@ watch(() => props.plan.workflow, () => {
       class="test-errors"
     >
       <ul>
-        <li v-for="(item, index) in validation.errors" :key="`error-${index}`">{{ item }}</li>
+        <li v-for="(item, index) in validation.errors" :key="`error-${index}`">{{ item.message }}</li>
       </ul>
     </el-alert>
 
