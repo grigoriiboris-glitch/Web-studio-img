@@ -379,6 +379,7 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
     aspect_ratio: effective.aspectRatio,
     reference_ids: refs,
     parameters: {
+      ...effective.generationParameters,
       card_batch_id: activeBatch.value?.id,
       card_id: card.id,
       card_number: card.cardNumber,
