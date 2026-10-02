@@ -124,7 +124,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     key: 'custom', name: 'Custom', version: 1,
     description: 'Произвольный тип карточек.',
     fields: [
-      { key: 'name', label: 'Name', type: 'text', required: true, aliases: ['card name', 'название', 'имя'] },
+      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
     ],
