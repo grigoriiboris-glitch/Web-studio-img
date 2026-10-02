@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
@@ -84,10 +83,6 @@ func (p *Provider) TestWorkflow(ctx context.Context, req generation.Request) (Te
 			if (history.Status != nil && history.Status.Completed) || len(history.Outputs) > 0 {
 				return TestResult{PromptID: response.PromptID, Duration: time.Since(started)}, nil
 			}
-		} else if !strings.Contains(historyErr.Error(), "history not found") {
-			// Keep polling transient history errors; the final timeout is reported
-			// as an unavailable runtime rather than pretending the workflow passed.
-		}
 
 		timer := time.NewTimer(p.cfg.PollEvery)
 		select {
