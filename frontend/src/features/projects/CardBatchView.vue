@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/* eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/attributes-order */
+/* eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order */
 import { computed, onMounted, ref } from 'vue'
 import {
   assetsApi,
