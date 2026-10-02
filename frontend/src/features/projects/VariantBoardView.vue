@@ -36,7 +36,7 @@ const offsetY = ref(0)
 const dragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
 const rejectReasonOptions = computed(() => {
-  const type = rejectDialogItem.value ? sourceCardType(rejectDialogItem.value.source as VariantSource) : 'custom'
+  const type = rejectDialogItem.value ? sourceCardType(rejectDialogItem.value.source) : 'custom'
   return type === 'unknown' ? REJECT_REASONS : REJECT_REASONS_BY_TYPE[type]
 })
 const rejectDialogItem = ref<Variant | null>(null)
@@ -49,7 +49,8 @@ const rejectionTimeline = ref<Awaited<ReturnType<typeof variantBoardApi.rejectio
 const carryRejectConstraints = ref(true)
 const iterationMessage = ref('')
 
-function sourceCardType(source: VariantSource): CardTypeKey | 'unknown' {
+function sourceCardType(source?: VariantSource): CardTypeKey | 'unknown' {
+  if (!source) return 'unknown'
   const value = source.context?.card_type || source.context?.final_parameters?.card_type || (typeof source.context?.final_parameters?.parameters === 'object' && source.context.final_parameters.parameters ? (source.context.final_parameters.parameters as Record<string, unknown>).card_type : undefined)
   return typeof value === 'string' && CARD_TYPES.some(type => type.key === value) ? value as CardTypeKey : 'unknown'
 }
