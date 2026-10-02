@@ -138,6 +138,10 @@ const finalizedCount = computed(() => activeCards.value.filter(card => card.stat
 const pendingCards = computed(() => activeCards.value.filter(card => ['pending', 'draft', 'failed', 'needs_revision'].includes(card.status)))
 const rejectedCards = computed(() => activeCards.value.filter(card => card.rejectReason))
 const requiredUnmappedFields = computed(() => typeSchema(newBatchType.value).fields.filter(field => field.required && !columnMapping.value[field.key]).map(field => field.label))
+const schemaDrift = computed(() => {
+  const batch = activeBatch.value
+  return !!batch && !!batch.cardTypeVersion && batch.cardTypeVersion !== cardTypeDefinition(batch.cardType).version
+}
 
 const importDiff = computed<ImportDiff | null>(() => {
   const batch = activeBatch.value
@@ -197,7 +201,12 @@ function setNewBatchType(value: CardTypeKey) {
 
 
 function cardValidation(card: CardItem) {
-  return validateCardData(card.cardNumber, card.prompt, card.fields, resolvedCardType(card))
+  const type = resolvedCardType(card)
+  const errors = validateCardData(card.cardNumber, card.prompt, card.fields, type)
+  if (card.cardTypeVersion && card.cardTypeVersion !== cardTypeDefinition(type).version) {
+    errors.push({ field: 'schemaVersion', message: 'Card Type schema changed. Migrate the batch before generating.' })
+  }
+  return errors
 }
 
 function resolvedTemplate(card: CardItem) {
@@ -662,6 +671,20 @@ function updateBatchSettings() {
   save()
 }
 
+function migrateBatchSchema() {
+  const batch = activeBatch.value
+  if (!batch) return
+  const type = batch.cardType || 'custom'
+  batch.cardTypeVersion = cardTypeDefinition(type).version
+  for (const card of batch.cards) {
+    const cardType = resolvedCardType(card)
+    card.cardTypeVersion = cardTypeDefinition(cardType).version
+    card.updatedAt = now()
+  }
+  save()
+  info.value = 'Batch schema migrated to current Card Type versions.'
+}
+
 function setBatchType(value: CardTypeKey) {
   if (!activeBatch.value) return
   activeBatch.value.cardType = value
@@ -933,6 +956,11 @@ onMounted(async () => {
         <label>Target height<input v-model.number="targetHeight" type="number" min="1" @change="updateBatchSettings"></label>
       </div>
       <p class="muted">Resolution: Card override → Batch → Card Type → Project/provider default. Template is separate from Card Type; schema and recipe never determine layout by accident.</p>
+      <div v-if="schemaDrift" class="schema-warning">
+        <strong>Card Type schema changed since this batch was created.</strong>
+        <span>Generation/finalization is blocked until the batch is explicitly migrated.</span>
+        <button type="button" @click="migrateBatchSchema">Migrate schema</button>
+      </div>
     </section>
 
     <section class="panel">
