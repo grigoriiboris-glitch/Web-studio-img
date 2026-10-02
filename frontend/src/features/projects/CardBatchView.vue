@@ -394,6 +394,8 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       recipe_version: recipeSelection?.version,
       original_prompt: prompt,
       version,
+      width: effective.width,
+      height: effective.height,
       target_width: effective.width,
       target_height: effective.height,
       aspect_ratio: effective.aspectRatio,
