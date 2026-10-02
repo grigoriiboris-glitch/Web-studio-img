@@ -54,6 +54,9 @@ func validateArtistFlowContract(expected []map[string]any, actual []map[string]a
 		if want["enabled"] == true && len(evidence) == 0 {
 			errors = append(errors, fmt.Sprintf("enabled artist step %s has no execution evidence", want["id"]))
 		}
+		if want["enabled"] == false && len(evidence) > 0 {
+			errors = append(errors, fmt.Sprintf("disabled artist step %s must not have execution evidence", want["id"]))
+		}
 		for _, raw := range evidence {
 			item, ok := raw.(map[string]any)
 			if !ok {
