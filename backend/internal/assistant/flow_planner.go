@@ -54,7 +54,7 @@ func (p *FlowPlanner) Enabled() bool {
 	return p != nil && p.BaseURL != "" && p.Model != "" && p.Client != nil
 }
 
-func (p *FlowPlanner) Plan(ctx context.Context, task string, snapshot comfyui.RuntimeCapabilitySnapshot, validationErrors []string) (FlowPlan, error) {
+func (p *FlowPlanner) Plan(ctx context.Context, task string, snapshot comfyui.RuntimeCapabilitySnapshot, validationErrors []string, currentWorkflow map[string]any) (FlowPlan, error) {
 	if !p.Enabled() {
 		return FlowPlan{}, errors.New("FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL must be configured")
 	}
@@ -67,6 +67,7 @@ func (p *FlowPlanner) Plan(ctx context.Context, task string, snapshot comfyui.Ru
 		"task": task,
 		"runtime": compactRuntime(task, snapshot),
 		"previous_validation_errors": validationErrors,
+		"current_workflow": currentWorkflow,
 		"output_schema": map[string]any{
 			"name": "string",
 			"description": "string",
