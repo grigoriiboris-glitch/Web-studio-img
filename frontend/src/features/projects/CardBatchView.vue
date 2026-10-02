@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   assetsApi,
+  cardBatchApi,
   generationsApi,
   recipesApi,
   variantBoardApi,
@@ -30,6 +31,7 @@ interface Batch {
   sheet: string
   createdAt: string
   cards: CardItem[]
+  version?: number
 }
 
 const routeProjectId = computed(() => String(location.pathname.match(/\/projects\/([^/]+)/)?.[1] ?? ''))
@@ -54,6 +56,7 @@ const recipeId = ref('')
 const editedPrompt = ref<Record<string, string>>({})
 const generations = ref<Record<string, Generation>>({})
 const downloads = ref<Record<string, string>>({})
+let saveQueue: Promise<void> = Promise.resolve()
 
 const activeBatch = computed(() => batches.value.find(item => item.id === activeBatchId.value))
 const columns = computed(() => rows.value.length ? Object.keys(rows.value[0]) : [])
@@ -64,6 +67,28 @@ const pendingCards = computed(() => activeCards.value.filter(card => card.status
 
 function save() {
   localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
+  const batch = activeBatch.value
+  if (!batch) return
+  const version = batch.version
+  if (!version) return
+  saveQueue = saveQueue.then(async () => {
+    const remote = await cardBatchApi.update(routeProjectId.value, batch.id, {
+      version,
+      source_file: batch.sourceFile,
+      sheet: batch.sheet,
+      mapping: {
+        card_number_column: cardColumn.value,
+        prompt_column: promptColumn.value,
+      },
+      state: {
+        cards: batch.cards,
+      },
+    })
+    batch.version = remote.version
+    batch.updatedAt = remote.updated_at
+  }).catch(e => {
+    error.value = e instanceof Error ? e.message : String(e)
+  })
 }
 function uid(prefix: string) {
   return prefix + '_' + crypto.randomUUID()
@@ -254,7 +279,7 @@ function changeSheet() {
   if (!cols.includes(promptColumn.value)) promptColumn.value = cols.find(c => c !== cardColumn.value) || ''
 }
 
-function createBatch() {
+async function createBatch() {
   if (!routeProjectId.value || !name.value.trim() || !sheet.value || !cardColumn.value || !promptColumn.value) {
     error.value = 'Project, batch name, sheet, card number and prompt columns are required.'
     return
@@ -289,11 +314,29 @@ function createBatch() {
     createdAt: now(),
     cards,
   }
-  batches.value.unshift(batch)
-  activeBatchId.value = batch.id
-  name.value = ''
-  save()
-  info.value = 'Batch created: ' + cards.length + ' cards'
+  try {
+    const remote = await cardBatchApi.create(routeProjectId.value, {
+      name: batch.name,
+      source_file: batch.sourceFile,
+      sheet: batch.sheet,
+      mapping: {
+        card_number_column: cardColumn.value,
+        prompt_column: promptColumn.value,
+      },
+      state: { cards },
+    })
+    batch.id = remote.id
+    batch.version = remote.version
+    batch.createdAt = remote.created_at
+    batch.updatedAt = remote.updated_at
+    batches.value.unshift(batch)
+    activeBatchId.value = batch.id
+    name.value = ''
+    save()
+    info.value = 'Batch created: ' + cards.length + ' cards'
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+  }
 }
 
 async function refreshBatch() {
@@ -307,11 +350,27 @@ async function refreshBatch() {
 
 onMounted(async () => {
   try {
-    batches.value = JSON.parse(localStorage.getItem(storageKey.value) || '[]') as Batch[]
+    const remote = await cardBatchApi.list(routeProjectId.value)
+    batches.value = remote.batches.map(item => ({
+      id: item.id,
+      name: item.name,
+      sourceFile: item.source_file,
+      sheet: item.sheet,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+      version: item.version,
+      cards: Array.isArray(item.state.cards) ? item.state.cards as CardItem[] : [],
+    }))
     activeBatchId.value = batches.value[0]?.id || ''
+    localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
     recipes.value = (await recipesApi.list(routeProjectId.value)).recipes
     await refreshBatch()
   } catch (e) {
+    // Keep existing browser state usable and migrate it when the server becomes available.
+    batches.value = JSON.parse(localStorage.getItem(storageKey.value) || '[]') as Batch[]
+    activeBatchId.value = batches.value[0]?.id || ''
+    try { recipes.value = (await recipesApi.list(routeProjectId.value)).recipes } catch { /* keep empty */ }
+    await refreshBatch()
     error.value = e instanceof Error ? e.message : String(e)
   }
 })
