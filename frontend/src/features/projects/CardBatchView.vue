@@ -15,10 +15,30 @@ import { parseSpreadsheet, type SpreadsheetRow } from './cardBatchSpreadsheet'
 type CardStatus = 'draft' | 'pending' | 'queued' | 'running' | 'succeeded' | 'needs_revision' | 'failed' | 'finalized'
 type RejectReason = 'wrong_composition' | 'wrong_style' | 'wrong_subject' | 'wrong_color' | 'wrong_detail' | 'technical' | 'other'
 
+type CardTypeKey = 'role' | 'item' | 'world' | 'event' | 'faction' | 'resource' | 'custom'
+
+interface CardTypeDefinition {
+  key: CardTypeKey
+  name: string
+  description: string
+  fields: string[]
+}
+
+const CARD_TYPES: CardTypeDefinition[] = [
+  { key: 'role', name: 'Role / Character', description: 'Персонажи, роли, классы и способности.', fields: ['name', 'description', 'prompt'] },
+  { key: 'item', name: 'Item / Equipment', description: 'Предметы, оружие, экипировка и артефакты.', fields: ['name', 'rarity', 'description', 'prompt'] },
+  { key: 'world', name: 'World / Location', description: 'Локации, места и окружение.', fields: ['name', 'region', 'description', 'prompt'] },
+  { key: 'event', name: 'Event', description: 'События, происшествия и условия раунда.', fields: ['name', 'description', 'effect', 'prompt'] },
+  { key: 'faction', name: 'Faction', description: 'Фракции, группы и стороны.', fields: ['name', 'description', 'ability', 'prompt'] },
+  { key: 'resource', name: 'Resource', description: 'Ресурсы, жетоны и игровые материалы.', fields: ['name', 'rarity', 'description', 'prompt'] },
+  { key: 'custom', name: 'Custom', description: 'Произвольный тип карточек.', fields: ['name', 'description', 'prompt'] },
+]
+
 interface CardItem {
   id: string
   cardNumber: string
   prompt: string
+  typeOverride?: CardTypeKey
   sourceRow: number
   status: CardStatus
   generationIds: string[]
@@ -41,6 +61,7 @@ type BatchState = Record<string, unknown> & {
   referenceIds?: string[]
   targetWidth?: number
   targetHeight?: number
+  cardType?: CardTypeKey
 }
 
 interface Batch {
@@ -93,11 +114,12 @@ const importMode = ref<'new' | 'diff'>('new')
 const importedRows = ref<SpreadsheetRow[]>([])
 const importedFileName = ref('')
 const rejectedOpen = ref(true)
+const batchTypeFilter = ref<CardTypeKey | 'all'>('all')
 let saveQueue: Promise<void> = Promise.resolve()
 
 const activeBatch = computed(() => batches.value.find(item => item.id === activeBatchId.value))
 const columns = computed(() => rows.value.length ? Object.keys(rows.value[0]) : [])
-const activeCards = computed(() => activeBatch.value?.cards.filter(card => !card.archived) ?? [])
+const activeCards = computed(() => activeBatch.value?.cards.filter(card => !card.archived && (batchTypeFilter.value === 'all' || resolvedCardType(card) === batchTypeFilter.value)) ?? [])
 const archivedCards = computed(() => activeBatch.value?.cards.filter(card => card.archived) ?? [])
 const completed = computed(() => activeCards.value.filter(card => ['succeeded', 'finalized'].includes(card.status)).length)
 const selectedCount = computed(() => activeCards.value.filter(card => card.selectedGenerationId).length)
@@ -131,6 +153,14 @@ function now() { return new Date().toISOString() }
 function uid(prefix: string) { return prefix + '_' + crypto.randomUUID() }
 function parsedReferenceIds(text: string) { return text.split(/[\s,]+/).map(x => x.trim()).filter(Boolean) }
 
+function cardTypeDefinition(key?: CardTypeKey) {
+  return CARD_TYPES.find(type => type.key === key) || CARD_TYPES.find(type => type.key === 'custom')!
+}
+
+function resolvedCardType(card: CardItem): CardTypeKey {
+  return card.typeOverride || activeBatch.value?.cardType || 'custom'
+}
+
 function batchState(batch: Batch): BatchState {
   return {
     cards: batch.cards,
@@ -138,6 +168,7 @@ function batchState(batch: Batch): BatchState {
     referenceIds: batch.referenceIds,
     targetWidth: batch.targetWidth,
     targetHeight: batch.targetHeight,
+    cardType: batch.cardType || 'custom',
   }
 }
 
@@ -245,6 +276,8 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       prompt_revision: card.promptRevision,
       asset_filename: filenameFor(card, 'pending', false, version),
       batch_name: activeBatch.value?.name,
+      card_type: resolvedCardType(card),
+      card_type_fields: cardTypeDefinition(resolvedCardType(card)).fields,
       version,
       target_width: activeBatch.value?.targetWidth,
       target_height: activeBatch.value?.targetHeight,
@@ -449,6 +482,7 @@ async function createBatch() {
     referenceIds: parsedReferenceIds(referenceIdsText.value),
     targetWidth: targetWidth.value,
     targetHeight: targetHeight.value,
+    cardType: 'custom',
   }
   try {
     const remote = await cardBatchApi.create(routeProjectId.value, {
@@ -522,6 +556,17 @@ function updateBatchSettings() {
   save()
 }
 
+function setBatchType(value: CardTypeKey) {
+  if (!activeBatch.value) return
+  activeBatch.value.cardType = value
+  save()
+}
+
+function setCardType(card: CardItem, value: CardTypeKey) {
+  card.typeOverride = value === (activeBatch.value?.cardType || 'custom') ? undefined : value
+  persistCard(card)
+}
+
 function setCardRecipe(card: CardItem, value: string) {
   card.recipeId = value || undefined
   persistCard(card)
@@ -550,6 +595,8 @@ function manifest() {
     projectId: routeProjectId.value,
     name: batch.name,
     sourceFile: batch.sourceFile,
+    cardType: batch.cardType || 'custom',
+    cardTypeName: cardTypeDefinition(batch.cardType).name,
     exportedAt: now(),
     cards: batch.cards.filter(c => c.status === 'finalized' && c.finalizedGenerationId).map(c => ({
       cardNumber: c.cardNumber,
@@ -613,6 +660,7 @@ onMounted(async () => {
         referenceIds: state.referenceIds,
         targetWidth: state.targetWidth,
         targetHeight: state.targetHeight,
+        cardType: state.cardType || 'custom',
       }
     })
     if (!batches.value.length) {
@@ -639,6 +687,7 @@ onMounted(async () => {
       referenceIdsText.value = (first.referenceIds || []).join(', ')
       targetWidth.value = first.targetWidth
       targetHeight.value = first.targetHeight
+      if (!first.cardType) first.cardType = 'custom'
     }
     const remoteFirst = remote.batches[0]
     cardColumn.value = String(remoteFirst?.mapping.card_number_column ?? '')
@@ -713,6 +762,7 @@ onMounted(async () => {
     <section class="panel" v-if="activeBatch">
       <h2>2. Production settings</h2>
       <div class="settings">
+        <label>Card type<select :value="activeBatch.cardType || 'custom'" @change="setBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
         <label>Batch Recipe<select v-model="recipeId" @change="updateBatchSettings"><option value="">Provider default</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
         <label>Reference asset IDs<input :value="referenceIdsText" placeholder="asset/reference IDs, comma separated" @change="referenceIdsText = ($event.target as HTMLInputElement).value; updateBatchSettings"></label>
         <label>Target width<input v-model.number="targetWidth" type="number" min="1" @change="updateBatchSettings"></label>
@@ -722,11 +772,11 @@ onMounted(async () => {
     </section>
 
     <section class="panel">
-      <h2>3. Batch history</h2>
+      <div class="history-head"><h2>3. Batch history</h2><label>Filter type<select v-model="batchTypeFilter"><option value="all">All types</option><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label></div>
       <div class="batch-list">
         <button v-for="batch in batches" :key="batch.id" type="button" :class="{ active: batch.id === activeBatchId }" @click="selectBatch(batch.id)">
           <strong>{{ batch.name }}</strong>
-          <span>{{ batch.cards.filter(c => !c.archived).length }} cards · {{ batch.cards.filter(c => c.status === 'finalized').length }} finalized</span>
+          <span>{{ cardTypeDefinition(batch.cardType).name }} · {{ batch.cards.filter(c => !c.archived).length }} cards · {{ batch.cards.filter(c => c.status === 'finalized').length }} finalized</span>
         </button>
       </div>
     </section>
@@ -744,6 +794,7 @@ onMounted(async () => {
           <small>Source row {{ card.sourceRow }} · prompt revision {{ card.promptRevision }}</small>
 
           <div class="card-settings">
+            <label>Card type<select :value="card.typeOverride || activeBatch.cardType || 'custom'" @change="setCardType(card, ($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
             <label>Recipe<select :value="card.recipeId || ''" @change="setCardRecipe(card, ($event.target as HTMLSelectElement).value)"><option value="">Batch default</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
             <label>References<input :value="(card.referenceIds || []).join(', ')" placeholder="override reference IDs" @change="setCardReferences(card, ($event.target as HTMLInputElement).value)"></label>
           </div>
@@ -828,6 +879,8 @@ th,td { border-bottom:1px solid #eee; text-align:left; padding:7px; }
 .dashboard div { padding:12px; background:#f5f5f5; border-radius:8px; text-align:center; }
 .dashboard strong,.dashboard span { display:block; }
 .dashboard strong { font-size:22px; }
+.history-head { display:flex; justify-content:space-between; gap:12px; align-items:end; margin-bottom:10px; }
+.history-head label { display:flex; flex-direction:column; gap:4px; font-size:12px; }
 .batch-list { display:flex; gap:8px; flex-wrap:wrap; }
 .batch-list button { display:flex; flex-direction:column; align-items:flex-start; gap:3px; }
 .batch-list button.active { outline:2px solid #222; }
