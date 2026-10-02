@@ -436,6 +436,8 @@ export interface VariantSource {
     resolved_workflow_hash?: string | null
     model_version?: string | null
     final_parameters?: Record<string, unknown>
+    card_type?: string
+    card_template_id?: string
   }
 }
 
