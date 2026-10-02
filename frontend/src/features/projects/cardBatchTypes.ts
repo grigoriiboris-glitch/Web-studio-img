@@ -47,8 +47,8 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     key: 'role', name: 'Role / Character', version: 1,
     description: 'Персонажи, роли, классы и способности.',
     fields: [
-      { key: 'name', label: 'Name', type: 'text', required: true, aliases: ['card name', 'название', 'имя'] },
-      { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
+      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
+      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['prompt', 'промт', 'image prompt'] },
     ],
     promptInstructions: 'Board-game character illustration. Make the character identity, silhouette and readable role cues clear.',
