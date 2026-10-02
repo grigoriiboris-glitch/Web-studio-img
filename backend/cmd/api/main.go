@@ -14,6 +14,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/brief"
+	"github.com/oleg3190/Web-studio-img/backend/internal/cardbatch"
 	"github.com/oleg3190/Web-studio-img/backend/internal/branches"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assistant"
 	"github.com/oleg3190/Web-studio-img/backend/internal/composition"
@@ -82,6 +83,7 @@ func main() {
 	var branchHandler *branches.Handler
 	var variantHandler *variants.Handler
 	var briefHandler *brief.Handler
+	var cardBatchHandler *cardbatch.Handler
 	var recipeHandler *recipes.Handler
 	var iterationHandler *iterations.Handler
 	var generationHandler *generation.Handler
@@ -179,6 +181,11 @@ func main() {
 		briefHandler, err = brief.NewHandler(projectDB, actionStore, provenanceStore, eventStore)
 		if err != nil {
 			logger.Error("creative brief handler initialization failed", "error", err)
+			os.Exit(1)
+		}
+		cardBatchHandler, err = cardbatch.NewHandler(projectDB)
+		if err != nil {
+			logger.Error("card batch handler initialization failed", "error", err)
 			os.Exit(1)
 		}
 
@@ -356,7 +363,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservabilityAndStatic(
 		logger, cfg.CORSOrigins, limiter, metrics, cfg.WebStaticDir,
 		projectHandler, iterationHandler, generationHandler, branchHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, variantHandler, recipeHandler, assetLibraryHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, cardBatchHandler, variantHandler, recipeHandler, assetLibraryHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
