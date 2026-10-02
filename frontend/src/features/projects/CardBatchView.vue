@@ -320,7 +320,7 @@ function rejectCard(card: CardItem) {
   }
   card.rejectReason = reason as RejectReason
   card.rejectComment = window.prompt('Reject comment (optional)', card.rejectComment || '') || undefined
-  card.nextIterationReason = card.rejectComment || reason.replaceAll('_', ' ')
+  card.nextIterationReason = card.rejectComment || reason.replace(/_/g, ' ')
   card.status = 'needs_revision'
   card.finalizedGenerationId = undefined
   persistCard(card)
