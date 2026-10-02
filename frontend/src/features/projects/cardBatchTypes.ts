@@ -70,7 +70,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     ],
     promptInstructions: 'Board-game item illustration. Keep the object as the unmistakable visual subject with a readable silhouette.',
     recipeKeywords: ['item', 'equipment', 'object', 'предмет'],
-    defaultTemplateId: 'standard-item', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
+    defaultTemplateId: 'standard-item', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
   },
   {
     key: 'world', name: 'World / Location', version: 1,
@@ -122,7 +122,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     ],
     promptInstructions: 'Board-game resource illustration. Keep the resource visually distinct and easy to identify at card size.',
     recipeKeywords: ['resource', 'token', 'material', 'ресурс'],
-    defaultTemplateId: 'standard-item',
+    defaultTemplateId: 'standard-item', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
   },
   {
     key: 'custom', name: 'Custom', version: 1,
