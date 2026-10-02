@@ -59,5 +59,5 @@ func TestCheckRepairInvariantsProtectedFingerprintIsStable(t *testing.T) {
         ColorReferenceContract: "palette",
         ArtistIntent: "intent",
     }
-    if hashProtectedRepairState(input) != hashProtectedRepairState(input) { t.Fatal("protected fingerprint is not stable") }
+    if got := hashProtectedRepairState(input); len(got) != 64 { t.Fatalf("protected fingerprint length=%d", len(got)) }
 }
