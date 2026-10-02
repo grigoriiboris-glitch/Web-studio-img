@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { assistantApi, type ComfyFlowPlan, type ComfyFlowStep } from '../../api/client'
+import { buildPiAgentIncident, parsePiAgentBridgeUrl } from './comfySelfHealing'
 
 type TestError = {
   code: string
@@ -67,6 +68,7 @@ const testRunAt = ref<string | null>(null)
 const repairHistory = ref<RepairHistoryItem[]>([])
 const repairStopped = ref(false)
 const repairing = ref(false)
+let activeRequestController: AbortController | null = null
 const formattedTestRunAt = computed(() => testRunAt.value ? new Date(testRunAt.value).toLocaleTimeString() : '')
 
 const stepCatalog: ArtistStep[] = [
@@ -164,6 +166,9 @@ async function validateFlow() {
   testRunAt.value = null
   error.value = ''
   repairHistory.value = []
+  activeRequestController?.abort()
+  const controller = new AbortController()
+  activeRequestController = controller
 
   let currentPlan = props.plan
   try {
@@ -188,6 +193,8 @@ async function validateFlow() {
           seed: currentPlan.parameters?.seed,
           parameters: currentPlan.parameters,
         },
+        undefined,
+        controller.signal,
       )
       const result = response.result
       const messages = result.errors
@@ -237,23 +244,38 @@ async function validateFlow() {
           flow_steps: currentPlan.flow_steps,
           max_attempts: 1,
         },
+        undefined,
+        controller.signal,
       )
       currentPlan = repair.result
       emit('update:plan', currentPlan)
       repairing.value = false
     }
   } catch (e) {
+    if (controller.signal.aborted || repairStopped.value) {
+      const last = repairHistory.value[repairHistory.value.length - 1]
+      if (last?.status === 'testing' || last?.status === 'repairing') {
+        last.status = 'stopped'
+        last.action = 'Остановлено пользователем'
+      } else {
+        repairHistory.value.push({ attempt: repairHistory.value.length + 1, status: 'stopped', errors: [] })
+      }
+      error.value = ''
+      return
+    }
     error.value = e instanceof Error ? e.message : 'Не удалось выполнить тест ComfyUI'
     validation.value = null
     testRunAt.value = new Date().toISOString()
   } finally {
     repairing.value = false
     validating.value = false
+    if (activeRequestController === controller) activeRequestController = null
   }
 }
 
 function stopRepairLoop() {
   repairStopped.value = true
+  activeRequestController?.abort()
 }
 
 async function restoreRepairHistory() {
@@ -304,35 +326,17 @@ async function sendToPiAgent() {
     return
   }
   try {
-    const parsed = new URL(bridgeUrl)
-    if (!['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
-      throw new Error('pi.dev bridge должен быть доступен только через localhost')
-    }
+    const parsed = parsePiAgentBridgeUrl(bridgeUrl)
     const response = await fetch(parsed.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        protocol: 'comfyui-self-healing/v1',
-        projectId: props.projectId,
-        container: 'comfyui',
-        endpoint: 'local-comfyui',
-        testId: last.test_id ?? '',
-        category: last.category,
-        errors: last.errors.map(item => ({ code: item.code, message: item.message, node: item.node, input: item.input, recoverable: item.recoverable })),
-        workflowFingerprint: props.plan.flow_fingerprint,
-        allowedActions: {
-          safe: ['inspect_runtime', 'read_logs', 'read_status'],
-          repair: ['edit_allowlisted_workflow', 'edit_allowlisted_config', 'restart_comfyui', 'retest'],
-          dangerous: [],
-        },
-        policy: {
-          arbitraryShell: false,
-          hostFilesystemAccess: false,
-          volumeDeletion: false,
-          imageReplacement: false,
-          networkMutation: false,
-        },
-      }),
+      body: JSON.stringify(buildPiAgentIncident(
+        props.projectId,
+        last.test_id ?? '',
+        last.category ?? 'unknown',
+        last.errors,
+        props.plan.flow_fingerprint ?? '',
+      )),
     })
     if (!response.ok) throw new Error('pi.dev bridge вернул HTTP ' + response.status)
     error.value = ''

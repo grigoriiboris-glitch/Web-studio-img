@@ -2,6 +2,7 @@ package comfyui
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -39,3 +40,47 @@ func TestProviderTestWorkflowDoesNotNeedGenerationStore(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if result.PromptID != "smoke-1" { t.Fatalf("prompt id=%q", result.PromptID) }
 }
+
+func TestProviderTestWorkflowInterruptsPromptOnTimeout(t *testing.T) {
+	interrupted := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/prompt":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"prompt_id":"timeout-1"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/history/timeout-1":
+			<-r.Context().Done()
+		case r.Method == http.MethodPost && r.URL.Path == "/interrupt":
+			interrupted <- struct{}{}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := newClient(server.URL, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &Provider{
+		client: client,
+		cfg: Config{Timeout: 20 * time.Millisecond, PollEvery: time.Millisecond},
+	}
+	_, err = provider.TestWorkflow(context.Background(), generation.Request{
+		Prompt: "timeout test",
+		Parameters: map[string]any{},
+		ResolvedWorkflow: map[string]any{"1": map[string]any{"class_type": "LoadImage", "inputs": map[string]any{}}},
+		IdempotencyKey: "timeout-key",
+	})
+	if err == nil || !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("expected provider-unavailable timeout, got %v", err)
+	}
+	select {
+	case <-interrupted:
+	case <-time.After(time.Second):
+		t.Fatal("expected ComfyUI interrupt for timed-out test prompt")
+	}
+}
+
