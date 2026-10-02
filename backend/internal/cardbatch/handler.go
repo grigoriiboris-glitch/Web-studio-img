@@ -1,6 +1,7 @@
 package cardbatch
 
 import (
+  "context"
   "database/sql"
   "encoding/json"
   "errors"
@@ -90,7 +91,6 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
   projectID, ok := h.authProject(w, r); if !ok { return }
   id, err := uuid.Parse(r.PathValue("batch_id")); if err != nil { writeError(w, 400, "invalid_batch_id", "invalid batch id"); return }
   item, err := h.load(r.Context(), projectID, id)
-  if err == nil { _ = json.Unmarshal(mappingBytes, &item.Mapping); _ = json.Unmarshal(stateBytes, &item.State) }
   if errors.Is(err, sql.ErrNoRows) { writeError(w, 404, "card_batch_not_found", "card batch not found"); return }
   if err != nil { writeError(w, 500, "card_batch_get_failed", "could not load card batch"); return }
   writeJSON(w, 200, item)
@@ -156,6 +156,16 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
   if err != nil { writeError(w, 500, "card_batch_delete_failed", "could not delete card batch"); return }
   if n, _ := result.RowsAffected(); n == 0 { writeError(w, 404, "card_batch_not_found", "card batch not found"); return }
   w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) load(ctx context.Context, projectID, id uuid.UUID) (Batch, error) {
+  var item Batch
+  var mapping, state []byte
+  err := h.db.QueryRowContext(ctx, "SELECT id,project_id,user_id,name,source_file,sheet,mapping,state,version,created_at,updated_at FROM card_batches WHERE id=$1 AND project_id=$2", id, projectID).Scan(scanArgs(&item, &mapping, &state)...)
+  if err != nil { return Batch{}, err }
+  if err := json.Unmarshal(mapping, &item.Mapping); err != nil { return Batch{}, err }
+  if err := json.Unmarshal(state, &item.State); err != nil { return Batch{}, err }
+  return item, nil
 }
 
 type scanner interface{ Scan(...any) error }
