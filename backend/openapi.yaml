@@ -444,6 +444,37 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Variant'}
+  /projects/{project_id}/variant-sets/{set_id}/variants/{variant_id}/regenerate:
+    post:
+      operationId: regenerateVariant
+      summary: Regenerate a variant using the original generation context and add it to the same Variant Set
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: set_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: variant_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '202':
+          description: Regeneration queued and linked to the same Variant Set
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [generation, variant]
+                properties:
+                  generation: {$ref: '#/components/schemas/Generation'}
+                  variant: {$ref: '#/components/schemas/Variant'}
+        '409':
+          description: Idempotency or source-generation conflict
   /projects/{project_id}/variant-sets/{set_id}/iterations:
     post:
       operationId: createIterationFromVariants
