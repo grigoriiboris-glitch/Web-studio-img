@@ -712,8 +712,16 @@ func criticVisualFeatures(stats similarity.Stats) map[string]any {
 
 
 func normalizeFlowSteps(raw any) []map[string]any {
-	items, ok := raw.([]any)
-	if !ok { return nil }
+	var items []any
+	switch values := raw.(type) {
+	case []any:
+		items = values
+	case []map[string]any:
+		items = make([]any, len(values))
+		for i, value := range values { items[i] = value }
+	default:
+		return nil
+	}
 	out := make([]map[string]any, 0, len(items))
 	seen := map[string]bool{}
 	for index, item := range items {
