@@ -88,3 +88,22 @@ func TestValidateSelectionResult(t *testing.T) {
     })
   }
 }
+
+func TestMutationRequestHashIsDeterministic(t *testing.T) {
+  payload := map[string]any{
+    "project_id": "project-1",
+    "generation_ids": []string{"g1", "g2"},
+    "name": "Candidates",
+  }
+  first := mutationRequestHash("create_set", payload)
+  second := mutationRequestHash("create_set", payload)
+  if first != second {
+    t.Fatalf("hash changed between identical requests: %s != %s", first, second)
+  }
+  if len(first) != 64 {
+    t.Fatalf("expected SHA-256 hex hash, got %q", first)
+  }
+  if first == mutationRequestHash("create_set", map[string]any{"project_id": "project-1", "generation_ids": []string{"g1", "g3"}, "name": "Candidates"}) {
+    t.Fatal("different request payload produced the same hash")
+  }
+}
