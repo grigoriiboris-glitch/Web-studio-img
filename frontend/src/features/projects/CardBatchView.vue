@@ -235,7 +235,7 @@ function effectiveDimensions(card: CardItem) {
     height: card.targetHeight || activeBatch.value?.targetHeight || defaults.height,
     aspectRatio: card.aspectRatio || activeBatch.value?.aspectRatio || defaults.aspectRatio,
     negativePrompt: card.negativePrompt || activeBatch.value?.negativePrompt || defaults.negativePrompt,
-    referenceIds: card.referenceIds?.length ? card.referenceIds : (activeBatch.value?.referenceIds?.length ? activeBatch.value.referenceIds : defaults.referenceIds),
+    referenceIds: card.referenceIds !== undefined ? card.referenceIds : (activeBatch.value?.referenceIds !== undefined ? activeBatch.value.referenceIds : defaults.referenceIds),
     generationParameters: defaults.generationParameters,
   }
 }
