@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"sort"
 )
 
 func flowFingerprint(steps []map[string]any) string {
