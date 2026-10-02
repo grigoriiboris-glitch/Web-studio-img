@@ -105,7 +105,7 @@ func TestClientRejectsComfyUINodeErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := newClient(server.URL, 5)
+	client, err := newClient(server.URL, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
