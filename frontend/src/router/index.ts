@@ -6,6 +6,7 @@ import VisualDNAV2View from '../features/projects/VisualDNAV2View.vue'
 import AssetLibraryView from '../features/library/AssetLibraryView.vue'
 import WorkflowView from '../features/projects/WorkflowView.vue'
 import VariantBoardView from '../features/projects/VariantBoardView.vue'
+import CardBatchView from '../features/projects/CardBatchView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,6 +18,7 @@ const router = createRouter({
     { path: '/projects/:projectId/visual-dna-v2', name: 'visual-dna-v2', component: VisualDNAV2View },
     { path: '/projects/:projectId/workflow', name: 'project-workflow', component: WorkflowView },
     { path: '/projects/:projectId/variants', name: 'variant-board', component: VariantBoardView },
+    { path: '/projects/:projectId/card-batch', name: 'card-batch', component: CardBatchView },
     { path: '/library', name: 'asset-library', component: AssetLibraryView },
     { path: '/:pathMatch(.*)*', redirect: '/projects' },
   ],
