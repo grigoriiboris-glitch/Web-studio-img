@@ -628,3 +628,34 @@ func criticVisualFeatures(stats similarity.Stats) map[string]any {
 		},
 	}
 }
+
+
+func normalizeFlowSteps(raw any) []map[string]any {
+	items, ok := raw.([]any)
+	if !ok { return nil }
+	out := make([]map[string]any, 0, len(items))
+	seen := map[string]bool{}
+	for index, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok { continue }
+		id, _ := m["id"].(string)
+		if id != "sketch" && id != "reference" && id != "structure" && id != "final" { continue }
+		if seen[id] { continue }
+		seen[id] = true
+		enabled, _ := m["enabled"].(bool)
+		out = append(out, map[string]any{"id": id, "enabled": enabled, "order": index})
+	}
+	return out
+}
+
+func formatFlowSteps(steps []map[string]any) string {
+	parts := make([]string, 0, len(steps))
+	for _, step := range steps {
+		id, _ := step["id"].(string)
+		enabled, _ := step["enabled"].(bool)
+		state := "disabled"
+		if enabled { state = "enabled" }
+		parts = append(parts, fmt.Sprintf("%d. %s (%s)", len(parts)+1, id, state))
+	}
+	return strings.Join(parts, "\n")
+}
