@@ -83,6 +83,7 @@ func (p *Provider) TestWorkflow(ctx context.Context, req generation.Request) (Te
 			if (history.Status != nil && history.Status.Completed) || len(history.Outputs) > 0 {
 				return TestResult{PromptID: response.PromptID, Duration: time.Since(started)}, nil
 			}
+		}
 
 		timer := time.NewTimer(p.cfg.PollEvery)
 		select {
