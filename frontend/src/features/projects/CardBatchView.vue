@@ -36,7 +36,7 @@ interface CardItem {
   prompt: string
   typeOverride?: CardTypeKey
   fields?: Record<string, string>
-  templateId?: string
+  templateOverrideId?: string
   cardTypeVersion?: number
   sourceRow: number
   status: CardStatus
@@ -176,7 +176,7 @@ function cardValidation(card: CardItem) {
 }
 
 function resolvedTemplate(card: CardItem) {
-  return templateForType(resolvedCardType(card), card.templateId)
+  return templateForType(resolvedCardType(card), card.templateOverrideId || activeBatch.value?.templateId)
 }
 
 function typeRecipe(type: CardTypeKey) {
@@ -290,6 +290,8 @@ async function waitForGeneration(card: CardItem, generationId: string) {
 }
 
 async function generateCard(card: CardItem, prompt = card.prompt) {
+  const validation = cardValidation(card)
+  if (validation.length) throw new Error('Card #' + card.cardNumber + ': ' + validation.map(item => item.message).join(' '))
   card.status = 'running'
   card.error = undefined
   persistCard(card)
@@ -620,7 +622,7 @@ function setBatchType(value: CardTypeKey) {
   for (const card of activeBatch.value.cards) {
     if (!card.typeOverride) {
       card.cardTypeVersion = cardTypeDefinition(value).version
-      card.templateId = templateForType(value).id
+      card.templateOverrideId = undefined
       card.fields = card.fields || {}
     }
   }
@@ -631,12 +633,18 @@ function setCardType(card: CardItem, value: CardTypeKey) {
   card.typeOverride = value === (activeBatch.value?.cardType || 'custom') ? undefined : value
   const type = resolvedCardType(card)
   card.cardTypeVersion = cardTypeDefinition(type).version
-  card.templateId = templateForType(type).id
+  card.templateOverrideId = undefined
   persistCard(card)
 }
 
 function setCardRecipe(card: CardItem, value: string) {
   card.recipeId = value || undefined
+  persistCard(card)
+}
+
+function setCardTemplate(card: CardItem, value: string) {
+  const batchTemplate = activeBatch.value?.templateId || templateForType(activeBatch.value?.cardType || 'custom').id
+  card.templateOverrideId = value && value !== batchTemplate ? value : undefined
   persistCard(card)
 }
 
