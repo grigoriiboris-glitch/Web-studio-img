@@ -574,8 +574,8 @@ watch(() => props.plan.workflow, () => {
       <el-button
         v-if="validation && validation.category && validation.category !== 'workflow' && validation.repair?.strategy === 'pi_agent'"
         type="warning"
-        @click="sendToPiAgent"
         :loading="piRepairing"
+        @click="sendToPiAgent"
       >
         🛠 {{ piRepairing ? 'pi.dev исправляет…' : 'Передать локальному pi.dev' }}
       </el-button>
