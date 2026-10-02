@@ -63,3 +63,40 @@ func TestMaterialRecommendationApplyIsDecisionOnly(t *testing.T) {
 		t.Fatalf("unexpected material expected effect: %#v", recommendation["expected_effect"])
 	}
 }
+
+
+func TestNormalizeFlowStepsPreservesArtistOrderAndEnabledState(t *testing.T) {
+	steps := normalizeFlowSteps([]any{
+		map[string]any{"id":"reference","enabled":false},
+		map[string]any{"id":"sketch","enabled":true},
+		map[string]any{"id":"structure","enabled":true},
+		map[string]any{"id":"final","enabled":true},
+	})
+	if len(steps) != 4 { t.Fatalf("expected 4 steps, got %d", len(steps)) }
+	if steps[0]["id"] != "reference" || steps[0]["enabled"] != false {
+		t.Fatalf("unexpected first step: %#v", steps[0])
+	}
+	if steps[1]["id"] != "sketch" || steps[1]["order"] != 1 {
+		t.Fatalf("unexpected second step: %#v", steps[1])
+	}
+}
+
+func TestNormalizeFlowStepsRejectsUnknownAndDuplicateSteps(t *testing.T) {
+	steps := normalizeFlowSteps([]any{
+		map[string]any{"id":"unknown","enabled":true},
+		map[string]any{"id":"sketch","enabled":true},
+		map[string]any{"id":"sketch","enabled":false},
+	})
+	if len(steps) != 1 || steps[0]["id"] != "sketch" || steps[0]["enabled"] != true {
+		t.Fatalf("unexpected normalized steps: %#v", steps)
+	}
+}
+
+func TestFormatFlowStepsIsDeterministic(t *testing.T) {
+	got := formatFlowSteps([]map[string]any{
+		{"id":"sketch","enabled":true,"order":0},
+		{"id":"reference","enabled":false,"order":1},
+	})
+	want := "1. sketch (enabled)\n2. reference (disabled)"
+	if got != want { t.Fatalf("got %q, want %q", got, want) }
+}
