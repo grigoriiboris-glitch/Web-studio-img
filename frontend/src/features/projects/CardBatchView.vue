@@ -732,7 +732,7 @@ function setBatchType(value: CardTypeKey) {
   for (const card of activeBatch.value.cards) {
     if (!card.typeOverride) {
       card.cardTypeVersion = cardTypeDefinition(value).version
-      card.templateOverrideId = undefined
+      if (card.templateOverrideId && !templatesFor(value).some(template => template.id === card.templateOverrideId)) card.templateOverrideId = undefined
       card.fields = card.fields || {}
     }
   }
@@ -803,7 +803,7 @@ function manifest() {
       aspectRatio: effectiveDimensions(c).aspectRatio,
       negativePrompt: effectiveDimensions(c).negativePrompt,
       referenceIds: c.recipeVersion || batch.recipeVersion,
-      referenceIds: c.referenceIds?.length ? c.referenceIds : batch.referenceIds || [],
+      referenceIds: c.referenceIds !== undefined ? c.referenceIds : batch.referenceIds || [],
       sourceRow: c.sourceRow,
       rejectReason: c.rejectReason,
       cardFields: c.fields || {},
