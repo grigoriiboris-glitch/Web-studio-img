@@ -290,7 +290,9 @@ async function regenerate(card: CardItem, fromReject = false) {
   error.value = ''
   try {
     const prompt = fromReject && card.nextIterationReason
-      ? card.prompt + '\n\nRevision requirement: ' + card.nextIterationReason
+      ? card.prompt + '
+
+Revision requirement: ' + card.nextIterationReason
       : card.prompt
     await generateCard(card, prompt)
   } catch (e) {
@@ -497,7 +499,17 @@ function applyImportDiff() {
   importedRows.value = []
 }
 
-function selectBatch(id: string) {\n  activeBatchId.value = id\n  const batch = batches.value.find(item => item.id === id)\n  if (!batch) return\n  recipeId.value = batch.recipeId || ''\n  referenceIdsText.value = (batch.referenceIds || []).join(', ')\n  targetWidth.value = batch.targetWidth\n  targetHeight.value = batch.targetHeight\n}\n\nfunction restoreArchived(card: CardItem) {
+function selectBatch(id: string) {
+  activeBatchId.value = id
+  const batch = batches.value.find(item => item.id === id)
+  if (!batch) return
+  recipeId.value = batch.recipeId || ''
+  referenceIdsText.value = (batch.referenceIds || []).join(', ')
+  targetWidth.value = batch.targetWidth
+  targetHeight.value = batch.targetHeight
+}
+
+function restoreArchived(card: CardItem) {
   card.archived = false
   card.status = card.selectedGenerationId ? 'succeeded' : 'draft'
   persistCard(card)
