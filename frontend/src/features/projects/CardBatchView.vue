@@ -39,6 +39,7 @@ interface CardItem {
   cardNumber: string
   prompt: string
   typeOverride?: CardTypeKey
+  fields?: Record<string, string>
   sourceRow: number
   status: CardStatus
   generationIds: string[]
@@ -157,6 +158,30 @@ function parsedReferenceIds(text: string) { return text.split(/[\s,]+/).map(x =>
 
 function cardTypeDefinition(key?: CardTypeKey) {
   return CARD_TYPES.find(type => type.key === key) || CARD_TYPES.find(type => type.key === 'custom')!
+}
+
+function fieldsFromRow(row: SpreadsheetRow): Record<string, string> {
+  const result: Record<string, string> = {}
+  const type = cardTypeDefinition(newBatchType.value)
+  for (const field of type.fields) {
+    if (field === 'prompt' || field === 'name') continue
+    const column = Object.keys(row).find(key => key.trim().toLowerCase() === field.toLowerCase())
+    const value = column ? String(row[column] ?? '').trim() : ''
+    if (value) result[field] = value
+  }
+  return result
+}
+
+function fieldsFromRowForCard(row: SpreadsheetRow, card: CardItem): Record<string, string> {
+  const result: Record<string, string> = {}
+  const type = cardTypeDefinition(resolvedCardType(card))
+  for (const field of type.fields) {
+    if (field === 'prompt' || field === 'name') continue
+    const column = Object.keys(row).find(key => key.trim().toLowerCase() === field.toLowerCase())
+    const value = column ? String(row[column] ?? '').trim() : ''
+    if (value) result[field] = value
+  }
+  return result
 }
 
 function resolvedCardType(card: CardItem): CardTypeKey {
@@ -286,6 +311,7 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       reference_ids: refs,
       rejection_reason: card.rejectReason,
       rejection_comment: card.rejectComment,
+      card_fields: card.fields || {},
     },
   }, 'card-batch-' + activeBatch.value?.id + '-' + card.id + '-v' + version)
   card.generationIds.push(generation.id)
@@ -449,6 +475,7 @@ function cardFromRow(row: SpreadsheetRow, sourceRow: number): CardItem {
     id: uid('card'),
     cardNumber: String(row[cardColumn.value] ?? '').trim(),
     prompt: String(row[promptColumn.value] ?? '').trim(),
+    fields: fieldsFromRow(row),
     sourceRow,
     status: 'pending',
     generationIds: [],
@@ -515,6 +542,7 @@ function applyImportDiff() {
   if (!batch || !diff) return
   for (const item of diff.changed) {
     item.card.prompt = item.newPrompt
+    item.card.fields = fieldsFromRowForCard(item.row, item.card)
     item.card.promptRevision++
     item.card.status = 'needs_revision'
     item.card.error = undefined
@@ -613,6 +641,7 @@ function manifest() {
       referenceIds: c.referenceIds?.length ? c.referenceIds : batch.referenceIds || [],
       sourceRow: c.sourceRow,
       rejectReason: c.rejectReason,
+      cardFields: c.fields || {},
     })),
   }
 }
@@ -799,7 +828,14 @@ onMounted(async () => {
           <textarea v-model="card.prompt" rows="4" @change="card.promptRevision++; card.status = 'needs_revision'; persistCard(card)" />
           <small>Source row {{ card.sourceRow }} · prompt revision {{ card.promptRevision }}</small>
 
-          <div class="card-settings">
+          <div v-if="cardTypeDefinition(resolvedCardType(card)).fields.filter(field => field !== 'prompt').length" class="card-data">
+        <label v-for="field in cardTypeDefinition(resolvedCardType(card)).fields.filter(field => field !== 'prompt')" :key="field">
+          {{ field }}
+          <input :value="card.fields?.[field] || ''" :placeholder="field + ' from spreadsheet'" @change="card.fields = { ...(card.fields || {}), [field]: ($event.target as HTMLInputElement).value }; persistCard(card)">
+        </label>
+      </div>
+
+      <div class="card-settings">
             <label>Card type<select :value="card.typeOverride || activeBatch.cardType || 'custom'" @change="setCardType(card, ($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
             <label>Recipe<select :value="card.recipeId || ''" @change="setCardRecipe(card, ($event.target as HTMLSelectElement).value)"><option value="">Batch default</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
             <label>References<input :value="(card.referenceIds || []).join(', ')" placeholder="override reference IDs" @change="setCardReferences(card, ($event.target as HTMLInputElement).value)"></label>
@@ -898,6 +934,8 @@ th,td { border-bottom:1px solid #eee; text-align:left; padding:7px; }
 .card.failed { border-color:#c66; }
 .card.finalized { border-color:#494; }
 .card-settings { display:grid; gap:8px; margin:10px 0; }
+.card-data { display:grid; grid-template-columns:repeat(2,minmax(120px,1fr)); gap:8px; margin:10px 0; padding:8px; background:#fafafa; border-radius:7px; }
+.card-data label { display:flex; flex-direction:column; gap:4px; font-size:12px; }
 .versions { display:grid; gap:6px; margin-top:10px; }
 .version { justify-content:space-between; padding:6px; background:#f7f7f7; border-radius:6px; }
 .checklist { display:grid; gap:3px; margin:10px 0; font-size:12px; }
