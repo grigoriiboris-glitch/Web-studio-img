@@ -137,7 +137,6 @@ const selectedCount = computed(() => activeCards.value.filter(card => card.selec
 const finalizedCount = computed(() => activeCards.value.filter(card => card.status === 'finalized').length)
 const pendingCards = computed(() => activeCards.value.filter(card => ['pending', 'draft', 'failed', 'needs_revision'].includes(card.status)))
 const rejectedCards = computed(() => activeCards.value.filter(card => card.rejectReason))
-const suggestedMapping = computed(() => mappingFor(newBatchType.value))
 const requiredUnmappedFields = computed(() => typeSchema(newBatchType.value).fields.filter(field => field.required && !columnMapping.value[field.key]).map(field => field.label))
 
 const importDiff = computed<ImportDiff | null>(() => {
@@ -178,6 +177,15 @@ function mappingFor(type: CardTypeKey) {
   return suggestColumnMapping(columns.value, type)
 }
 
+function setColumnMapping(field: string, value: string) {
+  if (value) columnMapping.value = { ...columnMapping.value, [field]: value }
+  else {
+    const next = { ...columnMapping.value }
+    delete next[field]
+    columnMapping.value = next
+  }
+}
+
 function setNewBatchType(value: CardTypeKey) {
   newBatchType.value = value
   columnMapping.value = { ...suggestColumnMapping(columns.value, value) }
@@ -185,10 +193,6 @@ function setNewBatchType(value: CardTypeKey) {
   if (columnMapping.value.prompt) promptColumn.value = columnMapping.value.prompt
 }
 
-function mappingLabel(fieldKey: string) {
-  const field = cardTypeDefinition(newBatchType.value).fields.find(item => item.key === fieldKey)
-  return field?.label || fieldKey
-}
 
 function cardValidation(card: CardItem) {
   return validateCardData(card.cardNumber, card.prompt, card.fields, resolvedCardType(card))
@@ -881,9 +885,13 @@ onMounted(async () => {
         </div>
         <div v-if="!activeBatch || importMode === 'new'" class="mapping-box">
           <strong>Automatic column mapping</strong>
-          <span v-for="field in typeSchema(newBatchType).fields" :key="field.key">
-            {{ field.label }} ← {{ columnMapping[field.key] || 'not mapped' }}
-          </span>
+          <label v-for="field in typeSchema(newBatchType).fields" :key="field.key">
+            {{ field.label }}
+            <select :value="columnMapping[field.key] || ''" @change="setColumnMapping(field.key, ($event.target as HTMLSelectElement).value)">
+              <option value="">Not mapped</option>
+              <option v-for="column in columns" :key="column" :value="column">{{ column }}</option>
+            </select>
+          </label>
           <small v-if="requiredUnmappedFields.length">Required but not mapped: {{ requiredUnmappedFields.join(', ') }}</small>
           <small v-else>All required fields are mapped.</small>
         </div>
