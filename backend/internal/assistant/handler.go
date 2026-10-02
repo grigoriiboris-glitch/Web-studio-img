@@ -175,11 +175,13 @@ func (h *Handler) inspectComfyUICapabilities(ctx context.Context,userID,projectI
 
 func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error) {
 	task,_:=in["task"].(string);task=strings.TrimSpace(task);if task==""{return nil,"",0,"",errors.New("task is required")}
+	flowSteps:=normalizeFlowSteps(in["flow_steps"])
+	if len(flowSteps)>0 { task += "\n\nArtist flow is authoritative. Compile the execution workflow to match this exact order and enabled state:\n" + formatFlowSteps(flowSteps) }
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
 	snapshot,err:=runtime.CapabilitySnapshot(ctx);if err!=nil{return nil,"",0,"",err}
 	currentWorkflow,_:=in["current_workflow"].(map[string]any)
 	if len(currentWorkflow)==0 {
-		if reusable,ok,findErr:=h.findReusableRecipe(ctx,userID,projectID,task,runtime);findErr!=nil{return nil,"",0,"",findErr}else if ok{return reusable,"Reused an existing recipe after validating it against the live ComfyUI runtime.",0.95,"The match is heuristic; a new flow is generated when no compatible recipe matches.",nil}
+		if reusable,ok,findErr:=h.findReusableRecipe(ctx,userID,projectID,task,runtime);findErr!=nil{return nil,"",0,"",findErr}else if ok{if len(flowSteps)>0 { reusable["flow_steps"]=flowSteps; reusable["compiled_flow_steps"]=flowSteps }; return reusable,"Reused an existing recipe after validating it against the live ComfyUI runtime.",0.95,"The match is heuristic; a new flow is generated when no compatible recipe matches.",nil}
 	}
 	if h.flowPlanner==nil||!h.flowPlanner.Enabled(){return nil,"",0,"",errors.New("flow planner is not configured; set FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL")}
 	validationErrors:=stringSlice(in["validation_errors"])
@@ -195,6 +197,7 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 		if validation.Compatible{
 			result:=flowPlanMap(plan)
 			result["source"]="ai_generated"
+			if len(flowSteps)>0 { result["flow_steps"]=flowSteps; result["compiled_flow_steps"]=flowSteps }
 			result["compatibility"]=map[string]any{"compatible":true,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}
 			result["runtime_retrieved_at"]=snapshot.RetrievedAt
 			return result,"AI generated a flow constrained to the live ComfyUI node and model catalog.",0.9,"The planner is retried with concrete runtime validation errors when needed.",nil
@@ -624,4 +627,35 @@ func criticVisualFeatures(stats similarity.Stats) map[string]any {
 			"y": stats.CenterY,
 		},
 	}
+}
+
+
+func normalizeFlowSteps(raw any) []map[string]any {
+	items, ok := raw.([]any)
+	if !ok { return nil }
+	out := make([]map[string]any, 0, len(items))
+	seen := map[string]bool{}
+	for index, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok { continue }
+		id, _ := m["id"].(string)
+		if id != "sketch" && id != "reference" && id != "structure" && id != "final" { continue }
+		if seen[id] { continue }
+		seen[id] = true
+		enabled, _ := m["enabled"].(bool)
+		out = append(out, map[string]any{"id": id, "enabled": enabled, "order": index})
+	}
+	return out
+}
+
+func formatFlowSteps(steps []map[string]any) string {
+	parts := make([]string, 0, len(steps))
+	for _, step := range steps {
+		id, _ := step["id"].(string)
+		enabled, _ := step["enabled"].(bool)
+		state := "disabled"
+		if enabled { state = "enabled" }
+		parts = append(parts, fmt.Sprintf("%d. %s (%s)", len(parts)+1, id, state))
+	}
+	return strings.Join(parts, "\n")
 }

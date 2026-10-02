@@ -515,7 +515,10 @@ async function createComfyFlow() {
   error.value = null
   try {
     syncComfyFlowAssets()
-    const response = await assistantApi.execute<ComfyFlowPlan>(projectId(), 'create_comfy_flow', { task: comfyFlowTask.value.trim() }, crypto.randomUUID())
+    const response = await assistantApi.execute<ComfyFlowPlan>(projectId(), 'create_comfy_flow', {
+      task: comfyFlowTask.value.trim(),
+      flow_steps: defaultComfyFlowSteps(),
+    }, crypto.randomUUID())
     comfyFlowPlan.value = response.result
     assistantActions.value.push(response.action)
   } catch (err) {
@@ -538,17 +541,51 @@ function flowInputAssets(): Record<string, string> {
   return assets
 }
 
+function defaultComfyFlowSteps() {
+  return [
+    { id: 'sketch', enabled: true, order: 0 },
+    { id: 'reference', enabled: true, order: 1 },
+    { id: 'structure', enabled: true, order: 2 },
+    { id: 'final', enabled: true, order: 3 },
+  ]
+}
+
+async function compileComfyFlow(plan: ComfyFlowPlan): Promise<ComfyFlowPlan> {
+  const flowSteps = plan.flow_steps?.length ? plan.flow_steps : defaultComfyFlowSteps()
+  const response = await assistantApi.execute<ComfyFlowPlan>(
+    projectId(),
+    'create_comfy_flow',
+    {
+      task: comfyFlowTask.value.trim() || plan.prompt || plan.description,
+      current_workflow: plan.workflow,
+      flow_steps: flowSteps,
+      inputs: plan.inputs,
+      parameters: plan.parameters,
+    },
+    crypto.randomUUID(),
+  )
+  assistantActions.value.push(response.action)
+  return response.result
+}
+
 async function runComfyFlow() {
-  const plan = comfyFlowPlan.value
+  let plan = comfyFlowPlan.value
   if (!plan) return
   comfyFlowRunning.value = true
   error.value = null
   try {
+    const requestedSteps = JSON.stringify(plan.flow_steps ?? defaultComfyFlowSteps())
+    const compiledSteps = JSON.stringify(plan.compiled_flow_steps ?? [])
+    if (requestedSteps !== compiledSteps) {
+      plan = await compileComfyFlow(plan)
+      comfyFlowPlan.value = plan
+    }
     const inputAssets = flowInputAssets()
     const missing = plan.inputs.filter(input => input.required && !inputAssets[input.id])
     if (missing.length) throw new Error('Required flow inputs are missing: ' + missing.map(item => item.label || item.id).join(', '))
     const response = await assistantApi.execute<Record<string, unknown>>(projectId(), 'run_comfy_flow', {
       workflow: plan.workflow,
+      flow_steps: plan.flow_steps ?? defaultComfyFlowSteps(),
       prompt: plan.prompt || comfyFlowTask.value.trim(),
       negative_prompt: plan.negative_prompt || undefined,
       parameters: plan.parameters,
@@ -568,11 +605,17 @@ async function runComfyFlow() {
 }
 
 async function saveComfyFlowAsRecipe() {
-  const plan = comfyFlowPlan.value
+  let plan = comfyFlowPlan.value
   if (!plan) return
   comfyFlowSaving.value = true
   error.value = null
   try {
+    const requestedSteps = JSON.stringify(plan.flow_steps ?? defaultComfyFlowSteps())
+    const compiledSteps = JSON.stringify(plan.compiled_flow_steps ?? [])
+    if (requestedSteps !== compiledSteps) {
+      plan = await compileComfyFlow(plan)
+      comfyFlowPlan.value = plan
+    }
     const assetInputs = flowInputAssets()
     const assetEntries = await Promise.all(
       Object.entries(assetInputs).map(async ([name, assetId]) => {
