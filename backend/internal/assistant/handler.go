@@ -191,7 +191,9 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 	}
 	if h.flowPlanner==nil||!h.flowPlanner.Enabled(){return nil,"",0,"",errors.New("flow planner is not configured; set FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL")}
 	validationErrors:=stringSlice(in["validation_errors"])
-	for attempt:=0;attempt<3;attempt++{
+	maxAttempts:=3
+	if requested,ok:=in["max_attempts"].(float64);ok&&int(requested)>=1&&int(requested)<=3{maxAttempts=int(requested)}
+	for attempt:=0;attempt<maxAttempts;attempt++{
 		plan,planErr:=h.flowPlanner.Plan(ctx,task,snapshot,validationErrors,currentWorkflow);if planErr!=nil{return nil,"",0,"",planErr}
 		assetRefs:=flowAssetRefs(plan.Workflow)
 		declared:=map[string]struct{}{}
