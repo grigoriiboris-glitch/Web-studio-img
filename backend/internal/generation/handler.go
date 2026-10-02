@@ -62,6 +62,48 @@ func NewHandlerWithRecipeResolver(store Store, queue Enqueuer, provider Provider
 
 func (h *Handler) SetPrivacyPolicy(policy ProjectPrivacyPolicy) { h.privacy = policy }
 
+func (h *Handler) Create(ctx context.Context, userID uuid.UUID, req Request) (Generation, bool, error) {
+	if h.privacy != nil {
+		allowed, mode, err := h.privacy.AllowsProvider(ctx, userID, req.ProjectID, h.provider.Name())
+		if err != nil {
+			return Generation{}, false, fmt.Errorf("privacy policy: %w", err)
+		}
+		if !allowed {
+			if h.projectEvents != nil {
+				_, _ = h.projectEvents.Append(ctx, userID, req.ProjectID, "generation.provider_rejected", "project", req.ProjectID, map[string]any{"provider": h.provider.Name(), "privacy_mode": mode})
+			}
+			return Generation{}, false, errors.New("selected provider is blocked by privacy mode")
+		}
+	}
+	item, created, err := h.store.Create(ctx, userID, req, h.provider.Name(), h.provider.Model())
+	if err != nil {
+		return Generation{}, false, err
+	}
+	if created {
+		task, err := NewTask(userID, item.ID)
+		if err != nil {
+			_ = h.store.MarkFailed(ctx, userID, item.ID, "queue_encode_failed", err.Error(), time.Now())
+			return Generation{}, false, fmt.Errorf("queue encode: %w", err)
+		}
+		if _, err := h.queue.Enqueue(ctx, task, asynq.MaxRetry(5), asynq.Timeout(6*time.Minute), asynq.Retention(24*time.Hour)); err != nil {
+			_ = h.store.MarkFailed(ctx, userID, item.ID, "queue_failed", err.Error(), time.Now())
+			return Generation{}, false, fmt.Errorf("queue: %w", err)
+		}
+		if h.projectEvents != nil {
+			_, _ = h.projectEvents.Append(ctx, userID, req.ProjectID, "generation.queued", "generation", item.ID, map[string]any{"provider": item.Provider, "model": item.Model})
+		}
+		if h.provenance != nil {
+			_, _ = h.provenance.Append(ctx, provenance.Event{
+				UserID: userID, ProjectID: req.ProjectID, IterationID: req.IterationID,
+				EntityType: "generation", EntityID: item.ID, Action: "generation_queued",
+				Payload: map[string]any{"provider": item.Provider, "model": item.Model, "prompt": item.Prompt, "negative_prompt": item.NegativePrompt, "seed": item.Seed, "aspect_ratio": item.AspectRatio, "parameters": item.Parameters, "reference_ids": item.ReferenceIDs, "provider_deterministic": item.ProviderDeterministic, "determinism_note": item.DeterminismNote},
+				CreatedAt: time.Now(),
+			})
+		}
+	}
+	return item, created, nil
+}
+
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/generations", h.create)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/generations/{generation_id}", h.get)
