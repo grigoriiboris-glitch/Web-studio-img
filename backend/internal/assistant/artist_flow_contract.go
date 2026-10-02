@@ -7,18 +7,6 @@ import (
 	"sort"
 )
 
-type artistFlowEvidence struct {
-	Kind string
-	Value string
-}
-
-type artistFlowStepContract struct {
-	ID       string
-	Enabled  bool
-	Order    int
-	Evidence []artistFlowEvidence
-}
-
 func flowFingerprint(steps []map[string]any) string {
 	normalized := normalizeFlowSteps(steps)
 	data, _ := json.Marshal(normalized)
@@ -80,37 +68,6 @@ func validateArtistFlowContract(expected []map[string]any, actual []map[string]a
 		}
 	}
 	return errors
-}
-
-func normalizeArtistFlowSteps(raw any) []map[string]any {
-	items, ok := raw.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]map[string]any, 0, len(items))
-	seen := map[string]bool{}
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		id, _ := m["id"].(string)
-		if id != "sketch" && id != "reference" && id != "structure" && id != "final" {
-			continue
-		}
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		enabled, _ := m["enabled"].(bool)
-		order, _ := m["order"].(float64)
-		evidence, _ := m["evidence"].([]any)
-		out = append(out, map[string]any{"id": id, "enabled": enabled, "order": int(order), "evidence": evidence})
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i]["order"].(int) < out[j]["order"].(int)
-	})
-	return out
 }
 
 func workflowContainsAsset(workflow map[string]any, name string) bool {
