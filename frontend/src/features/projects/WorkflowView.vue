@@ -272,7 +272,7 @@ onMounted(load)
   <main class="workflow">
     <div class="workflow-header">
       <h1>Project workflow</h1>
-      <a class="variant-link" :href="'/projects/' + projectId + '/variants'">Variant Board</a>
+      <div class="workflow-links"><a class="variant-link" :href="'/projects/' + projectId + '/variants'">Variant Board</a><a class="variant-link" :href="'/projects/' + projectId + '/card-batch'">Card Batch</a></div>
     </div>
     <p v-if="error" class="error">
       {{ error }}
