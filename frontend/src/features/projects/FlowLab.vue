@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { assistantApi, type ComfyFlowPlan, type ComfyFlowStep } from '../../api/client'
+import { buildPiAgentIncident, parsePiAgentBridgeUrl } from './comfySelfHealing'
 
 type TestError = {
   code: string
@@ -325,35 +326,17 @@ async function sendToPiAgent() {
     return
   }
   try {
-    const parsed = new URL(bridgeUrl)
-    if (!['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
-      throw new Error('pi.dev bridge должен быть доступен только через localhost')
-    }
+    const parsed = parsePiAgentBridgeUrl(bridgeUrl)
     const response = await fetch(parsed.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        protocol: 'comfyui-self-healing/v1',
-        projectId: props.projectId,
-        container: 'comfyui',
-        endpoint: 'local-comfyui',
-        testId: last.test_id ?? '',
-        category: last.category,
-        errors: last.errors.map(item => ({ code: item.code, message: item.message, node: item.node, input: item.input, recoverable: item.recoverable })),
-        workflowFingerprint: props.plan.flow_fingerprint,
-        allowedActions: {
-          safe: ['inspect_runtime', 'read_logs', 'read_status'],
-          repair: ['edit_allowlisted_workflow', 'edit_allowlisted_config', 'restart_comfyui', 'retest'],
-          dangerous: [],
-        },
-        policy: {
-          arbitraryShell: false,
-          hostFilesystemAccess: false,
-          volumeDeletion: false,
-          imageReplacement: false,
-          networkMutation: false,
-        },
-      }),
+      body: JSON.stringify(buildPiAgentIncident(
+        props.projectId,
+        last.test_id ?? '',
+        last.category,
+        last.errors,
+        props.plan.flow_fingerprint ?? '',
+      )),
     })
     if (!response.ok) throw new Error('pi.dev bridge вернул HTTP ' + response.status)
     error.value = ''
