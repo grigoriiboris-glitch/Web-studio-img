@@ -61,6 +61,7 @@ type VariantSource struct {
   CreatedAt time.Time `json:"created_at"`
   Width *int `json:"width,omitempty"`
   Height *int `json:"height,omitempty"`
+  Context map[string]any `json:"context,omitempty"`
 }
 
 type Variant struct {
@@ -117,7 +118,17 @@ func (h *Handler) sources(w http.ResponseWriter, r *http.Request) {
   userID, projectID, ok := h.authProject(w, r); if !ok { return }
   rows, err := h.db.QueryContext(r.Context(), `
     SELECT g.id,g.iteration_id,g.status,g.prompt,g.provider,g.model,g.created_at,
-           a.id,a.width,a.height
+           a.id,a.width,a.height,
+           jsonb_build_object(
+             'seed',g.seed,
+             'negative_prompt',g.negative_prompt,
+             'reference_ids',g.reference_ids,
+             'recipe_id',g.recipe_id,
+             'recipe_version',g.recipe_version,
+             'resolved_workflow_hash',g.resolved_workflow_hash,
+             'model_version',g.model_version,
+             'final_parameters',g.final_parameters
+           )
     FROM generations g
     LEFT JOIN assets a ON a.generation_id=g.id AND a.user_id=$2 AND a.lifecycle_status='active'
     WHERE g.project_id=$1 AND g.user_id=$2
@@ -130,13 +141,15 @@ func (h *Handler) sources(w http.ResponseWriter, r *http.Request) {
     var x VariantSource
     var iteration, asset sql.NullString
     var width,height sql.NullInt64
-    if err := rows.Scan(&x.GenerationID,&iteration,&x.Status,&x.Prompt,&x.Provider,&x.Model,&x.CreatedAt,&asset,&width,&height); err != nil {
+    var contextRaw []byte
+    if err := rows.Scan(&x.GenerationID,&iteration,&x.Status,&x.Prompt,&x.Provider,&x.Model,&x.CreatedAt,&asset,&width,&height,&contextRaw); err != nil {
       writeError(w,500,"variant_sources_failed","could not read generation source"); return
     }
     if iteration.Valid { if id,e:=uuid.Parse(iteration.String); e==nil { x.IterationID=&id } }
     if asset.Valid { if id,e:=uuid.Parse(asset.String); e==nil { x.AssetID=&id } }
     if width.Valid { v:=int(width.Int64); x.Width=&v }
     if height.Valid { v:=int(height.Int64); x.Height=&v }
+    _ = json.Unmarshal(contextRaw, &x.Context)
     out=append(out,x)
   }
   if err:=rows.Err();err!=nil { writeError(w,500,"variant_sources_failed","could not read generation sources"); return }
@@ -331,15 +344,25 @@ func (h *Handler) loadVariants(ctx context.Context,userID,projectID,setID uuid.U
   if filter!=""{ids:=strings.Split(filter,",");ph:=make([]string,0,len(ids));for i,id:=range ids{parsed,e:=uuid.Parse(strings.TrimSpace(id));if e!=nil{return nil,e};ph=append(ph,"$"+strconv.Itoa(i+4));args=append(args,parsed)};where=" AND v.id IN ("+strings.Join(ph,",")+")"}
   rows,err:=h.db.QueryContext(ctx,`
     SELECT v.id,v.variant_set_id,v.generation_id,v.asset_id,v.ordinal,v.decision,v.favorite,v.compare_selected,v.reject_reason,v.reject_comment,v.reject_severity,v.reject_reason_skipped,v.created_at,v.updated_at,
-           g.iteration_id,g.status,g.prompt,g.provider,g.model,g.created_at,a.width,a.height
+           g.iteration_id,g.status,g.prompt,g.provider,g.model,g.created_at,a.width,a.height,
+           jsonb_build_object(
+             'seed',g.seed,
+             'negative_prompt',g.negative_prompt,
+             'reference_ids',g.reference_ids,
+             'recipe_id',g.recipe_id,
+             'recipe_version',g.recipe_version,
+             'resolved_workflow_hash',g.resolved_workflow_hash,
+             'model_version',g.model_version,
+             'final_parameters',g.final_parameters
+           )
     FROM variants v JOIN generations g ON g.id=v.generation_id
     LEFT JOIN assets a ON a.id=v.asset_id AND a.user_id=$3 AND a.lifecycle_status='active'
     WHERE v.variant_set_id=$1 AND v.project_id=$2 AND v.user_id=$3`+where+` ORDER BY v.ordinal ASC`,args...)
   if err!=nil{return nil,err};defer func(){_=rows.Close()}()
   out:=make([]Variant,0)
-  for rows.Next(){var v Variant;var raw []byte;var source VariantSource;var iteration sql.NullString;var width,height sql.NullInt64
-    if err:=rows.Scan(&v.ID,&v.VariantSetID,&v.GenerationID,&v.AssetID,&v.Ordinal,&v.Decision,&v.Favorite,&v.CompareSelected,&raw,&v.RejectComment,&v.RejectSeverity,&v.RejectReasonSkipped,&v.CreatedAt,&v.UpdatedAt,&iteration,&source.Status,&source.Prompt,&source.Provider,&source.Model,&source.CreatedAt,&width,&height);err!=nil{return nil,err}
-    _=json.Unmarshal(raw,&v.RejectReason);if v.RejectReason==nil{v.RejectReason=[]string{}};if iteration.Valid{if id,e:=uuid.Parse(iteration.String);e==nil{source.IterationID=&id}};source.GenerationID=v.GenerationID;source.AssetID=v.AssetID;if width.Valid{v1:=int(width.Int64);source.Width=&v1};if height.Valid{v1:=int(height.Int64);source.Height=&v1};v.Source=&source;out=append(out,v)
+  for rows.Next(){var v Variant;var raw []byte;var source VariantSource;var iteration sql.NullString;var width,height sql.NullInt64;var contextRaw []byte
+    if err:=rows.Scan(&v.ID,&v.VariantSetID,&v.GenerationID,&v.AssetID,&v.Ordinal,&v.Decision,&v.Favorite,&v.CompareSelected,&raw,&v.RejectComment,&v.RejectSeverity,&v.RejectReasonSkipped,&v.CreatedAt,&v.UpdatedAt,&iteration,&source.Status,&source.Prompt,&source.Provider,&source.Model,&source.CreatedAt,&width,&height,&contextRaw);err!=nil{return nil,err}
+    _=json.Unmarshal(raw,&v.RejectReason);if v.RejectReason==nil{v.RejectReason=[]string{}};if iteration.Valid{if id,e:=uuid.Parse(iteration.String);e==nil{source.IterationID=&id}};source.GenerationID=v.GenerationID;source.AssetID=v.AssetID;if width.Valid{v1:=int(width.Int64);source.Width=&v1};if height.Valid{v1:=int(height.Int64);source.Height=&v1};_ = json.Unmarshal(contextRaw,&source.Context);v.Source=&source;out=append(out,v)
   }
   return out,rows.Err()
 }

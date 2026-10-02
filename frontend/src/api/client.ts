@@ -419,6 +419,16 @@ export interface VariantSource {
   created_at: string
   width?: number
   height?: number
+  context?: {
+    seed?: number | null
+    negative_prompt?: string
+    reference_ids?: string[]
+    recipe_id?: string | null
+    recipe_version?: number | null
+    resolved_workflow_hash?: string | null
+    model_version?: string | null
+    final_parameters?: Record<string, unknown>
+  }
 }
 
 export interface Variant {
