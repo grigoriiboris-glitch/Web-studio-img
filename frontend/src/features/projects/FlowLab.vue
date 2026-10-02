@@ -16,11 +16,7 @@ const props = defineProps<{
   inputAssets?: Record<string, string>
 }>()
 
-const emit = defineEmits<{
-  (event: 'update:plan', plan: ComfyFlowPlan): void
-  (event: 'run'): void
-  (event: 'save'): void
-}>()
+const emit = defineEmits(['update:plan', 'run', 'save'])
 
 const selectedNodeId = ref('')
 const nodeInputsText = ref('')
