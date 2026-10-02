@@ -55,7 +55,7 @@ func classifyComfyError(err error) (ComfyTestCategory, string, bool) {
 		return ComfyRuntimeCategory, "comfy_cancelled", true
 	case errors.Is(err, comfyui.ErrProviderInvalid):
 		if strings.Contains(lower, "model") || strings.Contains(lower, "checkpoint") || strings.Contains(lower, "vae") || strings.Contains(lower, "lora") { return ComfyModelCategory, "comfy_model", true }
-		if strings.Contains(lower, "node") || strings.Contains(lower, "input") || strings.Contains(lower, "workflow") || strings.Contains(lower, "connection") { return ComfyWorkflowCategory, "comfy_workflow", true }
+		if strings.Contains(lower, "node") || strings.Contains(lower, "input") || strings.Contains(lower, "connection") || strings.Contains(lower, "unknown class") { return ComfyWorkflowCategory, "comfy_workflow", true }
 		return ComfyRuntimeCategory, "comfy_execution", true
 	default:
 		return ComfyUnknownCategory, "comfy_unknown", false
