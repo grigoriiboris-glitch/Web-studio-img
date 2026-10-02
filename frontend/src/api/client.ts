@@ -492,6 +492,13 @@ export const variantBoardApi = {
       `/projects/${projectId}/variant-sets/${setId}/compare?${query}`,
     )
   },
+  regenerate: async (projectId: string, setId: string, variantId: string, idempotencyKey?: string) => {
+    const key = idempotencyKey ?? await buildIdempotencyKey("variant-regenerate-" + setId + "-" + variantId, { variantId })
+    return apiRequest<{ generation: Generation; variant: Variant }>(
+      `/projects/${projectId}/variant-sets/${setId}/variants/${variantId}/regenerate`,
+      { method: 'POST', headers: { "Idempotency-Key": key } },
+    )
+  },
   patchVariant: async (
     projectId: string,
     setId: string,
