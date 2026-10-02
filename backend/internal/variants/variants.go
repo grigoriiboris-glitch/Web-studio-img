@@ -22,7 +22,6 @@ import (
 )
 
 var ErrNotFound = errors.New("variant board resource not found")
-var ErrInvalidSelection = errors.New("invalid variant selection")
 
 func validateSelectionResult(selectedCount, requestedCount, branchCount int, parentValid, branchValid bool) error {
   if selectedCount != requestedCount {
@@ -178,14 +177,20 @@ func (h *Handler) listSets(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createSet(w http.ResponseWriter, r *http.Request) {
   userID,projectID,ok:=h.authProject(w,r);if !ok{return}
+  key:=strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+  if key=="" || len(key)>200 { writeError(w,400,"idempotency_key_required","Idempotency-Key is required and must be at most 200 characters"); return }
   var in CreateSetRequest
   if err:=decode(r,&in);err!=nil || strings.TrimSpace(in.Name)=="" || len([]rune(in.Name))>200 || len(in.GenerationIDs)<2 || len(in.GenerationIDs)>50{
     writeError(w,400,"invalid_variant_set","name and 2..50 generation_ids are required");return
   }
   seen:=map[uuid.UUID]bool{}
   for _,id:=range in.GenerationIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_variant_set","generation_ids must be unique valid UUIDs");return};seen[id]=true}
+  requestHash:=mutationRequestHash("create_set", map[string]any{"project_id":projectID,"name":strings.TrimSpace(in.Name),"generation_ids":in.GenerationIDs})
   tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"variant_set_create_failed","could not start transaction");return}
-  defer func(){_=tx.Rollback()}()
+  defer tx.Rollback()
+  replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,"create_set",key,requestHash)
+  if err!=nil { if errors.Is(err,ErrIdempotencyConflict) { writeError(w,409,"idempotency_conflict",err.Error()) } else { writeError(w,500,"variant_idempotency_failed","could not claim idempotency key") }; return }
+  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }()
   var set VariantSet;var metadata []byte
   err=tx.QueryRowContext(r.Context(), `
     INSERT INTO variant_sets(project_id,user_id,name,metadata) VALUES($1,$2,$3,'{}'::jsonb)
@@ -211,9 +216,11 @@ func (h *Handler) createSet(w http.ResponseWriter, r *http.Request) {
     `,v.ID,set.ID,projectID,userID,v.GenerationID,v.AssetID,v.Ordinal);err!=nil{writeError(w,500,"variant_set_create_failed","could not create variant");return}
     variants=append(variants,v)
   }
+  response,_:=json.Marshal(map[string]any{"variant_set":set,"variants":variants})
+  if err=storeVariantMutationResponse(r.Context(),tx,userID,"create_set",key,set.ID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
   if err:=tx.Commit();err!=nil{writeError(w,500,"variant_set_create_failed","could not commit variant set");return}
   h.audit(r.Context(),userID,projectID,set.ID,"VARIANT_SET_CREATED",map[string]any{"variant_set_id":set.ID,"generation_ids":in.GenerationIDs,"variant_count":len(variants)})
-  writeJSON(w,201,map[string]any{"variant_set":set,"variants":variants})
+  w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response)
 }
 
 func (h *Handler) getSet(w http.ResponseWriter,r *http.Request){
