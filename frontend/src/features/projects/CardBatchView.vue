@@ -181,7 +181,7 @@ function checklist(card: CardItem) {
     { key: 'success', label: 'Generation succeeded', status: generation?.status === 'succeeded' ? 'passed' : 'blocked' },
     { key: 'prompt', label: 'Prompt revision recorded', status: card.promptRevision > 0 ? 'passed' : 'blocked' },
     { key: 'provenance', label: 'Generation provenance', status: generation?.parameters?.card_batch_id === activeBatch.value?.id ? 'passed' : 'warning' },
-    { key: 'dimensions', label: 'Print dimensions', status: targetWidth.value && targetHeight.value ? (width >= targetWidth.value && height >= targetHeight.value ? 'passed' : 'blocked') : 'warning' },
+    { key: 'dimensions', label: 'Print dimensions', status: (activeBatch.value?.targetWidth && activeBatch.value?.targetHeight) ? (width >= activeBatch.value.targetWidth && height >= activeBatch.value.targetHeight ? 'passed' : 'blocked') : 'warning' },
     { key: 'identity', label: 'Stable card number', status: card.cardNumber ? 'passed' : 'blocked' },
   ] as Array<{ key: string; label: string; status: 'passed' | 'warning' | 'blocked' }>
 }
@@ -243,7 +243,7 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       card_number: card.cardNumber,
       source_row: card.sourceRow,
       prompt_revision: card.promptRevision,
-      asset_filename: filenameFor(card, 'pending', false).replace('v000', 'v' + version.toString().padStart(3, '0')),
+      asset_filename: filenameFor(card, 'pending', false, version),
       batch_name: activeBatch.value?.name,
       version,
       target_width: activeBatch.value?.targetWidth,
@@ -497,7 +497,7 @@ function applyImportDiff() {
   importedRows.value = []
 }
 
-function restoreArchived(card: CardItem) {
+function selectBatch(id: string) {\n  activeBatchId.value = id\n  const batch = batches.value.find(item => item.id === id)\n  if (!batch) return\n  recipeId.value = batch.recipeId || ''\n  referenceIdsText.value = (batch.referenceIds || []).join(', ')\n  targetWidth.value = batch.targetWidth\n  targetHeight.value = batch.targetHeight\n}\n\nfunction restoreArchived(card: CardItem) {
   card.archived = false
   card.status = card.selectedGenerationId ? 'succeeded' : 'draft'
   persistCard(card)
@@ -714,7 +714,7 @@ onMounted(async () => {
     <section class="panel">
       <h2>3. Batch history</h2>
       <div class="batch-list">
-        <button v-for="batch in batches" :key="batch.id" type="button" :class="{ active: batch.id === activeBatchId }" @click="activeBatchId = batch.id">
+        <button v-for="batch in batches" :key="batch.id" type="button" :class="{ active: batch.id === activeBatchId }" @click="selectBatch(batch.id)">
           <strong>{{ batch.name }}</strong>
           <span>{{ batch.cards.filter(c => !c.archived).length }} cards · {{ batch.cards.filter(c => c.status === 'finalized').length }} finalized</span>
         </button>
