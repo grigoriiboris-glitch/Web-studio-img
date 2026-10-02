@@ -333,7 +333,7 @@ async function sendToPiAgent() {
       body: JSON.stringify(buildPiAgentIncident(
         props.projectId,
         last.test_id ?? '',
-        last.category,
+        last.category ?? 'unknown',
         last.errors,
         props.plan.flow_fingerprint ?? '',
       )),
