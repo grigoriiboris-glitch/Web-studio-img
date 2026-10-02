@@ -78,6 +78,7 @@ interface Batch {
   cards: CardItem[]
   version?: number
   recipeId?: string
+  recipeVersion?: number
   referenceIds?: string[]
   targetWidth?: number
   targetHeight?: number
@@ -557,6 +558,7 @@ async function createBatch() {
     createdAt: now(),
     cards,
     recipeId: recipeId.value || undefined,
+    recipeVersion: recipes.value.find(recipe => recipe.id === recipeId.value)?.current_version,
     referenceIds: parsedReferenceIds(referenceIdsText.value),
     targetWidth: targetWidth.value,
     targetHeight: targetHeight.value,
