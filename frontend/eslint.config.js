@@ -53,6 +53,7 @@ export default [
       'src/features/projects/StudioView.vue',
       'src/features/projects/CreativeResourcesView.vue',
       'src/features/projects/VisualDNAV2View.vue',
+      'src/features/projects/FlowLab.vue',
     ],
     rules: {
       'vue/max-attributes-per-line': 'off',
