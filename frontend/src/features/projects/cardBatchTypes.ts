@@ -227,14 +227,26 @@ export function resolveDefaultRecipeId(recipes: Array<{ id: string; name: string
   const keywords = cardTypeDefinition(type).recipeKeywords
   if (!keywords.length) return undefined
   const normalized = (value: string) => normalizeHeader(value)
-  const match = recipes.find(recipe => keywords.some(keyword => normalized(recipe.name).includes(normalized(keyword))))
-  return match?.id
+  const scored = recipes.map(recipe => {
+    const name = normalized(recipe.name)
+    const score = Math.max(...keywords.map(keyword => {
+      const key = normalized(keyword)
+      if (name === key) return 100
+      if (name.startsWith(key + ' ')) return 80
+      if (name.includes(key)) return 60
+      return 0
+    }))
+    return { recipe, score }
+  }).filter(item => item.score > 0).sort((a, b) => b.score - a.score)
+  if (!scored.length) return undefined
+  if (scored.length > 1 && scored[0].score === scored[1].score) return undefined
+  return scored[0].recipe.id
 }
 
 export function assembleCardPrompt(prompt: string, type: CardTypeKey, fields: Record<string, string> | undefined): string {
   const definition = cardTypeDefinition(type)
   const context = definition.fields
-    .filter(field => field.key !== 'prompt' && field.key !== 'name' && fields?.[field.key])
+    .filter(field => field.key !== 'prompt' && fields?.[field.key])
     .map(field => field.label + ': ' + fields![field.key])
   const sections = [prompt.trim()]
   if (definition.promptInstructions) sections.push('Type direction: ' + definition.promptInstructions)
