@@ -89,6 +89,8 @@ interface Batch {
   referenceIds?: string[]
   targetWidth?: number
   targetHeight?: number
+  aspectRatio?: string
+  negativePrompt?: string
   cardType?: CardTypeKey
   cardTypeVersion?: number
   templateId?: string
