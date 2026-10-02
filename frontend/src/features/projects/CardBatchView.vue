@@ -856,7 +856,10 @@ onMounted(async () => {
         createdAt: item.created_at,
         updatedAt: item.updated_at,
         version: item.version,
-        cards: Array.isArray(state.cards) ? state.cards : [],
+        cards: Array.isArray(state.cards) ? state.cards.map(card => ({
+          ...card,
+          cardTypeVersion: card.cardTypeVersion ?? (card.typeOverride ? 1 : (state.cardTypeVersion ?? 1)),
+        })) : [],
         recipeId: state.recipeId,
         recipeVersion: state.recipeVersion,
         referenceIds: state.referenceIds,
@@ -865,7 +868,7 @@ onMounted(async () => {
         aspectRatio: state.aspectRatio,
         negativePrompt: state.negativePrompt,
         cardType: state.cardType || 'custom',
-        cardTypeVersion: state.cardTypeVersion || cardTypeDefinition(state.cardType || 'custom').version,
+        cardTypeVersion: state.cardTypeVersion ?? 1,
         templateId: state.templateId || templateForType(state.cardType || 'custom').id,
         mapping: item.mapping || {},
       }
