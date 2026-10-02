@@ -1,12 +1,13 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PI_AGENT_BRIDGE_PORT || 8787);
 const PROJECT_ROOT = resolve(process.env.WEB_STUDIO_PROJECT_ROOT || process.cwd());
 const PI_BIN = process.env.PI_BIN || "pi";
-const EXTENSION = resolve(new URL("./policy-extension.mjs", import.meta.url).pathname);
+const EXTENSION = fileURLToPath(new URL("./policy-extension.mjs", import.meta.url));
 const MAX_BODY = 128 * 1024;
 const TIMEOUT_MS = Number(process.env.PI_AGENT_TIMEOUT_MS || 180000);
 
