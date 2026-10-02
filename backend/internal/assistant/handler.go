@@ -24,6 +24,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
 	"github.com/oleg3190/Web-studio-img/backend/internal/provenance"
 	"github.com/oleg3190/Web-studio-img/backend/internal/providers/comfyui"
+	"github.com/oleg3190/Web-studio-img/backend/internal/privacy"
 	"github.com/oleg3190/Web-studio-img/backend/internal/references"
 	"github.com/oleg3190/Web-studio-img/backend/internal/similarity"
 	"github.com/oleg3190/Web-studio-img/backend/internal/storage"
@@ -48,6 +49,7 @@ type Handler struct {
 	queue generation.Enqueuer
 	provider generation.Provider
 	flowPlanner *FlowPlanner
+	privacy *privacy.Policy
 }
 
 type Config struct {
@@ -62,6 +64,7 @@ type Config struct {
 	Actions *Store
 	Queue generation.Enqueuer
 	Provider generation.Provider
+	Privacy *privacy.Policy
 }
 
 type ToolDescriptor struct {
@@ -91,7 +94,7 @@ var toolCatalog = []ToolDescriptor{
 
 func NewHandler(cfg Config) (*Handler,error) {
 	if cfg.DB==nil||cfg.Iterations==nil||cfg.Actions==nil{return nil,errors.New("assistant requires database, iteration store and action store")}
-	return &Handler{db:cfg.DB,iterations:cfg.Iterations,prompts:cfg.Prompts,refs:cfg.References,assets:cfg.Assets,storage:cfg.Storage,events:cfg.Events,provenance:cfg.Provenance,actions:cfg.Actions,queue:cfg.Queue,provider:cfg.Provider,flowPlanner:NewFlowPlannerFromEnv()},nil
+	return &Handler{db:cfg.DB,iterations:cfg.Iterations,prompts:cfg.Prompts,refs:cfg.References,assets:cfg.Assets,storage:cfg.Storage,events:cfg.Events,provenance:cfg.Provenance,actions:cfg.Actions,queue:cfg.Queue,provider:cfg.Provider,flowPlanner:NewFlowPlannerFromEnv(),privacy:cfg.Privacy},nil
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -225,6 +228,7 @@ func (h *Handler) validateComfyFlow(ctx context.Context,userID,projectID uuid.UU
 }
 
 func (h *Handler) runComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any,key string)(map[string]any,string,float64,string,error) {
+	if err:=h.checkPrivacy(ctx,userID,projectID); err!=nil{return nil,"",0,"",err}
 	if h.queue==nil||h.provider==nil{return nil,"",0,"",errors.New("generation provider is not configured")}
 	workflow,_:=in["workflow"].(map[string]any);if len(workflow)==0{return nil,"",0,"",errors.New("workflow is required")}
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
@@ -419,7 +423,21 @@ func (h *Handler) suggestMaterials(ctx context.Context,userID,projectID uuid.UUI
 	return map[string]any{"scope":"project_visible_library","kind":kind,"items":items},"Suggestions come from the project-visible library.",0.90,"Ranking is search/recency based, not a learned preference model.",nil
 }
 
+func (h *Handler) checkPrivacy(ctx context.Context,userID,projectID uuid.UUID) error {
+	if h.privacy == nil || h.provider == nil { return nil }
+	allowed, mode, err := h.privacy.AllowsProvider(ctx, userID, projectID, h.provider.Name())
+	if err != nil { return fmt.Errorf("privacy policy check failed: %w", err) }
+	if !allowed { return fmt.Errorf("%s: provider %q is blocked by project privacy mode", privacy.ErrExternalProviderBlocked, h.provider.Name()) }
+	if h.flowPlanner != nil && h.flowPlanner.Enabled() {
+		allowed, _, err = h.privacy.AllowsPlannerEndpoint(ctx, userID, projectID, h.flowPlanner.BaseURL)
+		if err != nil { return fmt.Errorf("privacy planner policy check failed: %w", err) }
+		if !allowed && mode == privacy.LocalOnly { return errors.New("flow planner endpoint is external and blocked by local-only privacy mode") }
+	}
+	return nil
+}
+
 func (h *Handler) createGeneration(ctx context.Context,userID,projectID uuid.UUID,in map[string]any,key string)(map[string]any,string,float64,string,error){
+	if err:=h.checkPrivacy(ctx,userID,projectID); err!=nil{return nil,"",0,"",err}
 	if h.queue==nil||h.provider==nil{return nil,"",0,"",errors.New("generation provider is not configured")}
 	prompt,_:=in["prompt"].(string);prompt=strings.TrimSpace(prompt);if prompt==""{return nil,"",0,"",errors.New("prompt is required")}
 	var iter *uuid.UUID;if v,_:=in["iteration_id"].(string);v!=""{x,e:=uuid.Parse(v);if e!=nil{return nil,"",0,"",e};iter=&x}
