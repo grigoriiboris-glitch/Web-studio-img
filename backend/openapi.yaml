@@ -334,6 +334,10 @@ paths:
       summary: Create an immutable Variant Set from completed generations
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
       requestBody:
         required: true
         content:
@@ -342,6 +346,8 @@ paths:
       responses:
         '201':
           description: Variant Set created
+        '409':
+          description: Idempotency key conflict
           content:
             application/json:
               schema:
@@ -421,6 +427,10 @@ paths:
           in: path
           required: true
           schema: {type: string, format: uuid}
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
       requestBody:
         required: true
         content:
@@ -429,6 +439,8 @@ paths:
       responses:
         '200':
           description: Updated variant
+        '409':
+          description: Idempotency key conflict
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Variant'}
@@ -442,6 +454,10 @@ paths:
           in: path
           required: true
           schema: {type: string, format: uuid}
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
       requestBody:
         required: true
         content:
@@ -450,6 +466,8 @@ paths:
       responses:
         '201':
           description: Created selection iteration
+        '409':
+          description: Idempotency key conflict
           content:
             application/json:
               schema:

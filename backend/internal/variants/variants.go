@@ -5,6 +5,7 @@ import (
   "database/sql"
   "encoding/json"
   "errors"
+  "fmt"
   "io"
   "net/http"
   "strconv"
@@ -61,6 +62,7 @@ type VariantSource struct {
   CreatedAt time.Time `json:"created_at"`
   Width *int `json:"width,omitempty"`
   Height *int `json:"height,omitempty"`
+  Context map[string]any `json:"context,omitempty"`
 }
 
 type Variant struct {
@@ -117,7 +119,17 @@ func (h *Handler) sources(w http.ResponseWriter, r *http.Request) {
   userID, projectID, ok := h.authProject(w, r); if !ok { return }
   rows, err := h.db.QueryContext(r.Context(), `
     SELECT g.id,g.iteration_id,g.status,g.prompt,g.provider,g.model,g.created_at,
-           a.id,a.width,a.height
+           a.id,a.width,a.height,
+           jsonb_build_object(
+             'seed',g.seed,
+             'negative_prompt',g.negative_prompt,
+             'reference_ids',g.reference_ids,
+             'recipe_id',g.recipe_id,
+             'recipe_version',g.recipe_version,
+             'resolved_workflow_hash',g.resolved_workflow_hash,
+             'model_version',g.model_version,
+             'final_parameters',g.final_parameters
+           )
     FROM generations g
     LEFT JOIN assets a ON a.generation_id=g.id AND a.user_id=$2 AND a.lifecycle_status='active'
     WHERE g.project_id=$1 AND g.user_id=$2
@@ -130,13 +142,15 @@ func (h *Handler) sources(w http.ResponseWriter, r *http.Request) {
     var x VariantSource
     var iteration, asset sql.NullString
     var width,height sql.NullInt64
-    if err := rows.Scan(&x.GenerationID,&iteration,&x.Status,&x.Prompt,&x.Provider,&x.Model,&x.CreatedAt,&asset,&width,&height); err != nil {
+    var contextRaw []byte
+    if err := rows.Scan(&x.GenerationID,&iteration,&x.Status,&x.Prompt,&x.Provider,&x.Model,&x.CreatedAt,&asset,&width,&height,&contextRaw); err != nil {
       writeError(w,500,"variant_sources_failed","could not read generation source"); return
     }
     if iteration.Valid { if id,e:=uuid.Parse(iteration.String); e==nil { x.IterationID=&id } }
     if asset.Valid { if id,e:=uuid.Parse(asset.String); e==nil { x.AssetID=&id } }
     if width.Valid { v:=int(width.Int64); x.Width=&v }
     if height.Valid { v:=int(height.Int64); x.Height=&v }
+    _ = json.Unmarshal(contextRaw, &x.Context)
     out=append(out,x)
   }
   if err:=rows.Err();err!=nil { writeError(w,500,"variant_sources_failed","could not read generation sources"); return }
@@ -165,14 +179,20 @@ func (h *Handler) listSets(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createSet(w http.ResponseWriter, r *http.Request) {
   userID,projectID,ok:=h.authProject(w,r);if !ok{return}
+  key:=strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+  if key=="" || len(key)>200 { writeError(w,400,"idempotency_key_required","Idempotency-Key is required and must be at most 200 characters"); return }
   var in CreateSetRequest
   if err:=decode(r,&in);err!=nil || strings.TrimSpace(in.Name)=="" || len([]rune(in.Name))>200 || len(in.GenerationIDs)<2 || len(in.GenerationIDs)>50{
     writeError(w,400,"invalid_variant_set","name and 2..50 generation_ids are required");return
   }
   seen:=map[uuid.UUID]bool{}
   for _,id:=range in.GenerationIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_variant_set","generation_ids must be unique valid UUIDs");return};seen[id]=true}
+  requestHash:=mutationRequestHash("create_set", map[string]any{"project_id":projectID,"name":strings.TrimSpace(in.Name),"generation_ids":in.GenerationIDs})
   tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"variant_set_create_failed","could not start transaction");return}
-  defer func(){_=tx.Rollback()}()
+  defer func() { _ = tx.Rollback() }()
+  replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,"create_set",key,requestHash)
+  if err!=nil { if errors.Is(err,ErrIdempotencyConflict) { writeError(w,409,"idempotency_conflict",err.Error()) } else { writeError(w,500,"variant_idempotency_failed","could not claim idempotency key") }; return }
+  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }
   var set VariantSet;var metadata []byte
   err=tx.QueryRowContext(r.Context(), `
     INSERT INTO variant_sets(project_id,user_id,name,metadata) VALUES($1,$2,$3,'{}'::jsonb)
@@ -198,9 +218,11 @@ func (h *Handler) createSet(w http.ResponseWriter, r *http.Request) {
     `,v.ID,set.ID,projectID,userID,v.GenerationID,v.AssetID,v.Ordinal);err!=nil{writeError(w,500,"variant_set_create_failed","could not create variant");return}
     variants=append(variants,v)
   }
+  response,_=json.Marshal(map[string]any{"variant_set":set,"variants":variants})
+  if err=storeVariantMutationResponse(r.Context(),tx,userID,"create_set",key,set.ID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
   if err:=tx.Commit();err!=nil{writeError(w,500,"variant_set_create_failed","could not commit variant set");return}
   h.audit(r.Context(),userID,projectID,set.ID,"VARIANT_SET_CREATED",map[string]any{"variant_set_id":set.ID,"generation_ids":in.GenerationIDs,"variant_count":len(variants)})
-  writeJSON(w,201,map[string]any{"variant_set":set,"variants":variants})
+  w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response)
 }
 
 func (h *Handler) getSet(w http.ResponseWriter,r *http.Request){
@@ -224,6 +246,7 @@ func (h *Handler) compare(w http.ResponseWriter,r *http.Request){
 func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   userID, projectID, ok := h.authProject(w, r)
   if !ok { return }
+  key:=strings.TrimSpace(r.Header.Get("Idempotency-Key")); if key=="" || len(key)>200 { writeError(w,400,"idempotency_key_required","Idempotency-Key is required and must be at most 200 characters"); return }
   setID, err := uuid.Parse(r.PathValue("set_id"))
   if err != nil { writeError(w, 400, "invalid_variant_set_id", "invalid variant set id"); return }
   variantID, err := uuid.Parse(r.PathValue("variant_id"))
@@ -252,6 +275,13 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
       in.RejectSeverity = &value
     }
   }
+  requestHash:=mutationRequestHash("patch_variant", map[string]any{"project_id":projectID,"variant_set_id":setID,"variant_id":variantID,"patch":in})
+  operation:=fmt.Sprintf("patch_variant:%s:%s",setID,variantID)
+  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"variant_update_failed","could not start transaction");return}
+  defer func() { _ = tx.Rollback() }()
+  replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,operation,key,requestHash)
+  if err!=nil { if errors.Is(err,ErrIdempotencyConflict){writeError(w,409,"idempotency_conflict",err.Error())}else{writeError(w,500,"variant_idempotency_failed","could not claim idempotency key")};return }
+  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(200); _,_=w.Write(response); return }
   current, err := h.loadVariant(r.Context(),userID,projectID,setID,variantID)
   if errors.Is(err,ErrNotFound) { writeError(w,404,"variant_not_found","variant not found"); return }
   if err != nil { writeError(w,500,"variant_get_failed","could not load variant"); return }
@@ -274,7 +304,7 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   var comment any; if nextComment!=nil { comment=*nextComment }
   var severity any; if nextSeverity!=nil { severity=*nextSeverity }
   var v Variant; var raw []byte
-  err=h.db.QueryRowContext(r.Context(), `UPDATE variants
+  err=tx.QueryRowContext(r.Context(), `UPDATE variants
     SET decision=$1,favorite=$2,compare_selected=$3,reject_reason=$4,reject_comment=$5,reject_severity=$6,reject_reason_skipped=$7,updated_at=now()
     WHERE id=$8 AND variant_set_id=$9 AND project_id=$10 AND user_id=$11
     RETURNING id,variant_set_id,generation_id,asset_id,ordinal,decision,favorite,compare_selected,reject_reason,reject_comment,reject_severity,reject_reason_skipped,created_at,updated_at`,
@@ -288,16 +318,26 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
     h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"decision":v.Decision,"reject_reason":v.RejectReason,"reject_comment":v.RejectComment,"reject_severity":v.RejectSeverity,"reject_reason_skipped":v.RejectReasonSkipped},oldState,newState)
   }
   if in.Favorite!=nil { action:="VARIANT_UNFAVORITED"; if nextFavorite { action="VARIANT_FAVORITED" }; h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"favorite":nextFavorite}) }
-  writeJSON(w,200,v)
+  response,_=json.Marshal(v)
+  if err=storeVariantMutationResponse(r.Context(),tx,userID,operation,key,v.ID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
+  if err:=tx.Commit();err!=nil{writeError(w,500,"variant_update_failed","could not commit variant update");return}
+  w.Header().Set("Content-Type","application/json"); w.WriteHeader(200); _,_=w.Write(response)
 }
 func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   userID,projectID,ok:=h.authProject(w,r);if !ok{return}
+  key:=strings.TrimSpace(r.Header.Get("Idempotency-Key")); if key=="" || len(key)>200 { writeError(w,400,"idempotency_key_required","Idempotency-Key is required and must be at most 200 characters"); return }
   setID,err:=uuid.Parse(r.PathValue("set_id"));if err!=nil{writeError(w,400,"invalid_variant_set_id","invalid variant set id");return}
   var in struct{VariantIDs []uuid.UUID `json:"variant_ids"`;Title string `json:"title"`;Decisions map[string]any `json:"decisions,omitempty"`}
   if err:=decode(r,&in);err!=nil||len(in.VariantIDs)<1||len(in.VariantIDs)>50{writeError(w,400,"invalid_selection","variant_ids must contain 1..50 values");return}
   if err:=iterations.ValidateDecisions(in.Decisions);err!=nil{writeError(w,400,"invalid_selection","invalid iteration decisions");return}
   seen:=map[uuid.UUID]bool{};for _,id:=range in.VariantIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_selection","variant_ids must be unique valid UUIDs");return};seen[id]=true}
-  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return};defer func(){_=tx.Rollback()}()
+  requestHash:=mutationRequestHash("create_iteration", map[string]any{"project_id":projectID,"variant_set_id":setID,"variant_ids":in.VariantIDs,"title":strings.TrimSpace(in.Title),"decisions":in.Decisions})
+  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return}
+  defer func() { _ = tx.Rollback() }()
+  operation:="create_iteration:"+setID.String()
+  replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,operation,key,requestHash)
+  if err!=nil { if errors.Is(err,ErrIdempotencyConflict){writeError(w,409,"idempotency_conflict",err.Error())}else{writeError(w,500,"variant_idempotency_failed","could not claim idempotency key")};return }
+  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }
   var parent sql.NullString;var branchID sql.NullString;var branchCount int;selectedJSON:=[]byte{}
   placeholders:=make([]string,0,len(in.VariantIDs));args:=[]any{projectID,userID,setID}
   for i,id:=range in.VariantIDs{placeholders=append(placeholders,"$"+strconv.Itoa(i+4));args=append(args,id)}
@@ -311,9 +351,11 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   rawDecisions,_:=json.Marshal(decisions)
   var iterationID uuid.UUID
   if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description,decisions) VALUES($1,$2::uuid,$3::uuid,'selection',$4,$5,$6) RETURNING id`,projectID,branchID.String,parent.String,title,description,rawDecisions).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
+  response,_=json.Marshal(map[string]any{"iteration_id":iterationID,"title":title,"description":description,"decisions":decisions})
+  if err=storeVariantMutationResponse(r.Context(),tx,userID,operation,key,iterationID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
   if err:=tx.Commit();err!=nil{writeError(w,500,"iteration_create_failed","could not commit selection iteration");return}
   h.audit(r.Context(),userID,projectID,iterationID,"VARIANT_SELECTED",map[string]any{"variant_set_id":setID,"variant_ids":in.VariantIDs,"created_iteration_id":iterationID,"decisions":decisions})
-  writeJSON(w,201,map[string]any{"iteration_id":iterationID,"title":title,"description":description,"decisions":decisions})
+  w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response)
 }
 func (h *Handler) loadSet(ctx context.Context,userID,projectID,setID uuid.UUID)(VariantSet,error){
   var x VariantSet;var raw []byte
@@ -331,15 +373,25 @@ func (h *Handler) loadVariants(ctx context.Context,userID,projectID,setID uuid.U
   if filter!=""{ids:=strings.Split(filter,",");ph:=make([]string,0,len(ids));for i,id:=range ids{parsed,e:=uuid.Parse(strings.TrimSpace(id));if e!=nil{return nil,e};ph=append(ph,"$"+strconv.Itoa(i+4));args=append(args,parsed)};where=" AND v.id IN ("+strings.Join(ph,",")+")"}
   rows,err:=h.db.QueryContext(ctx,`
     SELECT v.id,v.variant_set_id,v.generation_id,v.asset_id,v.ordinal,v.decision,v.favorite,v.compare_selected,v.reject_reason,v.reject_comment,v.reject_severity,v.reject_reason_skipped,v.created_at,v.updated_at,
-           g.iteration_id,g.status,g.prompt,g.provider,g.model,g.created_at,a.width,a.height
+           g.iteration_id,g.status,g.prompt,g.provider,g.model,g.created_at,a.width,a.height,
+           jsonb_build_object(
+             'seed',g.seed,
+             'negative_prompt',g.negative_prompt,
+             'reference_ids',g.reference_ids,
+             'recipe_id',g.recipe_id,
+             'recipe_version',g.recipe_version,
+             'resolved_workflow_hash',g.resolved_workflow_hash,
+             'model_version',g.model_version,
+             'final_parameters',g.final_parameters
+           )
     FROM variants v JOIN generations g ON g.id=v.generation_id
     LEFT JOIN assets a ON a.id=v.asset_id AND a.user_id=$3 AND a.lifecycle_status='active'
     WHERE v.variant_set_id=$1 AND v.project_id=$2 AND v.user_id=$3`+where+` ORDER BY v.ordinal ASC`,args...)
   if err!=nil{return nil,err};defer func(){_=rows.Close()}()
   out:=make([]Variant,0)
-  for rows.Next(){var v Variant;var raw []byte;var source VariantSource;var iteration sql.NullString;var width,height sql.NullInt64
-    if err:=rows.Scan(&v.ID,&v.VariantSetID,&v.GenerationID,&v.AssetID,&v.Ordinal,&v.Decision,&v.Favorite,&v.CompareSelected,&raw,&v.RejectComment,&v.RejectSeverity,&v.RejectReasonSkipped,&v.CreatedAt,&v.UpdatedAt,&iteration,&source.Status,&source.Prompt,&source.Provider,&source.Model,&source.CreatedAt,&width,&height);err!=nil{return nil,err}
-    _=json.Unmarshal(raw,&v.RejectReason);if v.RejectReason==nil{v.RejectReason=[]string{}};if iteration.Valid{if id,e:=uuid.Parse(iteration.String);e==nil{source.IterationID=&id}};source.GenerationID=v.GenerationID;source.AssetID=v.AssetID;if width.Valid{v1:=int(width.Int64);source.Width=&v1};if height.Valid{v1:=int(height.Int64);source.Height=&v1};v.Source=&source;out=append(out,v)
+  for rows.Next(){var v Variant;var raw []byte;var source VariantSource;var iteration sql.NullString;var width,height sql.NullInt64;var contextRaw []byte
+    if err:=rows.Scan(&v.ID,&v.VariantSetID,&v.GenerationID,&v.AssetID,&v.Ordinal,&v.Decision,&v.Favorite,&v.CompareSelected,&raw,&v.RejectComment,&v.RejectSeverity,&v.RejectReasonSkipped,&v.CreatedAt,&v.UpdatedAt,&iteration,&source.Status,&source.Prompt,&source.Provider,&source.Model,&source.CreatedAt,&width,&height,&contextRaw);err!=nil{return nil,err}
+    _=json.Unmarshal(raw,&v.RejectReason);if v.RejectReason==nil{v.RejectReason=[]string{}};if iteration.Valid{if id,e:=uuid.Parse(iteration.String);e==nil{source.IterationID=&id}};source.GenerationID=v.GenerationID;source.AssetID=v.AssetID;if width.Valid{v1:=int(width.Int64);source.Width=&v1};if height.Valid{v1:=int(height.Int64);source.Height=&v1};_ = json.Unmarshal(contextRaw,&source.Context);v.Source=&source;out=append(out,v)
   }
   return out,rows.Err()
 }

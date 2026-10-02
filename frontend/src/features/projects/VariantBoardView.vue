@@ -418,6 +418,30 @@ onMounted(async () => {
                 {{ item.source.prompt }}
               </p>
 
+              <details v-if="item.source?.context" class="generation-context">
+                <summary>Generation context</summary>
+                <dl>
+                  <template v-if="item.source.context.seed !== undefined && item.source.context.seed !== null">
+                    <dt>Seed</dt><dd>{{ item.source.context.seed }}</dd>
+                  </template>
+                  <template v-if="item.source.context.model_version">
+                    <dt>Model version</dt><dd>{{ item.source.context.model_version }}</dd>
+                  </template>
+                  <template v-if="item.source.context.recipe_id">
+                    <dt>Recipe</dt><dd>{{ item.source.context.recipe_id }}<span v-if="item.source.context.recipe_version"> · v{{ item.source.context.recipe_version }}</span></dd>
+                  </template>
+                  <template v-if="item.source.context.resolved_workflow_hash">
+                    <dt>Workflow</dt><dd>{{ item.source.context.resolved_workflow_hash }}</dd>
+                  </template>
+                  <template v-if="item.source.context.reference_ids?.length">
+                    <dt>References</dt><dd>{{ item.source.context.reference_ids.join(', ') }}</dd>
+                  </template>
+                  <template v-if="item.source.context.negative_prompt">
+                    <dt>Negative</dt><dd>{{ item.source.context.negative_prompt }}</dd>
+                  </template>
+                </dl>
+              </details>
+
               <div v-if="item.decision === 'rejected'" class="reject-meta">
                 <div v-if="item.reject_reason.length" class="reason-list">
                   <span v-for="reason in item.reject_reason" :key="reason" class="reason-chip">
@@ -901,6 +925,38 @@ onMounted(async () => {
   border-radius: 999px;
   background: #f2f4f7;
   font-size: 12px;
+}
+
+.generation-context {
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #fafafa;
+  font-size: 12px;
+}
+
+.generation-context summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.generation-context dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  margin: 8px 0 0;
+}
+
+.generation-context dt {
+  color: #667085;
+  font-weight: 600;
+}
+
+.generation-context dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .reject-meta {

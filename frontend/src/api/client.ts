@@ -46,6 +46,14 @@ export async function apiRequest<T>(
   return await response.json() as T
 }
 
+
+async function buildIdempotencyKey(scope: string, input: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(scope + ":" + JSON.stringify(input))
+  const digest = await crypto.subtle.digest("SHA-256", bytes)
+  const hex = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")
+  return scope + "-" + hex
+}
+
 export const healthApi = {
   get: () => apiRequest<{ status: string }>('/health'),
 }
@@ -419,6 +427,16 @@ export interface VariantSource {
   created_at: string
   width?: number
   height?: number
+  context?: {
+    seed?: number | null
+    negative_prompt?: string
+    reference_ids?: string[]
+    recipe_id?: string | null
+    recipe_version?: number | null
+    resolved_workflow_hash?: string | null
+    model_version?: string | null
+    final_parameters?: Record<string, unknown>
+  }
 }
 
 export interface Variant {
@@ -453,11 +471,17 @@ export const variantBoardApi = {
     apiRequest<{ sources: VariantSource[] }>(`/projects/${projectId}/variant-sources`),
   listSets: (projectId: string) =>
     apiRequest<{ variant_sets: VariantSet[] }>(`/projects/${projectId}/variant-sets`),
-  createSet: (projectId: string, input: { name: string; generation_ids: string[] }) =>
-    apiRequest<{ variant_set: VariantSet; variants: Variant[] }>(
+  createSet: async (
+    projectId: string,
+    input: { name: string; generation_ids: string[] },
+    idempotencyKey?: string,
+  ) => {
+    const key = idempotencyKey ?? await buildIdempotencyKey("variant-set-create", input)
+    return apiRequest<{ variant_set: VariantSet; variants: Variant[] }>(
       `/projects/${projectId}/variant-sets`,
-      { method: 'POST', body: JSON.stringify(input) },
-    ),
+      { method: 'POST', body: JSON.stringify(input), headers: { "Idempotency-Key": key } },
+    )
+  },
   getSet: (projectId: string, setId: string) =>
     apiRequest<{ variant_set: VariantSet; variants: Variant[] }>(
       `/projects/${projectId}/variant-sets/${setId}`,
@@ -468,7 +492,7 @@ export const variantBoardApi = {
       `/projects/${projectId}/variant-sets/${setId}/compare?${query}`,
     )
   },
-  patchVariant: (
+  patchVariant: async (
     projectId: string,
     setId: string,
     variantId: string,
@@ -481,31 +505,38 @@ export const variantBoardApi = {
       reject_severity?: '' | 'low' | 'medium' | 'high'
       skip_reason?: boolean
     },
-  ) =>
-    apiRequest<Variant>(
+    idempotencyKey?: string,
+  ) => {
+    const key = idempotencyKey ?? await buildIdempotencyKey("variant-patch-" + setId + "-" + variantId, input)
+    return apiRequest<Variant>(
       `/projects/${projectId}/variant-sets/${setId}/variants/${variantId}`,
-      { method: 'PATCH', body: JSON.stringify(input) },
-    ),
+      { method: 'PATCH', body: JSON.stringify(input), headers: { "Idempotency-Key": key } },
+    )
+  },
   rejectionSummary: (projectId: string) =>
     apiRequest<RejectReasonSummary>(`/projects/${projectId}/variant-rejection-summary`),
   rejectionTimeline: (projectId: string) =>
     apiRequest<{ items: RejectTimelineItem[] }>(`/projects/${projectId}/variant-rejection-timeline`),
-  createIteration: (
+  createIteration: async (
     projectId: string,
     setId: string,
     variantIds: string[],
     title?: string,
     decisions?: Record<string, unknown>,
-  ) =>
-    apiRequest<{
+    idempotencyKey?: string,
+  ) => {
+    const input = { variant_ids: variantIds, title, decisions }
+    const key = idempotencyKey ?? await buildIdempotencyKey("variant-iteration-" + setId, input)
+    return apiRequest<{
       iteration_id: string
       title: string
       description: string
       decisions?: Record<string, unknown>
     }>(
       `/projects/${projectId}/variant-sets/${setId}/iterations`,
-      { method: 'POST', body: JSON.stringify({ variant_ids: variantIds, title, decisions }) },
-    ),
+      { method: 'POST', body: JSON.stringify(input), headers: { "Idempotency-Key": key } },
+    )
+  },
 }
 
 
