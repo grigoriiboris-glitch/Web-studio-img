@@ -1002,8 +1002,10 @@ onMounted(async () => {
         <label>Reference asset IDs<input :value="referenceIdsText" placeholder="asset/reference IDs, comma separated" @change="referenceIdsText = ($event.target as HTMLInputElement).value; updateBatchSettings"></label>
         <label>Target width<input v-model.number="targetWidth" type="number" min="1" @change="updateBatchSettings"></label>
         <label>Target height<input v-model.number="targetHeight" type="number" min="1" @change="updateBatchSettings"></label>
+        <label>Aspect ratio<input v-model.trim="aspectRatio" placeholder="Type default" @change="updateBatchSettings"></label>
+        <label>Negative prompt<textarea v-model="negativePrompt" rows="2" placeholder="Type/project default" @change="updateBatchSettings"></textarea></label>
       </div>
-      <p class="muted">Resolution: Card override → Batch → Card Type → Project/provider default. Template is separate from Card Type; schema and recipe never determine layout by accident.</p>
+      <p class="muted">Resolution: Card override → Batch → Card Type → Project/provider default. Type defaults: {{ productionDefaults(activeBatch.cardType || 'custom').width || 'provider' }}×{{ productionDefaults(activeBatch.cardType || 'custom').height || 'provider' }}, {{ productionDefaults(activeBatch.cardType || 'custom').aspectRatio || 'provider' }}; template {{ templateForType(activeBatch.cardType || 'custom', activeBatch.templateId).name }}.</p>
       <div v-if="schemaDrift" class="schema-warning">
         <strong>Card Type schema changed since this batch was created.</strong>
         <span>Generation/finalization is blocked until the batch is explicitly migrated.</span>
@@ -1054,6 +1056,10 @@ onMounted(async () => {
             <label>Template<select :value="card.templateOverrideId || activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="setCardTemplate(card, ($event.target as HTMLSelectElement).value)"><option v-for="template in templatesFor(resolvedCardType(card))" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
             <label>Recipe<select :value="card.recipeId || ''" @change="setCardRecipe(card, ($event.target as HTMLSelectElement).value)"><option value="">Batch/type default</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
             <label>References<input :value="(card.referenceIds || []).join(', ')" placeholder="override reference IDs" @change="setCardReferences(card, ($event.target as HTMLInputElement).value)"></label>
+            <label>Width override<input :value="card.targetWidth || ''" type="number" min="1" placeholder="Batch/type default" @change="card.targetWidth = Number(($event.target as HTMLInputElement).value) || undefined; persistCard(card)"></label>
+            <label>Height override<input :value="card.targetHeight || ''" type="number" min="1" placeholder="Batch/type default" @change="card.targetHeight = Number(($event.target as HTMLInputElement).value) || undefined; persistCard(card)"></label>
+            <label>Aspect ratio override<input :value="card.aspectRatio || ''" placeholder="Batch/type default" @change="card.aspectRatio = ($event.target as HTMLInputElement).value.trim() || undefined; persistCard(card)"></label>
+            <label>Negative prompt override<textarea :value="card.negativePrompt || ''" rows="2" placeholder="Batch/type default" @change="card.negativePrompt = ($event.target as HTMLTextAreaElement).value || undefined; persistCard(card)"></textarea></label>
           </div>
 
           <div v-if="card.rejectReason" class="reject-box">
