@@ -492,7 +492,7 @@ export const variantBoardApi = {
       `/projects/${projectId}/variant-sets/${setId}/compare?${query}`,
     )
   },
-  patchVariant: (
+  patchVariant: async (
     projectId: string,
     setId: string,
     variantId: string,
@@ -517,7 +517,7 @@ export const variantBoardApi = {
     apiRequest<RejectReasonSummary>(`/projects/${projectId}/variant-rejection-summary`),
   rejectionTimeline: (projectId: string) =>
     apiRequest<{ items: RejectTimelineItem[] }>(`/projects/${projectId}/variant-rejection-timeline`),
-  createIteration: (
+  createIteration: async (
     projectId: string,
     setId: string,
     variantIds: string[],
