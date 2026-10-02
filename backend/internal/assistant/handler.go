@@ -193,7 +193,7 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 		assetRefs:=flowAssetRefs(plan.Workflow)
 		declared:=map[string]struct{}{}
 		for _,input:=range plan.Inputs{declared[input.ID]=struct{}{}}
-		inputErrors:=[]string{}
+		inputErrors:=colorReferenceContractErrors(flowSteps, plan.Inputs, plan.Workflow)
 		for ref:=range assetRefs{if _,ok:=declared[ref];!ok{inputErrors=append(inputErrors,"workflow uses undeclared asset input "+ref)}}
 		if len(inputErrors)>0{validationErrors=inputErrors;continue}
 		validation,validationErr:=runtime.ValidateWorkflow(ctx,plan.Workflow);if validationErr!=nil{return nil,"",0,"",validationErr}
