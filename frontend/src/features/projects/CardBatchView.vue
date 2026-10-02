@@ -379,6 +379,9 @@ onMounted(async () => {
       }
     }
     activeBatchId.value = batches.value[0]?.id || ''
+    const firstRemote = remote.batches[0]
+    cardColumn.value = String(firstRemote?.mapping.card_number_column ?? '')
+    promptColumn.value = String(firstRemote?.mapping.prompt_column ?? '')
     localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
     recipes.value = (await recipesApi.list(routeProjectId.value)).recipes
     await refreshBatch()
