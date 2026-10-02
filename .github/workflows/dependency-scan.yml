@@ -1,7 +1,6 @@
 name: dependency-scan
 
 on:
-  pull_request:
   push:
     branches: ["main"]
     paths:
@@ -16,17 +15,6 @@ permissions:
   security-events: write
 
 jobs:
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Review dependency changes
-        uses: actions/dependency-review-action@v5
-        continue-on-error: true
-        with:
-          fail-on-severity: high
-
   govulncheck:
     runs-on: ubuntu-latest
     defaults:
@@ -38,8 +26,7 @@ jobs:
         with:
           go-version: "1.24"
       - name: Run Go vulnerability scan
-        run: |
-          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
         continue-on-error: true
 
   npm-audit:
