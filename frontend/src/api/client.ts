@@ -1040,6 +1040,37 @@ export const texturesApi = {
 }
 
 
+export interface ComfyFlowInput {
+  id: string
+  type: 'image' | 'mask' | 'string' | 'number' | 'integer' | 'boolean'
+  label: string
+  required: boolean
+}
+
+export interface ComfyFlowCompatibility {
+  compatible: boolean
+  errors: string[]
+  warnings: string[]
+  referenced_nodes: string[]
+  referenced_models: string[]
+}
+
+export interface ComfyFlowPlan {
+  name: string
+  description: string
+  prompt: string
+  negative_prompt: string
+  inputs: ComfyFlowInput[]
+  parameters: Record<string, unknown>
+  selected_model: Record<string, string>
+  workflow: Record<string, unknown>
+  reasoning: string
+  source?: 'ai_generated' | 'existing_recipe'
+  recipe_id?: string
+  recipe_version?: number
+  compatibility: ComfyFlowCompatibility
+}
+
 export interface AssistantToolDescriptor {
   name: string
   description: string
