@@ -1,6 +1,8 @@
 package variants
 
 import (
+  "crypto/sha256"
+  "encoding/hex"
   "database/sql"
   "encoding/json"
   "errors"
@@ -90,7 +92,8 @@ func (h *Handler) regenerateVariant(w http.ResponseWriter, r *http.Request) {
     writeError(w, 500, "variant_regenerate_failed", "source reference ids are invalid"); return
   }
 
-  generationKey := "variant-regenerate-" + setID.String() + "-" + variantID.String() + "-" + key
+  sum := sha256.Sum256([]byte(setID.String() + ":" + variantID.String() + ":" + key))
+  generationKey := "variant-regenerate-" + hex.EncodeToString(sum[:])
   source.IdempotencyKey = generationKey
   generated, _, err := h.generationCreator.Create(r.Context(), userID, source)
   if errors.Is(err, generation.ErrIdempotencyConflict) {
