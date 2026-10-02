@@ -65,7 +65,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     fields: [
       { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'rarity', label: 'Rarity', type: 'select', options: ['common', 'uncommon', 'rare', 'epic', 'legendary'], aliases: ['редкость', 'уровень'] },
-      { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
+      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
     ],
     promptInstructions: 'Board-game item illustration. Keep the object as the unmistakable visual subject with a readable silhouette.',
@@ -78,7 +78,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     fields: [
       { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'region', label: 'Region', type: 'text', aliases: ['район', 'регион', 'местность'] },
-      { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
+      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
     ],
     promptInstructions: 'Board-game location illustration. Establish a clear place, spatial depth and environmental storytelling.',
@@ -90,7 +90,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     description: 'События, происшествия и условия раунда.',
     fields: [
       { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
+      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
       { key: 'effect', label: 'Effect', type: 'textarea', aliases: ['эффект', 'effect text'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
     ],
@@ -103,7 +103,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     description: 'Фракции, группы и стороны.',
     fields: [
       { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
+      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
       { key: 'ability', label: 'Ability', type: 'textarea', aliases: ['способность', 'ability text'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
     ],
@@ -117,7 +117,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     fields: [
       { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
       { key: 'rarity', label: 'Rarity', type: 'select', options: ['common', 'uncommon', 'rare', 'epic', 'legendary'], aliases: ['редкость', 'уровень'] },
-      { key: 'description', label: 'Description', type: 'textarea', required: true, aliases: ['desc', 'описание'] },
+      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
       { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
     ],
     promptInstructions: 'Board-game resource illustration. Keep the resource visually distinct and easy to identify at card size.',
