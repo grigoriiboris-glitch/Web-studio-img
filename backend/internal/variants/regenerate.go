@@ -92,8 +92,7 @@ func (h *Handler) regenerateVariant(w http.ResponseWriter, r *http.Request) {
     writeError(w, 500, "variant_regenerate_failed", "source reference ids are invalid"); return
   }
 
-  sum := sha256.Sum256([]byte(setID.String() + ":" + variantID.String() + ":" + key))
-  generationKey := "variant-regenerate-" + hex.EncodeToString(sum[:])
+  generationKey := regenerationGenerationKey(setID, variantID, key)
   source.IdempotencyKey = generationKey
   generated, _, err := h.generationCreator.Create(r.Context(), userID, source)
   if errors.Is(err, generation.ErrIdempotencyConflict) {
@@ -151,4 +150,10 @@ func (h *Handler) regenerateVariant(w http.ResponseWriter, r *http.Request) {
   if err := tx.Commit(); err != nil { writeError(w, 500, "variant_regenerate_failed", "could not commit regenerated variant"); return }
 
   w.Header().Set("Content-Type", "application/json"); w.WriteHeader(202); _, _ = w.Write(response)
+}
+
+
+func regenerationGenerationKey(setID, variantID uuid.UUID, key string) string {
+  sum := sha256.Sum256([]byte(setID.String() + ":" + variantID.String() + ":" + key))
+  return "variant-regenerate-" + hex.EncodeToString(sum[:])
 }
