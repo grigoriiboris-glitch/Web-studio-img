@@ -1044,6 +1044,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .error { padding:10px; background:#fee; color:#900; border-radius:8px; }
 .info { padding:10px; background:#eef8ee; color:#174d17; border-radius:8px; }
 .muted,small { color:#666; }
+.schema-box,.mapping-box { display:grid; gap:6px; padding:10px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; }
+.schema-fields { display:grid; gap:4px; }
+.schema-fields span { display:flex; justify-content:space-between; gap:8px; }
+.mapping-box label { font-size:12px; font-weight:600; }
+.mapping-box small { margin-top:2px; }
+.validation-box { display:grid; gap:4px; margin:8px 0; padding:9px; border-radius:7px; background:#fff0f0; color:#9b1c1c; }
 .preview { margin-top:14px; overflow:auto; }
 table { width:100%; border-collapse:collapse; margin-top:8px; }
 th,td { border-bottom:1px solid #eee; text-align:left; padding:7px; }
@@ -1066,6 +1072,7 @@ th,td { border-bottom:1px solid #eee; text-align:left; padding:7px; }
 .card-settings { display:grid; gap:8px; margin:10px 0; }
 .card-data { display:grid; grid-template-columns:repeat(2,minmax(120px,1fr)); gap:8px; margin:10px 0; padding:8px; background:#fafafa; border-radius:7px; }
 .card-data label { display:flex; flex-direction:column; gap:4px; font-size:12px; }
+.card-data label small { color:#8a6500; }
 .versions { display:grid; gap:6px; margin-top:10px; }
 .version { justify-content:space-between; padding:6px; background:#f7f7f7; border-radius:6px; }
 .checklist { display:grid; gap:3px; margin:10px 0; font-size:12px; }
