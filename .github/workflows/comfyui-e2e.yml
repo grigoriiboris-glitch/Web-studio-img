@@ -1,0 +1,45 @@
+name: ComfyUI E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      comfyui_image:
+        description: "ComfyUI Docker image"
+        required: true
+        default: "comfyanonymous/comfyui:latest"
+
+permissions:
+  contents: read
+
+jobs:
+  comfyui-e2e:
+    name: Real ComfyUI runtime smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Start ComfyUI
+        env:
+          COMFYUI_IMAGE: ${{ inputs.comfyui_image }}
+        run: |
+          docker pull "$COMFYUI_IMAGE"
+          docker run -d --name comfyui-e2e -p 8188:8188 "$COMFYUI_IMAGE" --listen 0.0.0.0 --port 8188
+
+      - name: Wait for ComfyUI
+        run: |
+          for i in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:8188/system_stats >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker logs comfyui-e2e
+          exit 1
+
+      - name: Verify live ComfyUI API
+        run: |
+          curl -fsS http://127.0.0.1:8188/system_stats
+          curl -fsS http://127.0.0.1:8188/object_info >/dev/null
+          curl -fsS http://127.0.0.1:8188/models >/dev/null
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f comfyui-e2e >/dev/null 2>&1 || true
