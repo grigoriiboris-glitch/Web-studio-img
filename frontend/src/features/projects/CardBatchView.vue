@@ -82,6 +82,7 @@ interface Batch {
   cardType?: CardTypeKey
   cardTypeVersion?: number
   templateId?: string
+  mapping?: Record<string, string>
 }
 
 interface ImportDiff {
@@ -847,7 +848,24 @@ onMounted(async () => {
         <label>Card number<select v-model="cardColumn"><option v-for="item in columns" :key="item" :value="item">{{ item }}</option></select></label>
         <label>Prompt<select v-model="promptColumn"><option v-for="item in columns" :key="item" :value="item">{{ item }}</option></select></label>
         <label v-if="!activeBatch || importMode === 'new'">Batch name<input v-model="name" placeholder="THE-PRICE-OF-ONE cards"></label>
-        <label v-if="!activeBatch || importMode === 'new'">Card type<select v-model="newBatchType"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
+        <label v-if="!activeBatch || importMode === 'new'">Card type<select :value="newBatchType" @change="setNewBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
+        <div v-if="!activeBatch || importMode === 'new'" class="schema-box">
+          <strong>{{ typeSchema(newBatchType).name }} schema v{{ typeSchema(newBatchType).version }}</strong>
+          <small>{{ typeSchema(newBatchType).description }}</small>
+          <div class="schema-fields">
+            <span v-for="field in typeSchema(newBatchType).fields" :key="field.key">
+              {{ field.label }}<b>{{ field.required ? 'required' : 'optional' }}</b>
+            </span>
+          </div>
+        </div>
+        <div v-if="!activeBatch || importMode === 'new'" class="mapping-box">
+          <strong>Automatic column mapping</strong>
+          <span v-for="field in typeSchema(newBatchType).fields" :key="field.key">
+            {{ field.label }} ← {{ columnMapping[field.key] || 'not mapped' }}
+          </span>
+          <small v-if="requiredUnmappedFields.length">Required but not mapped: {{ requiredUnmappedFields.join(', ') }}</small>
+          <small v-else>All required fields are mapped.</small>
+        </div>
         <button v-if="!activeBatch || importMode === 'new'" type="button" class="primary" @click="createBatch">Create Card Batch</button>
         <button v-else type="button" class="primary" @click="applyImportDiff">Apply diff</button>
       </div>
@@ -868,12 +886,13 @@ onMounted(async () => {
       <h2>2. Production settings</h2>
       <div class="settings">
         <label>Card type<select :value="activeBatch.cardType || 'custom'" @change="setBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
-        <label>Batch Recipe<select v-model="recipeId" @change="updateBatchSettings"><option value="">Provider default</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
+        <label>Batch Template<select :value="activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="activeBatch.templateId = ($event.target as HTMLSelectElement).value; save()"><option v-for="template in CARD_TEMPLATES" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+        <label>Batch Recipe<select v-model="recipeId" @change="updateBatchSettings"><option value="">Type default (auto)</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
         <label>Reference asset IDs<input :value="referenceIdsText" placeholder="asset/reference IDs, comma separated" @change="referenceIdsText = ($event.target as HTMLInputElement).value; updateBatchSettings"></label>
         <label>Target width<input v-model.number="targetWidth" type="number" min="1" @change="updateBatchSettings"></label>
         <label>Target height<input v-model.number="targetHeight" type="number" min="1" @change="updateBatchSettings"></label>
       </div>
-      <p class="muted">Card-level Recipe and Reference override batch defaults. Generation provenance stores the resolved values.</p>
+      <p class="muted">Resolution: Card override → Batch → Card Type → Project/provider default. Template is separate from Card Type; schema and recipe never determine layout by accident.</p>
     </section>
 
     <section class="panel">
@@ -898,8 +917,20 @@ onMounted(async () => {
           <textarea v-model="card.prompt" rows="4" @change="card.promptRevision++; card.status = 'needs_revision'; persistCard(card)" />
           <small>Source row {{ card.sourceRow }} · prompt revision {{ card.promptRevision }}</small>
 
-          <div v-if="cardTypeDefinition(resolvedCardType(card)).fields.filter(field => field !== 'prompt').length" class="card-data">
-        <label v-for="field in cardTypeDefinition(resolvedCardType(card)).fields.filter(field => field !== 'prompt')" :key="field">
+          <div v-if="cardValidation(card).length" class="validation-box">
+            <strong>Validation blocked</strong>
+            <span v-for="item in cardValidation(card)" :key="item.field">{{ item.message }}</span>
+          </div>
+          <div class="card-data">
+        <label v-for="field in cardTypeDefinition(resolvedCardType(card)).fields.filter(field => field.key !== 'prompt')" :key="field.key">
+          {{ field.label }} <small>{{ field.required ? 'required' : 'optional' }}</small>
+          <select v-if="field.type === 'select'" :value="card.fields?.[field.key] || field.defaultValue || ''" @change="card.fields = { ...(card.fields || {}), [field.key]: ($event.target as HTMLSelectElement).value }; persistCard(card)">
+            <option value="">Not set</option><option v-for="option in field.options || []" :key="option" :value="option">{{ option }}</option>
+          </select>
+          <input v-else-if="field.type === 'number'" :value="card.fields?.[field.key] || ''" type="number" @change="card.fields = { ...(card.fields || {}), [field.key]: ($event.target as HTMLInputElement).value }; persistCard(card)">
+          <textarea v-else-if="field.type === 'textarea'" :value="card.fields?.[field.key] || ''" rows="3" @change="card.fields = { ...(card.fields || {}), [field.key]: ($event.target as HTMLTextAreaElement).value }; persistCard(card)">
+          <input v-else :value="card.fields?.[field.key] || ''" :placeholder="field.key + ' from spreadsheet'" @change="card.fields = { ...(card.fields || {}), [field.key]: ($event.target as HTMLInputElement).value }; persistCard(card)">
+        </label>
           {{ field }}
           <input :value="card.fields?.[field] || ''" :placeholder="field + ' from spreadsheet'" @change="card.fields = { ...(card.fields || {}), [field]: ($event.target as HTMLInputElement).value }; persistCard(card)">
         </label>
@@ -907,7 +938,8 @@ onMounted(async () => {
 
       <div class="card-settings">
             <label>Card type<select :value="card.typeOverride || activeBatch.cardType || 'custom'" @change="setCardType(card, ($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
-            <label>Recipe<select :value="card.recipeId || ''" @change="setCardRecipe(card, ($event.target as HTMLSelectElement).value)"><option value="">Batch default</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
+            <label>Template<select :value="card.templateOverrideId || activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="setCardTemplate(card, ($event.target as HTMLSelectElement).value)"><option v-for="template in CARD_TEMPLATES" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+            <label>Recipe<select :value="card.recipeId || ''" @change="setCardRecipe(card, ($event.target as HTMLSelectElement).value)"><option value="">Batch/type default</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
             <label>References<input :value="(card.referenceIds || []).join(', ')" placeholder="override reference IDs" @change="setCardReferences(card, ($event.target as HTMLInputElement).value)"></label>
           </div>
 
