@@ -162,13 +162,13 @@ function hasRequiredAssets() {
   return props.plan.inputs.filter(input => input.required).every(input => Boolean(props.inputAssets?.[input.id]))
 }
 
-async function validateFlow() {
+async function validateFlow(options: { preserveHistory?: boolean } = {}) {
   validating.value = true
   repairing.value = false
   repairStopped.value = false
   testRunAt.value = null
   error.value = ''
-  repairHistory.value = []
+  if (!options.preserveHistory) repairHistory.value = []
   activeRequestController?.abort()
   const controller = new AbortController()
   activeRequestController = controller
@@ -359,54 +359,36 @@ async function restoreRepairHistory() {
 }
 
 async function sendToPiAgent() {
-  const last = validation.value
-  if (!last || last.category === 'workflow' || !last.errors.length) return
+  const initial = validation.value
+  if (!initial || initial.category === 'workflow' || !initial.errors.length) return
   const bridgeUrl = String(import.meta.env.VITE_PI_AGENT_BRIDGE_URL ?? '').trim()
-  if (!bridgeUrl) {
-    error.value = 'Локальный pi.dev bridge не настроен: задайте VITE_PI_AGENT_BRIDGE_URL.'
-    return
-  }
-  if (!window.confirm('Передать локальному pi.dev агенту право исправить локальную конфигурацию/ComfyUI и после этого повторить тест?')) return
-
-  piRepairing.value = true
-  error.value = ''
-  repairHistory.value.push({
-    attempt: repairHistory.value.length + 1,
-    status: 'repairing',
-    category: last.category,
-    action: 'pi.dev диагностирует и исправляет локальный ComfyUI',
-    errors: last.errors.map(item => item.message),
-  })
-
+  if (!bridgeUrl) { error.value = 'Локальный pi.dev bridge не настроен: задайте VITE_PI_AGENT_BRIDGE_URL.'; return }
+  if (!window.confirm('Передать локальному pi.dev агенту право исправить локальную конфигурацию/ComfyUI и автоматически повторять тест до 3 раз?')) return
+  piRepairing.value = true; repairStopped.value = false; error.value = ''
+  const parsed = parsePiAgentBridgeUrl(bridgeUrl)
+  const sessionId = repairSessionId.value ?? crypto.randomUUID()
+  repairSessionId.value = sessionId
+  const maxAttempts = 3
   try {
-    const parsed = parsePiAgentBridgeUrl(bridgeUrl)
-    const incident = {
-      ...buildPiAgentIncident(
-        props.projectId,
-        last.test_id ?? '',
-        last.category ?? 'unknown',
-        last.errors,
-        props.plan.flow_fingerprint ?? '',
-      ),
-      confirmed: true,
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (repairStopped.value) break
+      const current = validation.value
+      if (!current || current.category === 'workflow' || !current.errors.length) break
+      repairHistory.value.push({ attempt, status: 'repairing', category: current.category, action: 'pi.dev repair ' + attempt + '/' + maxAttempts + ' — локальный ComfyUI', errors: current.errors.map(item => item.message) })
+      const incident = { ...buildPiAgentIncident(props.projectId, current.test_id ?? '', current.category ?? 'unknown', current.errors, props.plan.flow_fingerprint ?? ''), confirmed: true, repair_session_id: sessionId, repair_attempt: attempt, max_attempts: maxAttempts }
+      const response = await fetch(parsed.toString(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(incident) })
+      const result = await response.json().catch(() => ({}))
+      const repairItem = repairHistory.value[repairHistory.value.length - 1]
+      if (result.rolled_back) { repairItem.status = 'rolled_back'; repairItem.action = 'pi.dev repair ' + attempt + '/' + maxAttempts + ' — rollback после неудачи' }
+      if (!response.ok && !result.rolled_back) throw new Error(result.error || result.agent?.error || 'pi.dev не смог завершить repair')
+      repairItem.action = result.rolled_back ? repairItem.action + '; выполняется retest с clean snapshot' : 'pi.dev repair ' + attempt + '/' + maxAttempts + ' завершён; выполняется реальный retest'
+      await validateFlow({ preserveHistory: true })
+      if (validation.value?.compatible) break
+      if (attempt === maxAttempts) error.value = 'pi.dev не смог восстановить ComfyUI за 3 попытки. Последняя неудачная попытка была откатана bridge.'
     }
-    const response = await fetch(parsed.toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(incident),
-    })
-    const result = await response.json().catch(() => ({}))
-    if (!response.ok || !result.ok) {
-      throw new Error(result.error || result.agent?.error || 'pi.dev не смог завершить repair')
-    }
-    await validateFlow()
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось выполнить repair через pi.dev'
-  } finally {
-    piRepairing.value = false
-  }
+  } catch (e) { if (!repairStopped.value) error.value = e instanceof Error ? e.message : 'Не удалось выполнить repair через pi.dev' }
+  finally { piRepairing.value = false }
 }
-
 async function fixWithAI() {
   const errors = validation.value?.errors ?? []
   if (!errors.length) {
