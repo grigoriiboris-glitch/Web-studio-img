@@ -489,7 +489,7 @@ watch(() => props.plan.workflow, () => {
       class="test-errors"
     >
       <ul>
-        <li v-for="(item, index) in validation.errors" :key="`error-${index}`">{{ item.message }}</li>
+        <li v-for="(item, index) in validation.errors" :key="`error-${index}`">{{ item.code ? `[${item.code}] ${item.message}` : item.message }}</li>
       </ul>
     </el-alert>
 
@@ -589,7 +589,7 @@ watch(() => props.plan.workflow, () => {
       <strong>История теста</strong>
       <div v-for="item in repairHistory" :key="`${item.attempt}-${item.status}-${item.action ?? ''}`" class="repair-item">
         <span>Попытка {{ item.attempt }}</span>
-        <span>{{ item.status === 'testing' ? 'Тест' : item.status === 'repairing' ? 'AI исправляет' : item.status === 'passed' ? 'Готово' : item.status === 'stopped' ? 'Остановлено' : 'Ошибка' }}</span>
+        <span>{{ item.status === 'testing' ? 'Тест' : item.status === 'repairing' ? 'AI исправляет' : item.status === 'passed' ? 'Готово' : item.status === 'rolled_back' ? 'Rollback' : item.status === 'stopped' ? 'Остановлено' : 'Ошибка' }}</span>
         <span v-if="item.category">{{ item.category }}</span>
       </div>
     </div>
