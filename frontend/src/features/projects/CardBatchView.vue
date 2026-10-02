@@ -45,6 +45,7 @@ interface CardItem {
   finalizedGenerationId?: string
   promptRevision: number
   recipeId?: string
+  recipeVersion?: number
   referenceIds?: string[]
   rejectReason?: RejectReason
   rejectComment?: string
@@ -57,6 +58,7 @@ interface CardItem {
 type BatchState = Record<string, unknown> & {
   cards: CardItem[]
   recipeId?: string
+  recipeVersion?: number
   referenceIds?: string[]
   targetWidth?: number
   targetHeight?: number
@@ -199,8 +201,13 @@ function typeRecipe(type: CardTypeKey) {
   return resolveDefaultRecipeId(recipes.value, type)
 }
 
-function effectiveRecipe(card: CardItem) {
-  return card.recipeId || activeBatch.value?.recipeId || typeRecipe(resolvedCardType(card)) || recipeId.value || undefined
+function effectiveRecipeSelection(card: CardItem): { id?: string; version?: number } | undefined {
+  if (card.recipeId) return { id: card.recipeId, version: card.recipeVersion }
+  if (activeBatch.value?.recipeId) return { id: activeBatch.value.recipeId, version: activeBatch.value.recipeVersion }
+  const typeId = typeRecipe(resolvedCardType(card))
+  if (typeId) return { id: typeId, version: recipes.value.find(recipe => recipe.id === typeId)?.current_version }
+  if (recipeId.value) return { id: recipeId.value, version: recipes.value.find(recipe => recipe.id === recipeId.value)?.current_version }
+  return undefined
 }
 
 function resolvedCardType(card: CardItem): CardTypeKey {
@@ -211,6 +218,7 @@ function batchState(batch: Batch): BatchState {
   return {
     cards: batch.cards,
     recipeId: batch.recipeId,
+    recipeVersion: batch.recipeVersion,
     referenceIds: batch.referenceIds,
     targetWidth: batch.targetWidth,
     targetHeight: batch.targetHeight,
@@ -313,13 +321,15 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
   card.error = undefined
   persistCard(card)
   const version = card.generationIds.length + 1
-  const selectedRecipe = effectiveRecipe(card)
+  const recipeSelection = effectiveRecipeSelection(card)
+  const selectedRecipe = recipeSelection?.id
   const refs = card.referenceIds?.length ? card.referenceIds : activeBatch.value?.referenceIds
   const resolvedType = resolvedCardType(card)
   const assembledPrompt = assembleCardPrompt(prompt, resolvedType, card.fields)
   const generation = await generationsApi.create(routeProjectId.value, {
     prompt: assembledPrompt,
     recipe_id: selectedRecipe,
+    recipe_version: recipeSelection?.version,
     reference_ids: refs,
     parameters: {
       card_batch_id: activeBatch.value?.id,
@@ -334,6 +344,7 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       card_type_fields: cardTypeDefinition(resolvedType).fields.map(field => field.key),
       card_template_id: resolvedTemplate(card).id,
       card_template_name: resolvedTemplate(card).name,
+      recipe_version: recipeSelection?.version,
       original_prompt: prompt,
       version,
       target_width: activeBatch.value?.targetWidth,
@@ -624,6 +635,7 @@ function restoreArchived(card: CardItem) {
 function updateBatchSettings() {
   if (!activeBatch.value) return
   activeBatch.value.recipeId = recipeId.value || undefined
+  activeBatch.value.recipeVersion = recipes.value.find(recipe => recipe.id === recipeId.value)?.current_version
   activeBatch.value.referenceIds = parsedReferenceIds(referenceIdsText.value)
   activeBatch.value.targetWidth = targetWidth.value
   activeBatch.value.targetHeight = targetHeight.value
@@ -659,6 +671,7 @@ function setCardType(card: CardItem, value: CardTypeKey) {
 
 function setCardRecipe(card: CardItem, value: string) {
   card.recipeId = value || undefined
+  card.recipeVersion = recipes.value.find(recipe => recipe.id === value)?.current_version
   persistCard(card)
 }
 
@@ -761,6 +774,7 @@ onMounted(async () => {
         version: item.version,
         cards: Array.isArray(state.cards) ? state.cards : [],
         recipeId: state.recipeId,
+        recipeVersion: state.recipeVersion,
         referenceIds: state.referenceIds,
         targetWidth: state.targetWidth,
         targetHeight: state.targetHeight,
