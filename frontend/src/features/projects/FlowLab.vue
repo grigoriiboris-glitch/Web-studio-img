@@ -67,6 +67,7 @@ const testRunAt = ref<string | null>(null)
 const repairHistory = ref<RepairHistoryItem[]>([])
 const repairStopped = ref(false)
 const repairing = ref(false)
+let activeRequestController: AbortController | null = null
 const formattedTestRunAt = computed(() => testRunAt.value ? new Date(testRunAt.value).toLocaleTimeString() : '')
 
 const stepCatalog: ArtistStep[] = [
@@ -164,6 +165,9 @@ async function validateFlow() {
   testRunAt.value = null
   error.value = ''
   repairHistory.value = []
+  activeRequestController?.abort()
+  const controller = new AbortController()
+  activeRequestController = controller
 
   let currentPlan = props.plan
   try {
@@ -188,6 +192,8 @@ async function validateFlow() {
           seed: currentPlan.parameters?.seed,
           parameters: currentPlan.parameters,
         },
+        undefined,
+        controller.signal,
       )
       const result = response.result
       const messages = result.errors
@@ -237,23 +243,38 @@ async function validateFlow() {
           flow_steps: currentPlan.flow_steps,
           max_attempts: 1,
         },
+        undefined,
+        controller.signal,
       )
       currentPlan = repair.result
       emit('update:plan', currentPlan)
       repairing.value = false
     }
   } catch (e) {
+    if (controller.signal.aborted || repairStopped.value) {
+      const last = repairHistory.value[repairHistory.value.length - 1]
+      if (last?.status === 'testing' || last?.status === 'repairing') {
+        last.status = 'stopped'
+        last.action = 'Остановлено пользователем'
+      } else {
+        repairHistory.value.push({ attempt: repairHistory.value.length + 1, status: 'stopped', errors: [] })
+      }
+      error.value = ''
+      return
+    }
     error.value = e instanceof Error ? e.message : 'Не удалось выполнить тест ComfyUI'
     validation.value = null
     testRunAt.value = new Date().toISOString()
   } finally {
     repairing.value = false
     validating.value = false
+    if (activeRequestController === controller) activeRequestController = null
   }
 }
 
 function stopRepairLoop() {
   repairStopped.value = true
+  activeRequestController?.abort()
 }
 
 async function restoreRepairHistory() {
