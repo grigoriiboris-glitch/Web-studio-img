@@ -33,6 +33,7 @@ const pendingFix = ref<ComfyFlowPlan | null>(null)
 const error = ref('')
 const technicalOpen = ref(false)
 const draggedStep = ref<string | null>(null)
+const testRunAt = ref<string | null>(null)
 
 const stepCatalog: ArtistStep[] = [
   { id: 'sketch', icon: '✏️', title: 'Скетч', description: 'Сохраняем композицию и важные линии.', enabled: true },
@@ -124,6 +125,7 @@ function hasRequiredAssets() {
 
 async function validateFlow() {
   validating.value = true
+  testRunAt.value = null
   error.value = ''
   try {
     const response = await assistantApi.execute<Validation>(
@@ -132,9 +134,11 @@ async function validateFlow() {
       { workflow: props.plan.workflow, flow_steps: props.plan.flow_steps, artist_steps: props.plan.artist_steps },
     )
     validation.value = response.result
+    testRunAt.value = new Date().toISOString()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Не удалось проверить Flow'
     validation.value = null
+    testRunAt.value = new Date().toISOString()
   } finally {
     validating.value = false
   }
@@ -203,12 +207,48 @@ watch(() => props.plan.workflow, () => {
     </div>
 
     <el-alert
+      v-if="error"
+      title="Тест не выполнен"
+      :description="error"
+      type="error"
+      :closable="false"
+      show-icon
+      class="test-error"
+    />
+
+    <el-alert
       :title="readiness.title"
       :description="readiness.text"
       :type="readiness.kind"
       :closable="false"
       class="readiness"
     />
+
+    <el-alert
+      v-if="validation && validation.errors.length"
+      title="Ошибки теста"
+      type="error"
+      :closable="false"
+      show-icon
+      class="test-errors"
+    >
+      <ul>
+        <li v-for="item in validation.errors" :key="item">{{ item }}</li>
+      </ul>
+    </el-alert>
+
+    <el-alert
+      v-if="validation && validation.warnings.length"
+      title="Предупреждения теста"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="test-errors"
+    >
+      <ul>
+        <li v-for="item in validation.warnings" :key="item">{{ item }}</li>
+      </ul>
+    </el-alert>
 
     <section class="steps">
       <div class="section-title">
@@ -281,7 +321,10 @@ watch(() => props.plan.workflow, () => {
     </section>
 
     <div class="actions">
-      <el-button :loading="validating" @click="validateFlow">Проверить готовность</el-button>
+      <el-button :loading="validating" type="info" @click="validateFlow">
+        🧪 {{ validating ? 'Тест выполняется…' : 'Запустить тест' }}
+      </el-button>
+      <span v-if="testRunAt && !validating" class="test-time">Последний тест: {{ new Date(testRunAt).toLocaleTimeString() }}</span>
       <el-button
         v-if="validation?.errors.length"
         :loading="fixing"
@@ -334,6 +377,10 @@ watch(() => props.plan.workflow, () => {
 .artist-intro p, .section-title span, .step-copy span, .material-card span { color: var(--el-text-color-secondary); }
 .artist-kicker { color: var(--el-color-primary); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 .readiness { margin: 0; }
+.test-error, .test-errors { margin: 0; }
+.test-errors ul { margin: 6px 0 0; padding-left: 20px; }
+.test-errors li { margin: 4px 0; }
+.test-time { color: var(--el-text-color-secondary); font-size: 12px; }
 .section-title { margin-bottom: 8px; }
 .section-title div { display: grid; gap: 3px; }
 .step-list { display: grid; gap: 8px; }
