@@ -77,6 +77,7 @@ interface Batch {
   referenceIds?: string[]
   targetWidth?: number
   targetHeight?: number
+  cardType?: CardTypeKey
 }
 
 interface ImportDiff {
@@ -115,6 +116,7 @@ const importedRows = ref<SpreadsheetRow[]>([])
 const importedFileName = ref('')
 const rejectedOpen = ref(true)
 const batchTypeFilter = ref<CardTypeKey | 'all'>('all')
+const newBatchType = ref<CardTypeKey>('custom')
 let saveQueue: Promise<void> = Promise.resolve()
 
 const activeBatch = computed(() => batches.value.find(item => item.id === activeBatchId.value))
@@ -482,7 +484,7 @@ async function createBatch() {
     referenceIds: parsedReferenceIds(referenceIdsText.value),
     targetWidth: targetWidth.value,
     targetHeight: targetHeight.value,
-    cardType: 'custom',
+    cardType: newBatchType.value,
   }
   try {
     const remote = await cardBatchApi.create(routeProjectId.value, {
@@ -499,6 +501,7 @@ async function createBatch() {
     batches.value.unshift(batch)
     activeBatchId.value = batch.id
     name.value = ''
+    newBatchType.value = 'custom'
     save()
     info.value = 'Batch created: ' + cards.length + ' cards'
   } catch (e) {
@@ -559,6 +562,7 @@ function updateBatchSettings() {
 function setBatchType(value: CardTypeKey) {
   if (!activeBatch.value) return
   activeBatch.value.cardType = value
+  newBatchType.value = value
   save()
 }
 
@@ -688,6 +692,7 @@ onMounted(async () => {
       targetWidth.value = first.targetWidth
       targetHeight.value = first.targetHeight
       if (!first.cardType) first.cardType = 'custom'
+      newBatchType.value = first.cardType
     }
     const remoteFirst = remote.batches[0]
     cardColumn.value = String(remoteFirst?.mapping.card_number_column ?? '')
@@ -743,6 +748,7 @@ onMounted(async () => {
         <label>Card number<select v-model="cardColumn"><option v-for="item in columns" :key="item" :value="item">{{ item }}</option></select></label>
         <label>Prompt<select v-model="promptColumn"><option v-for="item in columns" :key="item" :value="item">{{ item }}</option></select></label>
         <label v-if="!activeBatch || importMode === 'new'">Batch name<input v-model="name" placeholder="THE-PRICE-OF-ONE cards"></label>
+        <label v-if="!activeBatch || importMode === 'new'">Card type<select v-model="newBatchType"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
         <button v-if="!activeBatch || importMode === 'new'" type="button" class="primary" @click="createBatch">Create Card Batch</button>
         <button v-else type="button" class="primary" @click="applyImportDiff">Apply diff</button>
       </div>
