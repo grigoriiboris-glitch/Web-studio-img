@@ -103,7 +103,6 @@ const selectedCount = computed(() => activeCards.value.filter(card => card.selec
 const finalizedCount = computed(() => activeCards.value.filter(card => card.status === 'finalized').length)
 const pendingCards = computed(() => activeCards.value.filter(card => ['pending', 'draft', 'failed', 'needs_revision'].includes(card.status)))
 const rejectedCards = computed(() => activeCards.value.filter(card => card.rejectReason))
-const readyToFinalize = computed(() => activeCards.value.filter(card => Boolean(card.selectedGenerationId) && card.status !== 'finalized' && checklist(card).every(x => x.status !== 'blocked')))
 
 const importDiff = computed<ImportDiff | null>(() => {
   const batch = activeBatch.value
