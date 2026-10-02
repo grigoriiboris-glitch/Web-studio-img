@@ -31,7 +31,7 @@ function allowedBash(command) {
 export default function (pi) {
   pi.on("tool_call", async event => {
     if (event.toolName === "read" || event.toolName === "grep" || event.toolName === "find") {
-      const file = event.input.path || event.input.pattern || "";
+      const file = event.input.path || "";
       if (file && (!insideProject(file) || protectedPath(file))) {
         return { block: true, reason: "Bridge policy: access outside the project or to protected data is blocked." };
       }
