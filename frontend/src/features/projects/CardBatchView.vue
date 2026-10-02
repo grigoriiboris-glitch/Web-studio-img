@@ -90,7 +90,7 @@ interface Batch {
 
 interface ImportDiff {
   added: SpreadsheetRow[]
-  changed: Array<{ card: CardItem; row: SpreadsheetRow; newPrompt: string }>
+  changed: Array<{ card: CardItem; row: SpreadsheetRow; newPrompt: string; newFields: Record<string, string> }>
   unchanged: CardItem[]
   removed: CardItem[]
 }
@@ -154,7 +154,13 @@ const importDiff = computed<ImportDiff | null>(() => {
     incoming.add(number)
     const card = existing.get(number)
     if (!card) added.push(row)
-    else if (card.prompt !== prompt) changed.push({ card, row, newPrompt: prompt })
+    else {
+      const newFields = fieldsFromRow(row, resolvedCardType(card), columnMapping.value)
+      const oldFields = JSON.stringify(card.fields || {})
+      const nextFields = JSON.stringify(newFields)
+      if (card.prompt !== prompt || oldFields !== nextFields) changed.push({ card, row, newPrompt: prompt, newFields })
+      else unchanged.push(card)
+    }
     else unchanged.push(card)
   }
   const removed = batch.cards.filter(c => !c.archived && !incoming.has(c.cardNumber))
@@ -600,7 +606,7 @@ function applyImportDiff() {
   if (!batch || !diff) return
   for (const item of diff.changed) {
     item.card.prompt = item.newPrompt
-    item.card.fields = fieldsFromRowForCard(item.row, item.card)
+    item.card.fields = item.newFields
     item.card.promptRevision++
     item.card.status = 'needs_revision'
     item.card.error = undefined
@@ -901,7 +907,7 @@ onMounted(async () => {
       <div v-if="importDiff" class="diff">
         <strong>Re-import diff</strong>
         <span>{{ importDiff.added.length }} added · {{ importDiff.changed.length }} changed · {{ importDiff.unchanged.length }} unchanged · {{ importDiff.removed.length }} archived</span>
-        <ul><li v-for="item in importDiff.changed" :key="item.card.id">#{{ item.card.cardNumber }} prompt changed → revision {{ item.card.promptRevision + 1 }}</li></ul>
+        <ul><li v-for="item in importDiff.changed" :key="item.card.id">#{{ item.card.cardNumber }} data changed → revision {{ item.card.promptRevision + 1 }}</li></ul>
       </div>
       <div v-if="rows.length" class="preview">
         <strong>Preview: {{ rows.length }} rows</strong>
