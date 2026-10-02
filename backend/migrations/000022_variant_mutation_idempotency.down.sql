@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS variant_mutation_idempotency;
