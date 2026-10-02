@@ -1087,6 +1087,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .mapping-box label { font-size:12px; font-weight:600; }
 .mapping-box small { margin-top:2px; }
 .validation-box { display:grid; gap:4px; margin:8px 0; padding:9px; border-radius:7px; background:#fff0f0; color:#9b1c1c; }
+.schema-warning { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px; padding:10px; border-radius:8px; background:#fff8e1; color:#6b4f00; }
+.schema-warning span { flex:1; }
 .preview { margin-top:14px; overflow:auto; }
 table { width:100%; border-collapse:collapse; margin-top:8px; }
 th,td { border-bottom:1px solid #eee; text-align:left; padding:7px; }
