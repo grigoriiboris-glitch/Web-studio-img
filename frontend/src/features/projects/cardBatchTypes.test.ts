@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CARD_TYPES,
   assembleCardPrompt,
+  productionDefaults,
   fieldsFromRow,
   resolveDefaultRecipeId,
   suggestColumnMapping,
@@ -54,6 +55,12 @@ describe('card batch type schemas', () => {
   it('requires only the stable prompt for backward-compatible imports', () => {
     const errors = validateCardData('001', 'prompt', {}, 'item')
     expect(errors).toHaveLength(0)
+  })
+
+  it('resolves type production dimensions without forcing them onto custom cards', () => {
+    expect(productionDefaults('role')).toMatchObject({ width: 750, height: 1050, aspectRatio: '5:7' })
+    expect(productionDefaults('world')).toMatchObject({ width: 1200, height: 800, aspectRatio: '3:2' })
+    expect(productionDefaults('custom').width).toBeUndefined()
   })
 
   it('defines a versioned schema for every production card type', () => {
