@@ -115,5 +115,6 @@ func workflowContainsAsset(workflow map[string]any, name string) bool {
 	if name == "" {
 		return false
 	}
-	return len(flowAssetRefs(workflow)[name]) > 0
+	_, ok := flowAssetRefs(workflow)[name]
+	return ok
 }
