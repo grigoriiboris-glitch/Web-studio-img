@@ -32,6 +32,7 @@ type FlowPlan struct {
 	Inputs []FlowInput
 	SelectedModel map[string]string
 	Reasoning string
+	ArtistSteps []map[string]any
 }
 
 type FlowPlanner struct {
@@ -78,6 +79,7 @@ func (p *FlowPlanner) Plan(ctx context.Context, task string, snapshot comfyui.Ru
 			"selected_model": map[string]string{"folder":"checkpoints","filename":"exact installed filename"},
 			"workflow": map[string]any{"1":map[string]any{"class_type":"ExactNode","inputs":map[string]any{}}},
 			"reasoning": "short explanation",
+			"artist_steps": []map[string]any{{"id":"sketch","enabled":true,"order":0,"evidence":[]map[string]any{{"kind":"asset","value":"sketch"}}}},
 		},
 	}
 	payload := map[string]any{
@@ -148,8 +150,9 @@ func decodeFlowPlan(content string) (FlowPlan,error) {
 			inputs=append(inputs,FlowInput{ID:strings.TrimSpace(id),Type:strings.TrimSpace(kind),Label:strings.TrimSpace(label),Required:required})
 		}
 	}
+	artistSteps,_:=raw["artist_steps"].([]any)
 	getString:=func(key string) string { value,_:=raw[key].(string);return strings.TrimSpace(value) }
-	return FlowPlan{Name:strings.TrimSpace(name),Description:getString("description"),Prompt:getString("prompt"),NegativePrompt:getString("negative_prompt"),Workflow:workflow,Parameters:parameters,Inputs:inputs,SelectedModel:selected,Reasoning:getString("reasoning")},nil
+	return FlowPlan{Name:strings.TrimSpace(name),Description:getString("description"),Prompt:getString("prompt"),NegativePrompt:getString("negative_prompt"),Workflow:workflow,Parameters:parameters,Inputs:inputs,SelectedModel:selected,Reasoning:getString("reasoning"),ArtistSteps:artistSteps},nil
 }
 
 func compactRuntime(task string,snapshot comfyui.RuntimeCapabilitySnapshot) map[string]any {
@@ -195,5 +198,5 @@ func mustJSONString(value any) string {data,_:=json.Marshal(value);return string
 func flowPlanMap(plan FlowPlan) map[string]any {
 	inputs:=make([]map[string]any,0,len(plan.Inputs))
 	for _,input:=range plan.Inputs{inputs=append(inputs,map[string]any{"id":input.ID,"type":input.Type,"label":input.Label,"required":input.Required})}
-	return map[string]any{"name":plan.Name,"description":plan.Description,"prompt":plan.Prompt,"negative_prompt":plan.NegativePrompt,"inputs":inputs,"parameters":plan.Parameters,"selected_model":plan.SelectedModel,"workflow":plan.Workflow,"reasoning":plan.Reasoning}
+	return map[string]any{"name":plan.Name,"description":plan.Description,"prompt":plan.Prompt,"negative_prompt":plan.NegativePrompt,"inputs":inputs,"parameters":plan.Parameters,"selected_model":plan.SelectedModel,"workflow":plan.Workflow,"reasoning":plan.Reasoning,"artist_steps":plan.ArtistSteps}
 }
