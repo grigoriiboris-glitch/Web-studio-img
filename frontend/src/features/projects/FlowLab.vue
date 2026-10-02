@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { assistantApi, type ComfyFlowPlan } from '../../api/client'
+import { assistantApi, type ComfyFlowPlan, type ComfyFlowStep } from '../../api/client'
 
 type Validation = {
   compatible: boolean
@@ -42,6 +42,19 @@ const stepCatalog: ArtistStep[] = [
 ]
 
 const steps = ref<ArtistStep[]>(stepCatalog.map(step => ({ ...step })))
+watch(() => props.plan.flow_steps, (flowSteps) => {
+  if (!flowSteps?.length) return
+  const enabled = new Map(flowSteps.map(step => [step.id, step.enabled]))
+  const ordered = [...flowSteps].sort((a, b) => a.order - b.order).map(step => step.id)
+  const catalog = new Map(stepCatalog.map(step => [step.id, step]))
+  steps.value = ordered.map(id => ({ ...(catalog.get(id) ?? stepCatalog[0]), enabled: enabled.get(id) ?? true }))
+}, { deep: true })
+const emitFlowSteps = () => {
+  emit('update:plan', {
+    ...props.plan,
+    flow_steps: steps.value.map((step, order): ComfyFlowStep => ({ id: step.id as ComfyFlowStep['id'], enabled: step.enabled, order })),
+  })
+}
 
 const inputLabels: Record<string, string> = {
   sketch: 'Скетч',
@@ -90,6 +103,7 @@ function moveStep(from: number, to: number) {
   const [item] = next.splice(from, 1)
   next.splice(to, 0, item)
   steps.value = next
+  emitFlowSteps()
 }
 
 function onDrop(index: number) {
@@ -101,6 +115,7 @@ function onDrop(index: number) {
 
 function resetSteps() {
   steps.value = stepCatalog.map(step => ({ ...step }))
+  emitFlowSteps()
 }
 
 function hasRequiredAssets() {
@@ -220,7 +235,7 @@ watch(() => props.plan.workflow, () => {
             <strong>{{ step.title }}</strong>
             <span>{{ step.description }}</span>
           </div>
-          <el-switch v-model="step.enabled" />
+          <el-switch v-model="step.enabled" @change="emitFlowSteps" />
         </div>
       </div>
     </section>
