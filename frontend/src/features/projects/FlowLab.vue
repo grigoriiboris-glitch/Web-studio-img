@@ -23,7 +23,7 @@ type TestResult = {
 
 type RepairHistoryItem = {
   attempt: number
-  status: 'testing' | 'repairing' | 'passed' | 'failed' | 'stopped'
+  status: 'testing' | 'repairing' | 'passed' | 'failed' | 'rolled_back' | 'stopped'
   category?: TestResult['category']
   action?: string
   errors: string[]
@@ -231,6 +231,19 @@ async function validateFlow() {
       }
       if (result.category !== 'workflow' || attempt >= 3) break
 
+      if (attempt > 1) {
+        currentPlan = clonePlan(lastKnownGoodPlan)
+        emit('update:plan', currentPlan)
+        repairHistory.value[repairHistory.value.length - 1].action = 'Retest failed — workflow откатился к последнему рабочему snapshot'
+        repairHistory.value.push({
+          attempt,
+          status: 'rolled_back',
+          category: result.category,
+          action: 'Rollback к clean snapshot перед новой AI-попыткой',
+          errors: messages.map(item => item.message),
+        })
+      }
+
       repairing.value = true
       repairHistory.value.push({
         attempt,
@@ -320,19 +333,20 @@ async function restoreRepairHistory() {
         const errors = Array.isArray(result.errors)
           ? result.errors.map(item => typeof item === 'string' ? item : item.message)
           : []
+        const lifecycle = result.repair_lifecycle as { state?: string } | undefined
         return {
           attempt: index + 1,
-          status: result.ok ? 'passed' : 'failed',
+          status: lifecycle?.state === 'rolled_back' ? 'rolled_back' : result.ok ? 'passed' : 'failed',
           category: result.category,
-          action: 'Восстановлено из истории',
+          action: lifecycle?.state === 'rolled_back' ? 'Rollback из истории' : 'Восстановлено из истории',
           errors,
         }
       }
       return {
         attempt: index + 1,
-        status: 'repairing',
+        status: action.output && typeof action.output === 'object' && (action.output as Record<string, unknown>).repair_lifecycle && ((action.output as Record<string, unknown>).repair_lifecycle as Record<string, unknown>).state === 'rolled_back' ? 'rolled_back' : 'repairing',
         category: 'workflow',
-        action: 'AI исправление (восстановлено из истории)',
+        action: 'AI исправление / lifecycle (восстановлено из истории)',
         errors: [],
       }
     })
