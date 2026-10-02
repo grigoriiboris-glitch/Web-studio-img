@@ -114,3 +114,4 @@ func TestMutationRequestHashIncludesOperation(t *testing.T) {
     t.Fatal("different mutation operations must produce different hashes")
   }
 }
+
