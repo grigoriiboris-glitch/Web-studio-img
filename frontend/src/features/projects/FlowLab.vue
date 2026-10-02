@@ -200,6 +200,7 @@ async function validateFlow() {
           parameters: currentPlan.parameters,
           repair_session_id: sessionId,
           repair_attempt: attempt,
+          workflow_fingerprint_before: (currentPlan as ComfyFlowPlan & { flow_fingerprint?: string }).flow_fingerprint,
         },
         `repair-${sessionId}-test-${attempt}`,
         controller.signal,
