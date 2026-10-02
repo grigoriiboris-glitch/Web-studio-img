@@ -175,6 +175,8 @@ func (h *Handler) inspectComfyUICapabilities(ctx context.Context,userID,projectI
 
 func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error) {
 	task,_:=in["task"].(string);task=strings.TrimSpace(task);if task==""{return nil,"",0,"",errors.New("task is required")}
+	flowSteps:=normalizeFlowSteps(in["flow_steps"])
+	if len(flowSteps)>0 { task += "\n\nArtist flow is authoritative. Compile the execution workflow to match this exact order and enabled state:\n" + formatFlowSteps(flowSteps) }
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
 	snapshot,err:=runtime.CapabilitySnapshot(ctx);if err!=nil{return nil,"",0,"",err}
 	currentWorkflow,_:=in["current_workflow"].(map[string]any)
@@ -195,6 +197,7 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 		if validation.Compatible{
 			result:=flowPlanMap(plan)
 			result["source"]="ai_generated"
+			if len(flowSteps)>0 { result["flow_steps"]=flowSteps }
 			result["compatibility"]=map[string]any{"compatible":true,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}
 			result["runtime_retrieved_at"]=snapshot.RetrievedAt
 			return result,"AI generated a flow constrained to the live ComfyUI node and model catalog.",0.9,"The planner is retried with concrete runtime validation errors when needed.",nil
