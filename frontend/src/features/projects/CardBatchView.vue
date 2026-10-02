@@ -743,7 +743,7 @@ function setCardType(card: CardItem, value: CardTypeKey) {
   card.typeOverride = value === (activeBatch.value?.cardType || 'custom') ? undefined : value
   const type = resolvedCardType(card)
   card.cardTypeVersion = cardTypeDefinition(type).version
-  card.templateOverrideId = undefined
+  if (card.templateOverrideId && !templatesFor(type).some(template => template.id === card.templateOverrideId)) card.templateOverrideId = undefined
   persistCard(card)
 }
 
