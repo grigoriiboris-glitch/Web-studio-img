@@ -228,7 +228,7 @@ async function validateFlow() {
             currentPlan.prompt || currentPlan.description || 'Repair this ComfyUI workflow',
             'Repair only the technical workflow error. Preserve artist intent, Artist Flow order/enabled state, inputs, Creative Brief and Color Reference contract.',
             'Validation/execution errors:',
-            ...messages,
+            ...messages.map(item => item.message),
           ].join('\n'),
           current_workflow: currentPlan.workflow,
           validation_errors: messages.map(item => item.message),
