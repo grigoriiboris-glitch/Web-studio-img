@@ -68,6 +68,7 @@ const testRunAt = ref<string | null>(null)
 const repairHistory = ref<RepairHistoryItem[]>([])
 const repairStopped = ref(false)
 const repairing = ref(false)
+const repairSessionId = ref<string | null>(null)
 let activeRequestController: AbortController | null = null
 const formattedTestRunAt = computed(() => testRunAt.value ? new Date(testRunAt.value).toLocaleTimeString() : '')
 
@@ -169,8 +170,13 @@ async function validateFlow() {
   activeRequestController?.abort()
   const controller = new AbortController()
   activeRequestController = controller
+  const sessionId = crypto.randomUUID()
+  repairSessionId.value = sessionId
 
-  let currentPlan = props.plan
+  const clonePlan = (plan: ComfyFlowPlan): ComfyFlowPlan => JSON.parse(JSON.stringify(plan)) as ComfyFlowPlan
+  let lastKnownGoodPlan = clonePlan(props.plan)
+  let currentPlan = clonePlan(props.plan)
+
   try {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       if (repairStopped.value) {
@@ -192,8 +198,10 @@ async function validateFlow() {
           aspect_ratio: currentPlan.parameters?.aspect_ratio,
           seed: currentPlan.parameters?.seed,
           parameters: currentPlan.parameters,
+          repair_session_id: sessionId,
+          repair_attempt: attempt,
         },
-        undefined,
+        `repair-${sessionId}-test-${attempt}`,
         controller.signal,
       )
       const result = response.result
@@ -217,37 +225,53 @@ async function validateFlow() {
       }
       testRunAt.value = new Date().toISOString()
 
-      if (result.ok || result.category !== 'workflow' || attempt >= 3) break
+      if (result.ok) {
+        lastKnownGoodPlan = clonePlan(currentPlan)
+        break
+      }
+      if (result.category !== 'workflow' || attempt >= 3) break
 
       repairing.value = true
       repairHistory.value.push({
         attempt,
         status: 'repairing',
         category: result.category,
-        action: 'AI исправляет только техническую часть workflow',
+        action: 'AI исправляет только техническую часть workflow от последнего рабочего snapshot',
         errors: messages.map(item => item.message),
       })
+      const baseline = clonePlan(lastKnownGoodPlan)
+      const protectedPlan = baseline as ComfyFlowPlan & Record<string, unknown>
       const repair = await assistantApi.execute<ComfyFlowPlan>(
         props.projectId,
         'create_comfy_flow',
         {
           task: [
-            currentPlan.prompt || currentPlan.description || 'Repair this ComfyUI workflow',
+            baseline.prompt || baseline.description || 'Repair this ComfyUI workflow',
             'Repair only the technical workflow error. Preserve artist intent, Artist Flow order/enabled state, inputs, Creative Brief and Color Reference contract.',
             'Validation/execution errors:',
             ...messages.map(item => item.message),
           ].join('\n'),
-          current_workflow: currentPlan.workflow,
+          current_workflow: baseline.workflow,
           validation_errors: messages.map(item => item.message),
-          inputs: currentPlan.inputs,
-          parameters: currentPlan.parameters,
-          flow_steps: currentPlan.flow_steps,
+          inputs: baseline.inputs,
+          parameters: baseline.parameters,
+          flow_steps: baseline.flow_steps,
+          artist_steps: baseline.artist_steps,
+          creative_brief: protectedPlan.creative_brief,
+          color_reference_contract: protectedPlan.color_reference_contract,
+          artist_intent: protectedPlan.artist_intent,
+          repair_session_id: sessionId,
+          repair_attempt: attempt,
           max_attempts: 1,
         },
-        undefined,
+        `repair-${sessionId}-repair-${attempt}`,
         controller.signal,
       )
-      currentPlan = repair.result
+      currentPlan = clonePlan(repair.result)
+      const candidate = currentPlan as ComfyFlowPlan & Record<string, unknown>
+      if (candidate.flow_fingerprint && baseline.flow_fingerprint && candidate.flow_fingerprint === baseline.flow_fingerprint) {
+        repairHistory.value[repairHistory.value.length - 1].action = 'AI исправление не изменило workflow; повторная попытка от clean snapshot'
+      }
       emit('update:plan', currentPlan)
       repairing.value = false
     }
@@ -353,24 +377,37 @@ async function fixWithAI() {
   }
   fixing.value = true
   error.value = ''
+  const sessionId = repairSessionId.value ?? crypto.randomUUID()
+  repairSessionId.value = sessionId
   try {
+    const baseline = JSON.parse(JSON.stringify(props.plan)) as ComfyFlowPlan
+    const protectedPlan = baseline as ComfyFlowPlan & Record<string, unknown>
     const response = await assistantApi.execute<ComfyFlowPlan>(
       props.projectId,
       'create_comfy_flow',
       {
         task: [
-          props.plan.prompt || props.plan.description || 'Repair this ComfyUI workflow',
+          baseline.prompt || baseline.description || 'Repair this ComfyUI workflow',
           'Repair the supplied workflow instead of redesigning it.',
           'Keep the artist intent and current flow. Only fix what is necessary.',
+          'Preserve Creative Brief and Color Reference contract exactly.',
           'Validation errors:',
           ...errors.map(item => item.message),
         ].join('\n'),
-        current_workflow: props.plan.workflow,
+        current_workflow: baseline.workflow,
         validation_errors: errors.map(item => item.message),
-        inputs: props.plan.inputs,
-        parameters: props.plan.parameters,
-        flow_steps: props.plan.flow_steps,
+        inputs: baseline.inputs,
+        parameters: baseline.parameters,
+        flow_steps: baseline.flow_steps,
+        artist_steps: baseline.artist_steps,
+        creative_brief: protectedPlan.creative_brief,
+        color_reference_contract: protectedPlan.color_reference_contract,
+        artist_intent: protectedPlan.artist_intent,
+        repair_session_id: sessionId,
+        repair_attempt: 1,
+        max_attempts: 1,
       },
+      `repair-${sessionId}-manual`,
     )
     pendingFix.value = response.result
   } catch (e) {
