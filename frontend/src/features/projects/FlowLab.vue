@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { assistantApi, type ComfyFlowPlan, type ComfyFlowStep } from '../../api/client'
 
 type TestError = {
@@ -256,6 +256,45 @@ function stopRepairLoop() {
   repairStopped.value = true
 }
 
+async function restoreRepairHistory() {
+  try {
+    const response = await assistantApi.actions(props.projectId)
+    const persisted = response.actions
+      .filter(action => {
+        if (action.tool === 'test_comfy_flow') return true
+        if (action.tool !== 'create_comfy_flow') return false
+        const task = typeof action.input?.task === 'string' ? action.input.task : ''
+        return task.includes('Repair only the technical workflow error.')
+      })
+      .slice(-12)
+
+    repairHistory.value = persisted.map((action, index) => {
+      if (action.tool === 'test_comfy_flow') {
+        const result = action.output as Partial<TestResult>
+        const errors = Array.isArray(result.errors)
+          ? result.errors.map(item => typeof item === 'string' ? item : item.message)
+          : []
+        return {
+          attempt: index + 1,
+          status: result.ok ? 'passed' : 'failed',
+          category: result.category,
+          action: 'Восстановлено из истории',
+          errors,
+        }
+      }
+      return {
+        attempt: index + 1,
+        status: 'repairing',
+        category: 'workflow',
+        action: 'AI исправление (восстановлено из истории)',
+        errors: [],
+      }
+    })
+  } catch {
+    // History is supplementary; a transient history request must not block Flow Lab.
+  }
+}
+
 async function sendToPiAgent() {
   const last = validation.value
   if (!last || last.category === 'workflow' || !last.errors.length) return
@@ -347,6 +386,10 @@ function applyFix() {
 function rejectFix() {
   pendingFix.value = null
 }
+
+onMounted(() => {
+  void restoreRepairHistory()
+})
 
 watch(() => props.plan.workflow, () => {
   validation.value = null
