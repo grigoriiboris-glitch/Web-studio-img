@@ -1,4 +1,3 @@
-<!-- eslint-disable -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { assistantApi, type ComfyFlowPlan } from '../../api/client'
@@ -11,6 +10,14 @@ type Validation = {
   referenced_models: string[]
 }
 
+type ArtistStep = {
+  id: string
+  icon: string
+  title: string
+  description: string
+  enabled: boolean
+}
+
 const props = defineProps<{
   projectId: string
   plan: ComfyFlowPlan
@@ -19,98 +26,85 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:plan', 'run', 'save'])
 
-const selectedNodeId = ref('')
-const nodeInputsText = ref('')
-const nodeClassType = ref('')
-const disabledNodes = ref<string[]>([])
-const disabledSnapshots = ref<Record<string, unknown>>({})
 const validation = ref<Validation | null>(null)
 const validating = ref(false)
 const fixing = ref(false)
 const pendingFix = ref<ComfyFlowPlan | null>(null)
 const error = ref('')
+const technicalOpen = ref(false)
+const draggedStep = ref<string | null>(null)
 
-const nodeEntries = computed(() => Object.entries(props.plan.workflow))
-const selectedNode = computed(() => {
-  if (!selectedNodeId.value) return null
-  const value = props.plan.workflow[selectedNodeId.value]
-  return value && typeof value === 'object' ? value as Record<string, unknown> : null
+const stepCatalog: ArtistStep[] = [
+  { id: 'sketch', icon: '✏️', title: 'Скетч', description: 'Сохраняем композицию и важные линии.', enabled: true },
+  { id: 'reference', icon: '🎨', title: 'Цветной референс', description: 'Берём цвета, материалы и настроение.', enabled: true },
+  { id: 'structure', icon: '🧩', title: 'Сохраняем форму', description: 'Не даём генерации потерять основную конструкцию изображения.', enabled: true },
+  { id: 'final', icon: '🖼️', title: 'Финальная иллюстрация', description: 'Получаем полноценное цветное изображение.', enabled: true },
+]
+
+const steps = ref<ArtistStep[]>(stepCatalog.map(step => ({ ...step })))
+
+const inputLabels: Record<string, string> = {
+  sketch: 'Скетч',
+  color_reference: 'Цветной референс',
+  color_reference_image: 'Цветной референс',
+  reference: 'Референс',
+  input_image: 'Исходное изображение',
+  mask_image: 'Маска',
+}
+
+const visibleInputs = computed(() => props.plan.inputs.filter(input => input.required || props.inputAssets?.[input.id]))
+const readiness = computed(() => {
+  const missing = props.plan.inputs
+    .filter(input => input.required)
+    .filter(input => !props.inputAssets?.[input.id])
+  if (missing.length) return { kind: 'warning' as const, title: 'Нужно добавить материалы', text: missing.map(input => input.label || inputLabels[input.id] || input.id).join(', ') }
+  if (validation.value?.compatible) return { kind: 'success' as const, title: 'Всё готово', text: 'Можно создавать изображение.' }
+  if (validation.value && validation.value.errors.length) return { kind: 'error' as const, title: 'Нужно исправление', text: 'Нажмите «Исправить автоматически».' }
+  return { kind: 'info' as const, title: 'Проверим перед запуском', text: 'Студия сама проверит техническую часть.' }
 })
 
-function selectNode(id: string) {
-  selectedNodeId.value = id
-  const node = props.plan.workflow[id] as Record<string, unknown> | undefined
-  nodeClassType.value = typeof node?.class_type === 'string' ? node.class_type : ''
-  nodeInputsText.value = JSON.stringify(node?.inputs ?? {}, null, 2)
+const parameterDefinitions = computed(() => Object.entries(props.plan.parameters ?? {}).filter(([key]) =>
+  ['reference_strength', 'color_strength', 'line_strength', 'denoise', 'strength', 'creativity'].includes(key.toLowerCase()),
+))
+
+function parameterValue(key: string): number {
+  const value = props.plan.parameters?.[key]
+  return typeof value === 'number' ? value : 0.7
 }
 
-watch(() => props.plan.workflow, () => {
-  if (!selectedNodeId.value || !props.plan.workflow[selectedNodeId.value]) {
-    const first = Object.keys(props.plan.workflow)[0]
-    if (first) selectNode(first)
-  }
-}, { immediate: true })
-
-function updatePlan(workflow: Record<string, unknown>) {
-  emit('update:plan', { ...props.plan, workflow })
+function setParameter(key: string, value: number) {
+  emit('update:plan', {
+    ...props.plan,
+    parameters: { ...(props.plan.parameters ?? {}), [key]: value },
+  })
+  validation.value = null
 }
 
-function applyNodeEdit() {
-  if (!selectedNodeId.value) return
-  let inputs: Record<string, unknown>
-  try {
-    const parsed = JSON.parse(nodeInputsText.value || '{}')
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Inputs must be a JSON object')
-    inputs = parsed
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Invalid node inputs JSON'
-    return
-  }
-  const current = props.plan.workflow[selectedNodeId.value]
-  const node = current && typeof current === 'object' ? { ...(current as Record<string, unknown>) } : {}
-  node.class_type = nodeClassType.value.trim()
-  node.inputs = inputs
-  updatePlan({ ...props.plan.workflow, [selectedNodeId.value]: node })
-  error.value = ''
+function inputLabel(input: { id: string; label?: string }) {
+  return input.label || inputLabels[input.id] || input.id.replaceAll('_', ' ')
 }
 
-function toggleNodeDisabled(id: string) {
-  const workflow = { ...props.plan.workflow }
-  if (disabledNodes.value.includes(id)) {
-    const snapshot = disabledSnapshots.value[id]
-    if (snapshot) workflow[id] = snapshot
-    const next = { ...disabledSnapshots.value }
-    delete next[id]
-    disabledSnapshots.value = next
-    disabledNodes.value = disabledNodes.value.filter(value => value !== id)
-  } else {
-    disabledSnapshots.value = { ...disabledSnapshots.value, [id]: workflow[id] }
-    delete workflow[id]
-    disabledNodes.value = [...disabledNodes.value, id]
-  }
-  updatePlan(workflow)
+function moveStep(from: number, to: number) {
+  if (to < 0 || to >= steps.value.length || from === to) return
+  const next = [...steps.value]
+  const [item] = next.splice(from, 1)
+  next.splice(to, 0, item)
+  steps.value = next
 }
 
-function activeWorkflow(): Record<string, unknown> {
-  return { ...props.plan.workflow }
+function onDrop(index: number) {
+  if (!draggedStep.value) return
+  const from = steps.value.findIndex(step => step.id === draggedStep.value)
+  moveStep(from, index)
+  draggedStep.value = null
 }
 
-function addNode() {
-  const ids = new Set(Object.keys(props.plan.workflow))
-  let index = Object.keys(props.plan.workflow).length + 1
-  while (ids.has(String(index))) index += 1
-  const id = String(index)
-  updatePlan({ ...props.plan.workflow, [id]: { class_type: 'LoadImage', inputs: {} } })
-  selectNode(id)
+function resetSteps() {
+  steps.value = stepCatalog.map(step => ({ ...step }))
 }
 
-function removeNode() {
-  if (!selectedNodeId.value) return
-  const workflow = { ...props.plan.workflow }
-  delete workflow[selectedNodeId.value]
-  disabledNodes.value = disabledNodes.value.filter(id => id !== selectedNodeId.value)
-  selectedNodeId.value = ''
-  updatePlan(workflow)
+function hasRequiredAssets() {
+  return props.plan.inputs.filter(input => input.required).every(input => Boolean(props.inputAssets?.[input.id]))
 }
 
 async function validateFlow() {
@@ -120,11 +114,11 @@ async function validateFlow() {
     const response = await assistantApi.execute<Validation>(
       props.projectId,
       'validate_comfy_flow',
-      { workflow: activeWorkflow() },
+      { workflow: props.plan.workflow },
     )
     validation.value = response.result
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Validation failed'
+    error.value = e instanceof Error ? e.message : 'Не удалось проверить Flow'
     validation.value = null
   } finally {
     validating.value = false
@@ -134,7 +128,7 @@ async function validateFlow() {
 async function fixWithAI() {
   const errors = validation.value?.errors ?? []
   if (!errors.length) {
-    error.value = 'Run Validate first and provide at least one validation error'
+    error.value = 'Сначала нажмите «Проверить готовность».'
     return
   }
   fixing.value = true
@@ -147,10 +141,11 @@ async function fixWithAI() {
         task: [
           props.plan.prompt || props.plan.description || 'Repair this ComfyUI workflow',
           'Repair the supplied workflow instead of redesigning it.',
+          'Keep the artist intent and current flow. Only fix what is necessary.',
           'Validation errors:',
           ...errors,
         ].join('\n'),
-        current_workflow: activeWorkflow(),
+        current_workflow: props.plan.workflow,
         validation_errors: errors,
         inputs: props.plan.inputs,
         parameters: props.plan.parameters,
@@ -158,7 +153,7 @@ async function fixWithAI() {
     )
     pendingFix.value = response.result
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'AI fix failed'
+    error.value = e instanceof Error ? e.message : 'Не удалось исправить Flow'
   } finally {
     fixing.value = false
   }
@@ -169,108 +164,178 @@ function applyFix() {
   emit('update:plan', pendingFix.value)
   pendingFix.value = null
   validation.value = null
-  selectedNodeId.value = ''
 }
 
 function rejectFix() {
   pendingFix.value = null
 }
+
+watch(() => props.plan.workflow, () => {
+  validation.value = null
+}, { deep: true })
 </script>
 
 <template>
-  <div class="flow-lab">
-    <div class="flow-lab-toolbar">
+  <div class="artist-flow">
+    <div class="artist-intro">
       <div>
-        <strong>Flow Lab</strong>
-        <span class="flow-lab-subtitle">Visual ComfyUI workflow editor</span>
+        <div class="artist-kicker">Творческий процесс</div>
+        <h3>{{ plan.name || 'Создание иллюстрации' }}</h3>
+        <p>{{ plan.description || 'Соберите процесс из понятных творческих шагов. Техническая часть настраивается автоматически.' }}</p>
       </div>
-      <el-space wrap>
-        <el-button :loading="validating" @click="validateFlow">Validate</el-button>
-        <el-button :loading="fixing" :disabled="!validation?.errors.length" @click="fixWithAI">Fix with AI</el-button>
-        <el-button @click="addNode">Add node</el-button>
-        <el-button type="primary" :disabled="!validation?.compatible" @click="emit('run')">Run Flow</el-button>
-        <el-button :disabled="!validation?.compatible" @click="emit('save')">Save as Recipe</el-button>
-      </el-space>
+      <el-tag :type="readiness.kind">{{ readiness.title }}</el-tag>
     </div>
 
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-alert
-      v-if="validation"
-      :title="validation.compatible ? 'Workflow is compatible' : 'Workflow has blocking errors'"
-      :type="validation.compatible ? 'success' : 'error'"
-      :description="[...validation.errors, ...validation.warnings].join(' • ')"
+      :title="readiness.title"
+      :description="readiness.text"
+      :type="readiness.kind"
       :closable="false"
+      class="readiness"
     />
 
-    <div class="flow-lab-grid">
-      <section class="flow-graph">
-        <div
-          v-for="([id, node], index) in nodeEntries"
-          :key="id"
-          class="flow-node"
-          :class="{ selected: selectedNodeId === id, disabled: disabledNodes.includes(id) }"
-          :style="{ '--node-index': index }"
-          @click="selectNode(id)"
-        >
-          <div class="flow-node-header">
-            <span>#{{ id }}</span>
-            <el-tag size="small">{{ typeof (node as Record<string, unknown>).class_type === 'string' ? (node as Record<string, unknown>).class_type : 'Unknown' }}</el-tag>
-          </div>
-          <div class="flow-node-body">
-            {{ Object.keys(((node as Record<string, unknown>).inputs ?? {}) as object).length }} inputs
-          </div>
-          <div v-if="disabledNodes.includes(id)" class="flow-node-state">disabled</div>
+    <section class="steps">
+      <div class="section-title">
+        <div>
+          <strong>Ваш процесс</strong>
+          <span>Перетащите шаги, если хотите изменить порядок.</span>
         </div>
-      </section>
+        <el-button text @click="resetSteps">Сбросить</el-button>
+      </div>
 
-      <aside class="flow-inspector">
-        <template v-if="selectedNode">
-          <h4>Node #{{ selectedNodeId }}</h4>
-          <el-input v-model="nodeClassType" placeholder="class_type" />
-          <el-input
-            v-model="nodeInputsText"
-            type="textarea"
-            :rows="14"
-            spellcheck="false"
-            class="flow-json-editor"
-          />
-          <el-space wrap>
-            <el-button type="primary" @click="applyNodeEdit">Apply node</el-button>
-            <el-button @click="toggleNodeDisabled(selectedNodeId)">
-              {{ disabledNodes.includes(selectedNodeId) ? 'Enable' : 'Disable' }}
-            </el-button>
-            <el-button type="danger" plain @click="removeNode">Remove</el-button>
-          </el-space>
-        </template>
-        <el-empty v-else description="Select a node" />
-      </aside>
+      <div class="step-list">
+        <div
+          v-for="(step, index) in steps"
+          :key="step.id"
+          class="artist-step"
+          :class="{ muted: !step.enabled }"
+          draggable="true"
+          @dragstart="draggedStep = step.id"
+          @dragover.prevent
+          @drop.prevent="onDrop(index)"
+        >
+          <div class="step-number">{{ index + 1 }}</div>
+          <div class="step-icon">{{ step.icon }}</div>
+          <div class="step-copy">
+            <strong>{{ step.title }}</strong>
+            <span>{{ step.description }}</span>
+          </div>
+          <el-switch v-model="step.enabled" />
+        </div>
+      </div>
+    </section>
+
+    <section v-if="visibleInputs.length" class="materials">
+      <div class="section-title">
+        <div>
+          <strong>Материалы</strong>
+          <span>Студия использует их внутри Flow автоматически.</span>
+        </div>
+      </div>
+      <div class="material-list">
+        <div v-for="input in visibleInputs" :key="input.id" class="material-card">
+          <div class="material-icon">{{ input.id.includes('reference') ? '🎨' : input.id.includes('mask') ? '◼️' : '🖼️' }}</div>
+          <div>
+            <strong>{{ inputLabel(input) }}</strong>
+            <span v-if="inputAssets?.[input.id]">Добавлено</span>
+            <span v-else>Нужно добавить</span>
+          </div>
+          <el-tag v-if="inputAssets?.[input.id]" type="success" size="small">Готово</el-tag>
+          <el-tag v-else type="warning" size="small">Нужно</el-tag>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="parameterDefinitions.length" class="controls">
+      <div class="section-title">
+        <div>
+          <strong>Настройки</strong>
+          <span>Только параметры, которые понятны художнику.</span>
+        </div>
+      </div>
+      <div class="control-list">
+        <div v-for="[key] in parameterDefinitions" :key="key" class="control">
+          <div class="control-head">
+            <span>{{ key === 'reference_strength' ? 'Влияние референса' : key === 'color_strength' ? 'Влияние цвета' : key === 'line_strength' ? 'Сохранение линий' : key === 'creativity' ? 'Степень изменений' : 'Сила изменения' }}</span>
+            <strong>{{ Math.round(parameterValue(key) * 100) }}%</strong>
+          </div>
+          <el-slider :model-value="parameterValue(key)" :min="0" :max="1" :step="0.01" @update:model-value="(value) => setParameter(key, Number(value))" />
+        </div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <el-button :loading="validating" @click="validateFlow">Проверить готовность</el-button>
+      <el-button
+        v-if="validation?.errors.length"
+        :loading="fixing"
+        type="warning"
+        @click="fixWithAI"
+      >
+        Исправить автоматически
+      </el-button>
+      <el-button
+        type="primary"
+        size="large"
+        :disabled="!hasRequiredAssets() || !validation?.compatible"
+        @click="emit('run')"
+      >
+        ✨ Создать иллюстрацию
+      </el-button>
+      <el-button :disabled="!validation?.compatible" @click="emit('save')">Сохранить процесс</el-button>
     </div>
 
-    <div v-if="pendingFix" class="flow-fix-preview">
-      <el-alert title="AI proposed a corrected workflow" type="warning" :closable="false" />
-      <p>{{ pendingFix.reasoning }}</p>
-      <el-space>
-        <el-button type="primary" @click="applyFix">Apply correction</el-button>
-        <el-button @click="rejectFix">Reject</el-button>
-      </el-space>
-    </div>
+    <el-alert
+      v-if="pendingFix"
+      title="Студия подготовила исправление"
+      :description="pendingFix.reasoning || 'Техническая проблема Flow была исправлена без изменения творческой задачи.'"
+      type="info"
+      :closable="false"
+    >
+      <template #default>
+        <el-space>
+          <el-button type="primary" @click="applyFix">Применить</el-button>
+          <el-button @click="rejectFix">Отменить</el-button>
+        </el-space>
+      </template>
+    </el-alert>
+
+    <details class="technical">
+      <summary @click="technicalOpen = !technicalOpen">Для разработчика</summary>
+      <div v-if="technicalOpen" class="technical-content">
+        <p>ComfyUI используется только как внутренний исполнитель. Этот раздел не нужен художнику.</p>
+        <pre>{{ JSON.stringify(plan.workflow, null, 2) }}</pre>
+      </div>
+    </details>
   </div>
 </template>
 
 <style scoped>
-.flow-lab { display: grid; gap: 12px; }
-.flow-lab-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.flow-lab-subtitle { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
-.flow-lab-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 12px; min-height: 420px; }
-.flow-graph { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); align-content: start; gap: 12px; padding: 12px; border: 1px solid var(--el-border-color); border-radius: 8px; background: var(--el-fill-color-lighter); }
-.flow-node { min-height: 100px; padding: 10px; border: 1px solid var(--el-border-color); border-radius: 8px; background: var(--el-bg-color); cursor: pointer; }
-.flow-node.selected { border-color: var(--el-color-primary); box-shadow: 0 0 0 1px var(--el-color-primary); }
-.flow-node.disabled { opacity: .5; }
-.flow-node-header { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-.flow-node-body { margin-top: 12px; color: var(--el-text-color-secondary); font-size: 12px; }
-.flow-node-state { margin-top: 8px; color: var(--el-color-warning); font-size: 11px; }
-.flow-inspector { display: grid; align-content: start; gap: 10px; padding: 12px; border: 1px solid var(--el-border-color); border-radius: 8px; }
-.flow-json-editor :deep(textarea) { font-family: monospace; }
-.flow-fix-preview { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--el-color-warning); border-radius: 8px; }
-@media (max-width: 900px) { .flow-lab-grid { grid-template-columns: 1fr; } }
+.artist-flow { display: grid; gap: 18px; }
+.artist-intro, .section-title, .control-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.artist-intro { padding: 18px; border-radius: 14px; background: var(--el-fill-color-lighter); }
+.artist-intro h3 { margin: 4px 0; font-size: 20px; }
+.artist-intro p, .section-title span, .step-copy span, .material-card span { color: var(--el-text-color-secondary); }
+.artist-kicker { color: var(--el-color-primary); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.readiness { margin: 0; }
+.section-title { margin-bottom: 8px; }
+.section-title div { display: grid; gap: 3px; }
+.step-list { display: grid; gap: 8px; }
+.artist-step { display: grid; grid-template-columns: 32px 44px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 14px; border: 1px solid var(--el-border-color); border-radius: 12px; background: var(--el-bg-color); cursor: grab; }
+.artist-step:active { cursor: grabbing; }
+.artist-step.muted { opacity: .55; }
+.step-number { font-weight: 700; color: var(--el-text-color-secondary); }
+.step-icon, .material-icon { font-size: 26px; text-align: center; }
+.step-copy { display: grid; gap: 3px; }
+.material-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.material-card { display: grid; grid-template-columns: 36px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--el-border-color); border-radius: 12px; }
+.material-card div:nth-child(2) { display: grid; gap: 3px; }
+.control-list { display: grid; gap: 14px; }
+.control { padding: 12px 14px; border: 1px solid var(--el-border-color); border-radius: 12px; }
+.control-head strong { color: var(--el-color-primary); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.technical { border-top: 1px solid var(--el-border-color); padding-top: 10px; color: var(--el-text-color-secondary); }
+.technical summary { cursor: pointer; }
+.technical-content pre { max-height: 360px; overflow: auto; padding: 12px; border-radius: 8px; background: var(--el-fill-color-darker); color: var(--el-color-white); }
+@media (max-width: 700px) { .artist-intro, .section-title { align-items: flex-start; flex-direction: column; } .artist-step { grid-template-columns: 28px 38px minmax(0,1fr); } .artist-step :deep(.el-switch) { grid-column: 3; justify-self: start; } }
 </style>
