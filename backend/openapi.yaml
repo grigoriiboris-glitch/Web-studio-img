@@ -334,6 +334,10 @@ paths:
       summary: Create an immutable Variant Set from completed generations
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
       requestBody:
         required: true
         content:
@@ -421,6 +425,10 @@ paths:
           in: path
           required: true
           schema: {type: string, format: uuid}
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
       requestBody:
         required: true
         content:
@@ -442,6 +450,10 @@ paths:
           in: path
           required: true
           schema: {type: string, format: uuid}
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
       requestBody:
         required: true
         content:
