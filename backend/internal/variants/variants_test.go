@@ -107,3 +107,10 @@ func TestMutationRequestHashIsDeterministic(t *testing.T) {
     t.Fatal("different request payload produced the same hash")
   }
 }
+
+func TestMutationRequestHashIncludesOperation(t *testing.T) {
+  payload := map[string]any{"id": "same"}
+  if mutationRequestHash("patch_variant", payload) == mutationRequestHash("create_set", payload) {
+    t.Fatal("different mutation operations must produce different hashes")
+  }
+}
