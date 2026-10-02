@@ -51,6 +51,11 @@ describe('card batch type schemas', () => {
     expect(result).toContain('Rarity: rare')
   })
 
+  it('requires only the stable prompt for backward-compatible imports', () => {
+    const errors = validateCardData('001', 'prompt', {}, 'item')
+    expect(errors).toHaveLength(0)
+  })
+
   it('defines a versioned schema for every production card type', () => {
     for (const type of CARD_TYPES) {
       expect(type.version).toBeGreaterThan(0)
