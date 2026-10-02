@@ -192,7 +192,7 @@ func (h *Handler) createSet(w http.ResponseWriter, r *http.Request) {
   defer tx.Rollback()
   replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,"create_set",key,requestHash)
   if err!=nil { if errors.Is(err,ErrIdempotencyConflict) { writeError(w,409,"idempotency_conflict",err.Error()) } else { writeError(w,500,"variant_idempotency_failed","could not claim idempotency key") }; return }
-  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }()
+  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }
   var set VariantSet;var metadata []byte
   err=tx.QueryRowContext(r.Context(), `
     INSERT INTO variant_sets(project_id,user_id,name,metadata) VALUES($1,$2,$3,'{}'::jsonb)
@@ -337,7 +337,7 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   operation:="create_iteration:"+setID.String()
   replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,operation,key,requestHash)
   if err!=nil { if errors.Is(err,ErrIdempotencyConflict){writeError(w,409,"idempotency_conflict",err.Error())}else{writeError(w,500,"variant_idempotency_failed","could not claim idempotency key")};return }
-  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }()
+  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }
   var parent sql.NullString;var branchID sql.NullString;var branchCount int;selectedJSON:=[]byte{}
   placeholders:=make([]string,0,len(in.VariantIDs));args:=[]any{projectID,userID,setID}
   for i,id:=range in.VariantIDs{placeholders=append(placeholders,"$"+strconv.Itoa(i+4));args=append(args,id)}
