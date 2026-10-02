@@ -129,7 +129,7 @@ async function validateFlow() {
     const response = await assistantApi.execute<Validation>(
       props.projectId,
       'validate_comfy_flow',
-      { workflow: props.plan.workflow },
+      { workflow: props.plan.workflow, flow_steps: props.plan.flow_steps, artist_steps: props.plan.artist_steps },
     )
     validation.value = response.result
   } catch (e) {
@@ -164,6 +164,7 @@ async function fixWithAI() {
         validation_errors: errors,
         inputs: props.plan.inputs,
         parameters: props.plan.parameters,
+        flow_steps: props.plan.flow_steps,
       },
     )
     pendingFix.value = response.result

@@ -180,7 +180,7 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
 	snapshot,err:=runtime.CapabilitySnapshot(ctx);if err!=nil{return nil,"",0,"",err}
 	currentWorkflow,_:=in["current_workflow"].(map[string]any)
-	if len(currentWorkflow)==0 {
+	if len(currentWorkflow)==0 && len(flowSteps)==0 {
 		if reusable,ok,findErr:=h.findReusableRecipe(ctx,userID,projectID,task,runtime);findErr!=nil{return nil,"",0,"",findErr}else if ok{if len(flowSteps)>0 { reusable["flow_steps"]=flowSteps; reusable["compiled_flow_steps"]=flowSteps }; return reusable,"Reused an existing recipe after validating it against the live ComfyUI runtime.",0.95,"The match is heuristic; a new flow is generated when no compatible recipe matches.",nil}
 	}
 	if h.flowPlanner==nil||!h.flowPlanner.Enabled(){return nil,"",0,"",errors.New("flow planner is not configured; set FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL")}
@@ -195,11 +195,16 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 		if len(inputErrors)>0{validationErrors=inputErrors;continue}
 		validation,validationErr:=runtime.ValidateWorkflow(ctx,plan.Workflow);if validationErr!=nil{return nil,"",0,"",validationErr}
 		if validation.Compatible{
+			if len(flowSteps)>0 {
+				semanticErrors:=validateArtistFlowContract(flowSteps, plan.ArtistSteps, plan.Workflow)
+				if len(semanticErrors)>0 { validationErrors=semanticErrors; continue }
+			}
 			result:=flowPlanMap(plan)
 			result["source"]="ai_generated"
 			if len(flowSteps)>0 { result["flow_steps"]=flowSteps; result["compiled_flow_steps"]=flowSteps }
 			result["compatibility"]=map[string]any{"compatible":true,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}
 			result["runtime_retrieved_at"]=snapshot.RetrievedAt
+			if len(flowSteps)>0 { result["flow_fingerprint"]=flowFingerprint(flowSteps); result["artist_flow_validated"]=true }
 			return result,"AI generated a flow constrained to the live ComfyUI node and model catalog.",0.9,"The planner is retried with concrete runtime validation errors when needed.",nil
 		}
 		validationErrors=append([]string(nil),validation.Errors...)
@@ -211,7 +216,12 @@ func (h *Handler) validateComfyFlow(ctx context.Context,userID,projectID uuid.UU
 	workflow,_:=in["workflow"].(map[string]any);if len(workflow)==0{return nil,"",0,"",errors.New("workflow is required")}
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
 	validation,err:=runtime.ValidateWorkflow(ctx,workflow);if err!=nil{return nil,"",0,"",err}
-	return map[string]any{"compatible":validation.Compatible,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels},"Validation used the live ComfyUI node and model catalog.",0.99,"This is runtime catalog and structural validation; queueing remains a separate step.",nil
+	semanticErrors:=[]string{}
+	if rawSteps,ok:=in["flow_steps"].([]any);ok&&len(rawSteps)>0 {
+		if rawArtist,ok:=in["artist_steps"].([]any);ok { semanticErrors=validateArtistFlowContract(rawSteps,rawArtist,workflow) } else { semanticErrors=append(semanticErrors,"compiled workflow has no Artist Flow evidence") }
+	}
+	allErrors:=append(append([]string{},validation.Errors...),semanticErrors...)
+	return map[string]any{"compatible":validation.Compatible&&len(semanticErrors)==0,"errors":allErrors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels,"artist_flow_errors":semanticErrors},"Validation checks both the live ComfyUI runtime and the Artist Flow semantic contract.",0.99,"Technical and artist-flow validation are reported together; queueing remains a separate step.",nil
 }
 
 func (h *Handler) runComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any,key string)(map[string]any,string,float64,string,error) {

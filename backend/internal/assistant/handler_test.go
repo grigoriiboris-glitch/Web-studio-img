@@ -100,3 +100,84 @@ func TestFormatFlowStepsIsDeterministic(t *testing.T) {
 	want := "1. sketch (enabled)\n2. reference (disabled)"
 	if got != want { t.Fatalf("got %q, want %q", got, want) }
 }
+
+
+func TestValidateArtistFlowContractAcceptsMatchingEvidence(t *testing.T) {
+	expected := []map[string]any{
+		{"id":"sketch","enabled":true,"order":0},
+		{"id":"reference","enabled":true,"order":1},
+		{"id":"structure","enabled":true,"order":2},
+		{"id":"final","enabled":true,"order":3},
+	}
+	actual := []map[string]any{
+		{"id":"sketch","enabled":true,"order":0,"evidence":[]any{map[string]any{"kind":"asset","value":"sketch"}}},
+		{"id":"reference","enabled":true,"order":1,"evidence":[]any{map[string]any{"kind":"asset","value":"color_reference"}}},
+		{"id":"structure","enabled":true,"order":2,"evidence":[]any{map[string]any{"kind":"node","value":"2"}}},
+		{"id":"final","enabled":true,"order":3,"evidence":[]any{map[string]any{"kind":"node","value":"3"}}},
+	}
+	workflow := map[string]any{
+		"1": map[string]any{"inputs": map[string]any{"image":"{{asset:sketch}}"}},
+		"2": map[string]any{"class_type":"ControlNetApply"},
+		"3": map[string]any{"class_type":"SaveImage"},
+		"4": map[string]any{"inputs": map[string]any{"image":"{{asset:color_reference}}"}},
+	}
+	if errors := validateArtistFlowContract(expected, actual, workflow); len(errors) != 0 {
+		t.Fatalf("unexpected semantic errors: %#v", errors)
+	}
+}
+
+func TestValidateArtistFlowContractRejectsChangedOrderAndDisabledState(t *testing.T) {
+	expected := []map[string]any{
+		{"id":"sketch","enabled":true,"order":0},
+		{"id":"reference","enabled":false,"order":1},
+		{"id":"final","enabled":true,"order":2},
+	}
+	actual := []map[string]any{
+		{"id":"reference","enabled":true,"order":0,"evidence":[]any{map[string]any{"kind":"asset","value":"color_reference"}}},
+		{"id":"sketch","enabled":true,"order":1,"evidence":[]any{map[string]any{"kind":"asset","value":"sketch"}}},
+		{"id":"final","enabled":true,"order":2,"evidence":[]any{map[string]any{"kind":"node","value":"3"}}},
+	}
+	workflow := map[string]any{
+		"1": map[string]any{"inputs": map[string]any{"image":"{{asset:sketch}}"}},
+		"3": map[string]any{"class_type":"SaveImage"},
+		"4": map[string]any{"inputs": map[string]any{"image":"{{asset:color_reference}}"}},
+	}
+	errors := validateArtistFlowContract(expected, actual, workflow)
+	if len(errors) == 0 {
+		t.Fatal("expected semantic validation errors")
+	}
+}
+
+func TestValidateArtistFlowContractRejectsMissingEvidence(t *testing.T) {
+	expected := []map[string]any{
+		{"id":"sketch","enabled":true,"order":0},
+	}
+	actual := []map[string]any{
+		{"id":"sketch","enabled":true,"order":0,"evidence":[]any{}},
+	}
+	errors := validateArtistFlowContract(expected, actual, map[string]any{})
+	if len(errors) == 0 {
+		t.Fatal("expected missing evidence error")
+	}
+}
+
+func TestFlowFingerprintIsStableAndSensitiveToFlowState(t *testing.T) {
+	a := []map[string]any{
+		{"id":"sketch","enabled":true,"order":0},
+		{"id":"reference","enabled":true,"order":1},
+	}
+	b := []map[string]any{
+		{"id":"sketch","enabled":true,"order":0},
+		{"id":"reference","enabled":true,"order":1},
+	}
+	c := []map[string]any{
+		{"id":"sketch","enabled":true,"order":0},
+		{"id":"reference","enabled":false,"order":1},
+	}
+	if flowFingerprint(a) != flowFingerprint(b) {
+		t.Fatal("equivalent flows must have the same fingerprint")
+	}
+	if flowFingerprint(a) == flowFingerprint(c) {
+		t.Fatal("changing enabled state must change the fingerprint")
+	}
+}

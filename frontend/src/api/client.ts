@@ -1048,6 +1048,15 @@ export interface ComfyFlowStep {
   order: number
 }
 
+export interface ComfyFlowEvidence {
+  kind: 'asset' | 'node'
+  value: string
+}
+
+export interface ComfyArtistFlowStep extends ComfyFlowStep {
+  evidence?: ComfyFlowEvidence[]
+}
+
 export interface ComfyFlowInput {
   id: string
   type: 'image' | 'mask' | 'string' | 'number' | 'integer' | 'boolean'
@@ -1073,6 +1082,9 @@ export interface ComfyFlowPlan {
   selected_model: Record<string, string>
   workflow: Record<string, unknown>
   reasoning: string
+  artist_steps?: ComfyArtistFlowStep[]
+  flow_fingerprint?: string
+  artist_flow_validated?: boolean
   source?: 'ai_generated' | 'existing_recipe'
   recipe_id?: string
   recipe_version?: number
