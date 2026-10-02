@@ -273,13 +273,26 @@ async function sendToPiAgent() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        protocol: 'comfyui-self-healing/v1',
         projectId: props.projectId,
         container: 'comfyui',
         endpoint: 'local-comfyui',
         testId: last.test_id ?? '',
         category: last.category,
-        errors: last.errors.map(message => ({ code: 'comfy_runtime', message })),
+        errors: last.errors.map(item => ({ code: item.code, message: item.message, node: item.node, input: item.input, recoverable: item.recoverable })),
         workflowFingerprint: props.plan.flow_fingerprint,
+        allowedActions: {
+          safe: ['inspect_runtime', 'read_logs', 'read_status'],
+          repair: ['edit_allowlisted_workflow', 'edit_allowlisted_config', 'restart_comfyui', 'retest'],
+          dangerous: [],
+        },
+        policy: {
+          arbitraryShell: false,
+          hostFilesystemAccess: false,
+          volumeDeletion: false,
+          imageReplacement: false,
+          networkMutation: false,
+        },
       }),
     })
     if (!response.ok) throw new Error('pi.dev bridge вернул HTTP ' + response.status)
