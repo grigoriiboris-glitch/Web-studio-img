@@ -6,6 +6,7 @@ import {
 import SketchImportZone from '../../components/SketchImportZone.vue'
 import { buildAvoidConstraints } from './rejectReasons'
 import BranchPanel from './BranchPanel.vue'
+import FlowLab from './FlowLab.vue'
 import {
   generationsApi,
   humanActionsApi,
@@ -1340,6 +1341,18 @@ onUnmounted(() => {
               />
             </div>
           </template>
+        </el-card>
+
+        <el-card v-if="comfyFlowPlan" class="create-card flow-lab-card">
+          <template #header>Flow Lab</template>
+          <FlowLab
+            :project-id="projectId()"
+            :plan="comfyFlowPlan"
+            :input-assets="flowInputAssets()"
+            @update:plan="comfyFlowPlan = $event"
+            @run="runComfyFlow"
+            @save="saveComfyFlowAsRecipe"
+          />
         </el-card>
 
         <el-card class="create-card">
