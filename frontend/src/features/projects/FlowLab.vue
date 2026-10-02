@@ -26,6 +26,7 @@ const selectedNodeId = ref('')
 const nodeInputsText = ref('')
 const nodeClassType = ref('')
 const disabledNodes = ref<string[]>([])
+const disabledSnapshots = ref<Record<string, unknown>>({})
 const validation = ref<Validation | null>(null)
 const validating = ref(false)
 const fixing = ref(false)
@@ -77,19 +78,24 @@ function applyNodeEdit() {
 }
 
 function toggleNodeDisabled(id: string) {
-  disabledNodes.value = disabledNodes.value.includes(id)
-    ? disabledNodes.value.filter(value => value !== id)
-    : [...disabledNodes.value, id]
+  const workflow = { ...props.plan.workflow }
+  if (disabledNodes.value.includes(id)) {
+    const snapshot = disabledSnapshots.value[id]
+    if (snapshot) workflow[id] = snapshot
+    const next = { ...disabledSnapshots.value }
+    delete next[id]
+    disabledSnapshots.value = next
+    disabledNodes.value = disabledNodes.value.filter(value => value !== id)
+  } else {
+    disabledSnapshots.value = { ...disabledSnapshots.value, [id]: workflow[id] }
+    delete workflow[id]
+    disabledNodes.value = [...disabledNodes.value, id]
+  }
+  updatePlan(workflow)
 }
 
 function activeWorkflow(): Record<string, unknown> {
-  const blocked = new Set(disabledNodes.value)
-  const workflow: Record<string, unknown> = {}
-  for (const [id, raw] of Object.entries(props.plan.workflow)) {
-    if (blocked.has(id)) continue
-    workflow[id] = raw
-  }
-  return workflow
+  return { ...props.plan.workflow }
 }
 
 function addNode() {
