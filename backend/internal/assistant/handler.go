@@ -272,7 +272,7 @@ func (h *Handler) testComfyFlow(ctx context.Context,userID,projectID uuid.UUID,i
 				if strings.Contains(lower,"model ") { category=ComfyModelCategory; break }
 			}
 		}
-		return map[string]any{"ok":false,"category":category,"errors":errorsOut,"warnings":validation.Warnings,"repair":comfyRepairFor(category),"repair_lifecycle":map[string]any{"state":"failed","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0)},"audit":map[string]any{"workflow_fingerprint_before":assistantStringValue(in["workflow_fingerprint_before"]),"workflow_fingerprint_after":hashWorkflow(workflow)}}, "ComfyUI validation failed before execution.", 0.99, "Fix the reported workflow or model issue before running a real execution test.", nil
+		return map[string]any{"ok":false,"category":category,"errors":errorsOut,"warnings":validation.Warnings,"repair":comfyRepairFor(category),"repair_lifecycle":map[string]any{"state":"failed","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0)},"audit":map[string]any{"workflow_fingerprint_before":workflowFingerprintBefore(in, workflow),"workflow_fingerprint_after":hashWorkflow(workflow)}}, "ComfyUI validation failed before execution.", 0.99, "Fix the reported workflow or model issue before running a real execution test.", nil
 	}
 	params:=assistantCloneMap(in["parameters"]);if params==nil{params=map[string]any{}}
 	params["validate_runtime"]=false
@@ -704,6 +704,7 @@ func valueOrString(v *string)string{if v==nil{return ""};return *v}
 func uuidString(v *uuid.UUID)any{if v==nil{return nil};return v.String()}
 func stringValue(v any)string{if s,ok:=v.(string);ok{return strings.TrimSpace(s)};return ""}
 func intValueAny(value any, fallback int) int { if n,ok:=value.(float64); ok { return int(n) }; if n,ok:=value.(int); ok { return n }; return fallback }
+func workflowFingerprintBefore(input map[string]any, workflow map[string]any) string { if value:=assistantStringValue(input["workflow_fingerprint_before"]); value!="" { return value }; return hashWorkflow(workflow) }
 func parsePathUUID(r *http.Request,name string)uuid.UUID{id,e:=uuid.Parse(r.PathValue(name));if e!=nil{return uuid.Nil};return id}
 func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
