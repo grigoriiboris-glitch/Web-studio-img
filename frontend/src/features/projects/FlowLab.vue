@@ -2,12 +2,42 @@
 import { computed, ref, watch } from 'vue'
 import { assistantApi, type ComfyFlowPlan, type ComfyFlowStep } from '../../api/client'
 
+type TestError = {
+  code: string
+  message: string
+  node?: string
+  input?: string
+  recoverable: boolean
+}
+
+type TestResult = {
+  ok: boolean
+  category: 'workflow' | 'runtime' | 'connection' | 'container' | 'model' | 'unknown'
+  errors: TestError[]
+  warnings: string[]
+  repair: { available: boolean; strategy: 'ai_flow' | 'pi_agent' | 'manual' }
+  test_id?: string
+  duration_ms?: number
+}
+
+type RepairHistoryItem = {
+  attempt: number
+  status: 'testing' | 'repairing' | 'passed' | 'failed' | 'stopped'
+  category?: TestResult['category']
+  action?: string
+  errors: string[]
+}
+
 type Validation = {
   compatible: boolean
-  errors: string[]
+  errors: TestError[]
   warnings: string[]
   referenced_nodes: string[]
   referenced_models: string[]
+  category?: TestResult['category']
+  repair?: TestResult['repair']
+  test_id?: string
+  duration_ms?: number
 }
 
 type ArtistStep = {
@@ -34,6 +64,9 @@ const error = ref('')
 const technicalOpen = ref(false)
 const draggedStep = ref<string | null>(null)
 const testRunAt = ref<string | null>(null)
+const repairHistory = ref<RepairHistoryItem[]>([])
+const repairStopped = ref(false)
+const repairing = ref(false)
 const formattedTestRunAt = computed(() => testRunAt.value ? new Date(testRunAt.value).toLocaleTimeString() : '')
 
 const stepCatalog: ArtistStep[] = [
@@ -126,22 +159,146 @@ function hasRequiredAssets() {
 
 async function validateFlow() {
   validating.value = true
+  repairing.value = false
+  repairStopped.value = false
   testRunAt.value = null
   error.value = ''
+  repairHistory.value = []
+
+  let currentPlan = props.plan
   try {
-    const response = await assistantApi.execute<Validation>(
-      props.projectId,
-      'validate_comfy_flow',
-      { workflow: props.plan.workflow, flow_steps: props.plan.flow_steps, artist_steps: props.plan.artist_steps },
-    )
-    validation.value = response.result
-    testRunAt.value = new Date().toISOString()
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      if (repairStopped.value) {
+        repairHistory.value.push({ attempt, status: 'stopped', errors: [] })
+        break
+      }
+
+      repairHistory.value.push({ attempt, status: 'testing', action: 'Реальный execution test', errors: [] })
+      const response = await assistantApi.execute<TestResult>(
+        props.projectId,
+        'test_comfy_flow',
+        {
+          workflow: currentPlan.workflow,
+          flow_steps: currentPlan.flow_steps,
+          artist_steps: currentPlan.artist_steps,
+          input_assets: props.inputAssets,
+          prompt: currentPlan.prompt,
+          negative_prompt: currentPlan.negative_prompt,
+          aspect_ratio: currentPlan.parameters?.aspect_ratio,
+          seed: currentPlan.parameters?.seed,
+          parameters: currentPlan.parameters,
+        },
+      )
+      const result = response.result
+      const messages = result.errors
+      repairHistory.value[repairHistory.value.length - 1] = {
+        attempt,
+        status: result.ok ? 'passed' : 'failed',
+        category: result.category,
+        errors: messages.map(item => item.message),
+      }
+      validation.value = {
+        compatible: result.ok,
+        errors: messages,
+        warnings: result.warnings,
+        referenced_nodes: [],
+        referenced_models: [],
+        category: result.category,
+        repair: result.repair,
+        test_id: result.test_id,
+        duration_ms: result.duration_ms,
+      }
+      testRunAt.value = new Date().toISOString()
+
+      if (result.ok || result.category !== 'workflow' || attempt >= 3) break
+
+      repairing.value = true
+      repairHistory.value.push({
+        attempt,
+        status: 'repairing',
+        category: result.category,
+        action: 'AI исправляет только техническую часть workflow',
+        errors: messages.map(item => item.message),
+      })
+      const repair = await assistantApi.execute<ComfyFlowPlan>(
+        props.projectId,
+        'create_comfy_flow',
+        {
+          task: [
+            currentPlan.prompt || currentPlan.description || 'Repair this ComfyUI workflow',
+            'Repair only the technical workflow error. Preserve artist intent, Artist Flow order/enabled state, inputs, Creative Brief and Color Reference contract.',
+            'Validation/execution errors:',
+            ...messages.map(item => item.message),
+          ].join('\n'),
+          current_workflow: currentPlan.workflow,
+          validation_errors: messages.map(item => item.message),
+          inputs: currentPlan.inputs,
+          parameters: currentPlan.parameters,
+          flow_steps: currentPlan.flow_steps,
+          max_attempts: 1,
+        },
+      )
+      currentPlan = repair.result
+      emit('update:plan', currentPlan)
+      repairing.value = false
+    }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось проверить Flow'
+    error.value = e instanceof Error ? e.message : 'Не удалось выполнить тест ComfyUI'
     validation.value = null
     testRunAt.value = new Date().toISOString()
   } finally {
+    repairing.value = false
     validating.value = false
+  }
+}
+
+function stopRepairLoop() {
+  repairStopped.value = true
+}
+
+async function sendToPiAgent() {
+  const last = validation.value
+  if (!last || last.category === 'workflow' || !last.errors.length) return
+  const bridgeUrl = String(import.meta.env.VITE_PI_AGENT_BRIDGE_URL ?? '').trim()
+  if (!bridgeUrl) {
+    error.value = 'Локальный pi.dev bridge не настроен: задайте VITE_PI_AGENT_BRIDGE_URL.'
+    return
+  }
+  try {
+    const parsed = new URL(bridgeUrl)
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
+      throw new Error('pi.dev bridge должен быть доступен только через localhost')
+    }
+    const response = await fetch(parsed.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'comfyui-self-healing/v1',
+        projectId: props.projectId,
+        container: 'comfyui',
+        endpoint: 'local-comfyui',
+        testId: last.test_id ?? '',
+        category: last.category,
+        errors: last.errors.map(item => ({ code: item.code, message: item.message, node: item.node, input: item.input, recoverable: item.recoverable })),
+        workflowFingerprint: props.plan.flow_fingerprint,
+        allowedActions: {
+          safe: ['inspect_runtime', 'read_logs', 'read_status'],
+          repair: ['edit_allowlisted_workflow', 'edit_allowlisted_config', 'restart_comfyui', 'retest'],
+          dangerous: [],
+        },
+        policy: {
+          arbitraryShell: false,
+          hostFilesystemAccess: false,
+          volumeDeletion: false,
+          imageReplacement: false,
+          networkMutation: false,
+        },
+      }),
+    })
+    if (!response.ok) throw new Error('pi.dev bridge вернул HTTP ' + response.status)
+    error.value = ''
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Не удалось передать диагностику pi.dev агенту'
   }
 }
 
@@ -163,10 +320,10 @@ async function fixWithAI() {
           'Repair the supplied workflow instead of redesigning it.',
           'Keep the artist intent and current flow. Only fix what is necessary.',
           'Validation errors:',
-          ...errors,
+          ...errors.map(item => item.message),
         ].join('\n'),
         current_workflow: props.plan.workflow,
-        validation_errors: errors,
+        validation_errors: errors.map(item => item.message),
         inputs: props.plan.inputs,
         parameters: props.plan.parameters,
         flow_steps: props.plan.flow_steps,
@@ -234,9 +391,18 @@ watch(() => props.plan.workflow, () => {
       class="test-errors"
     >
       <ul>
-        <li v-for="(item, index) in validation.errors" :key="`error-${index}`">{{ item }}</li>
+        <li v-for="(item, index) in validation.errors" :key="`error-${index}`">{{ item.message }}</li>
       </ul>
     </el-alert>
+
+    <el-alert
+      v-if="validation?.category && validation.category !== 'unknown'"
+      :title="`Категория: ${validation.category}`"
+      :description="validation.repair ? `Восстановление: ${validation.repair.strategy}` : ''"
+      type="info"
+      :closable="false"
+      class="test-errors"
+    />
 
     <el-alert
       v-if="validation && validation.warnings.length"
@@ -321,11 +487,28 @@ watch(() => props.plan.workflow, () => {
       </div>
     </section>
 
+    <div v-if="repairHistory.length" class="repair-history">
+      <strong>История теста</strong>
+      <div v-for="item in repairHistory" :key="`${item.attempt}-${item.status}-${item.action ?? ''}`" class="repair-item">
+        <span>Попытка {{ item.attempt }}</span>
+        <span>{{ item.status === 'testing' ? 'Тест' : item.status === 'repairing' ? 'AI исправляет' : item.status === 'passed' ? 'Готово' : item.status === 'stopped' ? 'Остановлено' : 'Ошибка' }}</span>
+        <span v-if="item.category">{{ item.category }}</span>
+      </div>
+    </div>
+
     <div class="actions">
       <el-button :loading="validating" type="info" @click="validateFlow">
         🧪 {{ validating ? 'Тест выполняется…' : 'Запустить тест' }}
       </el-button>
       <span v-if="testRunAt && !validating" class="test-time">Последний тест: {{ formattedTestRunAt }}</span>
+      <el-button v-if="validating && !repairStopped" @click="stopRepairLoop">Остановить восстановление</el-button>
+      <el-button
+        v-if="validation && validation.category && validation.category !== 'workflow' && validation.repair?.strategy === 'pi_agent'"
+        type="warning"
+        @click="sendToPiAgent"
+      >
+        🛠 Передать локальному pi.dev
+      </el-button>
       <el-button
         v-if="validation?.errors.length"
         :loading="fixing"
@@ -382,6 +565,8 @@ watch(() => props.plan.workflow, () => {
 .test-errors ul { margin: 6px 0 0; padding-left: 20px; }
 .test-errors li { margin: 4px 0; }
 .test-time { color: var(--el-text-color-secondary); font-size: 12px; }
+.repair-history { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--el-border-color); border-radius: 12px; }
+.repair-item { display: flex; flex-wrap: wrap; gap: 10px; color: var(--el-text-color-secondary); font-size: 13px; }
 .section-title { margin-bottom: 8px; }
 .section-title div { display: grid; gap: 3px; }
 .step-list { display: grid; gap: 8px; }

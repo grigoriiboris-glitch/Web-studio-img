@@ -78,6 +78,7 @@ var toolCatalog = []ToolDescriptor{
 	{Name:"inspect_comfyui_capabilities",Description:"Inspect the live ComfyUI runtime: nodes, models, version and devices."},
 	{Name:"create_comfy_flow",Description:"Create or repair a ComfyUI flow from a natural-language task using only live runtime capabilities."},
 	{Name:"validate_comfy_flow",Description:"Validate a ComfyUI API workflow against the live installed node and model catalog."},
+	{Name:"test_comfy_flow",Description:"Execute a real ComfyUI smoke test without creating a Web Studio generation record."},
 	{Name:"run_comfy_flow",Description:"Validate and queue a generated ComfyUI flow through the normal generation pipeline.",Mutating:true},
 	{Name:"create_iteration",Description:"Create one immutable creative iteration.",Mutating:true},
 	{Name:"get_project_history",Description:"Return the owned project's creative history."},
@@ -143,6 +144,7 @@ func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 	case "inspect_comfyui_capabilities":result,explanation,confidence,uncertainty,e=h.inspectComfyUICapabilities(r.Context(),p.UserID,pid)
 	case "create_comfy_flow":result,explanation,confidence,uncertainty,e=h.createComfyFlow(r.Context(),p.UserID,pid,input)
 	case "validate_comfy_flow":result,explanation,confidence,uncertainty,e=h.validateComfyFlow(r.Context(),p.UserID,pid,input)
+	case "test_comfy_flow":result,explanation,confidence,uncertainty,e=h.testComfyFlow(r.Context(),p.UserID,pid,input)
 	case "run_comfy_flow":result,explanation,confidence,uncertainty,e=h.runComfyFlow(r.Context(),p.UserID,pid,input,key)
 	case "fact_check":result,explanation,confidence,uncertainty,e=factCheck(input)
 	default:e=errors.New("unsupported tool")
@@ -161,6 +163,7 @@ func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 type comfyFlowRuntime interface {
 	CapabilitySnapshot(context.Context) (comfyui.RuntimeCapabilitySnapshot,error)
 	ValidateWorkflow(context.Context,map[string]any) (comfyui.WorkflowValidation,error)
+	TestWorkflow(context.Context,generation.Request) (comfyui.TestResult,error)
 }
 
 func (h *Handler) comfyRuntime() (comfyFlowRuntime,error) {
@@ -188,7 +191,9 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 	}
 	if h.flowPlanner==nil||!h.flowPlanner.Enabled(){return nil,"",0,"",errors.New("flow planner is not configured; set FLOW_PLANNER_BASE_URL and FLOW_PLANNER_MODEL")}
 	validationErrors:=stringSlice(in["validation_errors"])
-	for attempt:=0;attempt<3;attempt++{
+	maxAttempts:=3
+	if requested,ok:=in["max_attempts"].(float64);ok&&int(requested)>=1&&int(requested)<=3{maxAttempts=int(requested)}
+	for attempt:=0;attempt<maxAttempts;attempt++{
 		plan,planErr:=h.flowPlanner.Plan(ctx,task,snapshot,validationErrors,currentWorkflow);if planErr!=nil{return nil,"",0,"",planErr}
 		assetRefs:=flowAssetRefs(plan.Workflow)
 		declared:=map[string]struct{}{}
@@ -225,6 +230,54 @@ func (h *Handler) validateComfyFlow(ctx context.Context,userID,projectID uuid.UU
 	}
 	allErrors:=append(append([]string{},validation.Errors...),semanticErrors...)
 	return map[string]any{"compatible":validation.Compatible&&len(semanticErrors)==0,"errors":allErrors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels,"artist_flow_errors":semanticErrors},"Validation checks both the live ComfyUI runtime and the Artist Flow semantic contract.",0.99,"Technical and artist-flow validation are reported together; queueing remains a separate step.",nil
+}
+
+func (h *Handler) testComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error) {
+	if err:=h.checkPrivacy(ctx,userID,projectID); err!=nil{return nil,"",0,"",err}
+	workflow,_:=in["workflow"].(map[string]any);if len(workflow)==0{return nil,"",0,"",errors.New("workflow is required")}
+	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
+	validation,err:=runtime.ValidateWorkflow(ctx,workflow)
+	if err!=nil {
+		category,code,recoverable:=classifyComfyError(err)
+		return map[string]any{"ok":false,"category":category,"errors":[]ComfyTestError{{Code:code,Message:err.Error(),Recoverable:recoverable}},"warnings":[]string{},"repair":comfyRepairFor(category)}, "ComfyUI validation failed before execution.", 0.99, "The workflow was not executed because live runtime validation failed.", nil
+	}
+	if !validation.Compatible {
+		category:=ComfyWorkflowCategory
+		errorsOut:=make([]ComfyTestError,0,len(validation.Errors))
+		for _,message:=range validation.Errors {
+			errorsOut=append(errorsOut,ComfyTestError{Code:"comfy_workflow",Message:message,Recoverable:true})
+		}
+		if len(validation.ReferencedModels)>0 {
+			for _,message:=range validation.Errors {
+				lower:=strings.ToLower(message)
+				if strings.Contains(lower,"model ") { category=ComfyModelCategory; break }
+			}
+		}
+		return map[string]any{"ok":false,"category":category,"errors":errorsOut,"warnings":validation.Warnings,"repair":comfyRepairFor(category)}, "ComfyUI validation failed before execution.", 0.99, "Fix the reported workflow or model issue before running a real execution test.", nil
+	}
+	params:=assistantCloneMap(in["parameters"]);if params==nil{params=map[string]any{}}
+	params["validate_runtime"]=false
+	inputAssets,_:=in["input_assets"].(map[string]any)
+	if len(inputAssets)>0 {
+		storageKeys:=map[string]any{}
+		for name,value:=range inputAssets {
+			assetID,ok:=value.(string);if !ok||strings.TrimSpace(assetID)==""{return nil,"",0,"",fmt.Errorf("input asset %s must be an asset UUID",name)}
+			id,parseErr:=uuid.Parse(assetID);if parseErr!=nil{return nil,"",0,"",fmt.Errorf("input asset %s has invalid UUID",name)}
+			if h.assets==nil{return nil,"",0,"",errors.New("asset store is not configured")}
+			asset,assetErr:=h.assets.GetOwned(ctx,userID,projectID,id);if assetErr!=nil{return nil,"",0,"",fmt.Errorf("input asset %s is not owned by the project: %w",name,assetErr)}
+			storageKeys[name]=asset.StorageKey
+		}
+		params["asset_storage_keys"]=storageKeys
+	}
+	prompt,_:=in["prompt"].(string);prompt=strings.TrimSpace(prompt);if prompt==""{prompt="ComfyUI smoke test"}
+	request:=generation.Request{ProjectID:projectID,Prompt:prompt,NegativePrompt:assistantStringValue(in["negative_prompt"]),AspectRatio:assistantStringValue(in["aspect_ratio"]),Parameters:params,IdempotencyKey:uuid.NewString(),ResolvedWorkflow:workflow,ResolvedWorkflowHash:hashWorkflow(workflow),FinalParameters:params}
+	if seed,ok:=in["seed"].(float64);ok{n:=int64(seed);request.Seed=&n}
+	test,err:=runtime.TestWorkflow(ctx,request)
+	if err!=nil {
+		category,_,_:=classifyComfyError(err)
+		return map[string]any{"ok":false,"category":category,"errors":[]ComfyTestError{comfyTestError(err)},"warnings":validation.Warnings,"repair":comfyRepairFor(category)}, "ComfyUI execution test failed.", 0.99, "The backend classified the real provider error; no generation record was created.", nil
+	}
+	return map[string]any{"ok":true,"category":"unknown","errors":[]ComfyTestError{},"warnings":validation.Warnings,"repair":ComfyTestRepair{Available:false,Strategy:"manual"},"test_id":test.PromptID,"duration_ms":test.Duration.Milliseconds()}, "ComfyUI real execution test passed.", 0.99, "The workflow completed in ComfyUI without creating a normal generation record.", nil
 }
 
 func (h *Handler) runComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any,key string)(map[string]any,string,float64,string,error) {
@@ -659,8 +712,16 @@ func criticVisualFeatures(stats similarity.Stats) map[string]any {
 
 
 func normalizeFlowSteps(raw any) []map[string]any {
-	items, ok := raw.([]any)
-	if !ok { return nil }
+	var items []any
+	switch values := raw.(type) {
+	case []any:
+		items = values
+	case []map[string]any:
+		items = make([]any, len(values))
+		for i, value := range values { items[i] = value }
+	default:
+		return nil
+	}
 	out := make([]map[string]any, 0, len(items))
 	seen := map[string]bool{}
 	for index, item := range items {
