@@ -19,6 +19,7 @@ type TestResult = {
   repair: { available: boolean; strategy: 'ai_flow' | 'pi_agent' | 'manual' }
   test_id?: string
   duration_ms?: number
+  repair_lifecycle?: { state?: string; session_id?: string; attempt?: number }
 }
 
 type RepairHistoryItem = {
