@@ -841,8 +841,19 @@ onMounted(async () => {
   color: #fff;
 }
 
-.ordinal {
+ .ordinal {
   left: 8px;
+}
+
+.type-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
 }
 
 .favorite {
