@@ -346,6 +346,8 @@ paths:
       responses:
         '201':
           description: Variant Set created
+        '409':
+          description: Idempotency key conflict
           content:
             application/json:
               schema:
@@ -437,6 +439,8 @@ paths:
       responses:
         '200':
           description: Updated variant
+        '409':
+          description: Idempotency key conflict
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Variant'}
@@ -462,6 +466,8 @@ paths:
       responses:
         '201':
           description: Created selection iteration
+        '409':
+          description: Idempotency key conflict
           content:
             application/json:
               schema:
