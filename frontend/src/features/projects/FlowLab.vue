@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/html-indent -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { assistantApi, type ComfyFlowPlan } from '../../api/client'
