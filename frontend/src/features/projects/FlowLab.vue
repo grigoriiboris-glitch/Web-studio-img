@@ -68,6 +68,7 @@ const testRunAt = ref<string | null>(null)
 const repairHistory = ref<RepairHistoryItem[]>([])
 const repairStopped = ref(false)
 const repairing = ref(false)
+const piRepairing = ref(false)
 let activeRequestController: AbortController | null = null
 const formattedTestRunAt = computed(() => testRunAt.value ? new Date(testRunAt.value).toLocaleTimeString() : '')
 
@@ -325,23 +326,44 @@ async function sendToPiAgent() {
     error.value = 'Локальный pi.dev bridge не настроен: задайте VITE_PI_AGENT_BRIDGE_URL.'
     return
   }
+  if (!window.confirm('Передать локальному pi.dev агенту право исправить локальную конфигурацию/ComfyUI и после этого повторить тест?')) return
+
+  piRepairing.value = true
+  error.value = ''
+  repairHistory.value.push({
+    attempt: repairHistory.value.length + 1,
+    status: 'repairing',
+    category: last.category,
+    action: 'pi.dev диагностирует и исправляет локальный ComfyUI',
+    errors: last.errors.map(item => item.message),
+  })
+
   try {
     const parsed = parsePiAgentBridgeUrl(bridgeUrl)
-    const response = await fetch(parsed.toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildPiAgentIncident(
+    const incident = {
+      ...buildPiAgentIncident(
         props.projectId,
         last.test_id ?? '',
         last.category ?? 'unknown',
         last.errors,
         props.plan.flow_fingerprint ?? '',
-      )),
+      ),
+      confirmed: true,
+    }
+    const response = await fetch(parsed.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(incident),
     })
-    if (!response.ok) throw new Error('pi.dev bridge вернул HTTP ' + response.status)
-    error.value = ''
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error || result.agent?.error || 'pi.dev не смог завершить repair')
+    }
+    await validateFlow()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось передать диагностику pi.dev агенту'
+    error.value = e instanceof Error ? e.message : 'Не удалось выполнить repair через pi.dev'
+  } finally {
+    piRepairing.value = false
   }
 }
 
@@ -553,8 +575,9 @@ watch(() => props.plan.workflow, () => {
         v-if="validation && validation.category && validation.category !== 'workflow' && validation.repair?.strategy === 'pi_agent'"
         type="warning"
         @click="sendToPiAgent"
+        :loading="piRepairing"
       >
-        🛠 Передать локальному pi.dev
+        🛠 {{ piRepairing ? 'pi.dev исправляет…' : 'Передать локальному pi.dev' }}
       </el-button>
       <el-button
         v-if="validation?.errors.length"
