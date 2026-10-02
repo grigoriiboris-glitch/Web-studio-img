@@ -5,6 +5,7 @@ import (
   "database/sql"
   "encoding/json"
   "errors"
+  "fmt"
   "io"
   "net/http"
   "strconv"
@@ -324,12 +325,19 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   userID,projectID,ok:=h.authProject(w,r);if !ok{return}
+  key:=strings.TrimSpace(r.Header.Get("Idempotency-Key")); if key=="" || len(key)>200 { writeError(w,400,"idempotency_key_required","Idempotency-Key is required and must be at most 200 characters"); return }
   setID,err:=uuid.Parse(r.PathValue("set_id"));if err!=nil{writeError(w,400,"invalid_variant_set_id","invalid variant set id");return}
   var in struct{VariantIDs []uuid.UUID `json:"variant_ids"`;Title string `json:"title"`;Decisions map[string]any `json:"decisions,omitempty"`}
   if err:=decode(r,&in);err!=nil||len(in.VariantIDs)<1||len(in.VariantIDs)>50{writeError(w,400,"invalid_selection","variant_ids must contain 1..50 values");return}
   if err:=iterations.ValidateDecisions(in.Decisions);err!=nil{writeError(w,400,"invalid_selection","invalid iteration decisions");return}
   seen:=map[uuid.UUID]bool{};for _,id:=range in.VariantIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_selection","variant_ids must be unique valid UUIDs");return};seen[id]=true}
-  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return};defer func(){_=tx.Rollback()}()
+  requestHash:=mutationRequestHash("create_iteration", map[string]any{"project_id":projectID,"variant_set_id":setID,"variant_ids":in.VariantIDs,"title":strings.TrimSpace(in.Title),"decisions":in.Decisions})
+  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return}
+  defer tx.Rollback()
+  operation:="create_iteration:"+setID.String()
+  replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,operation,key,requestHash)
+  if err!=nil { if errors.Is(err,ErrIdempotencyConflict){writeError(w,409,"idempotency_conflict",err.Error())}else{writeError(w,500,"variant_idempotency_failed","could not claim idempotency key")};return }
+  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response); return }()
   var parent sql.NullString;var branchID sql.NullString;var branchCount int;selectedJSON:=[]byte{}
   placeholders:=make([]string,0,len(in.VariantIDs));args:=[]any{projectID,userID,setID}
   for i,id:=range in.VariantIDs{placeholders=append(placeholders,"$"+strconv.Itoa(i+4));args=append(args,id)}
@@ -343,9 +351,11 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   rawDecisions,_:=json.Marshal(decisions)
   var iterationID uuid.UUID
   if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description,decisions) VALUES($1,$2::uuid,$3::uuid,'selection',$4,$5,$6) RETURNING id`,projectID,branchID.String,parent.String,title,description,rawDecisions).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
+  response,_:=json.Marshal(map[string]any{"iteration_id":iterationID,"title":title,"description":description,"decisions":decisions})
+  if err=storeVariantMutationResponse(r.Context(),tx,userID,operation,key,iterationID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
   if err:=tx.Commit();err!=nil{writeError(w,500,"iteration_create_failed","could not commit selection iteration");return}
   h.audit(r.Context(),userID,projectID,iterationID,"VARIANT_SELECTED",map[string]any{"variant_set_id":setID,"variant_ids":in.VariantIDs,"created_iteration_id":iterationID,"decisions":decisions})
-  writeJSON(w,201,map[string]any{"iteration_id":iterationID,"title":title,"description":description,"decisions":decisions})
+  w.Header().Set("Content-Type","application/json"); w.WriteHeader(201); _,_=w.Write(response)
 }
 func (h *Handler) loadSet(ctx context.Context,userID,projectID,setID uuid.UUID)(VariantSet,error){
   var x VariantSet;var raw []byte
