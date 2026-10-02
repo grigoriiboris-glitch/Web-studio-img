@@ -22,6 +22,7 @@ import (
 )
 
 var ErrNotFound = errors.New("variant board resource not found")
+var ErrInvalidSelection = errors.New("invalid variant selection")
 
 func validateSelectionResult(selectedCount, requestedCount, branchCount int, parentValid, branchValid bool) error {
   if selectedCount != requestedCount {
@@ -244,6 +245,7 @@ func (h *Handler) compare(w http.ResponseWriter,r *http.Request){
 func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   userID, projectID, ok := h.authProject(w, r)
   if !ok { return }
+  key:=strings.TrimSpace(r.Header.Get("Idempotency-Key")); if key=="" || len(key)>200 { writeError(w,400,"idempotency_key_required","Idempotency-Key is required and must be at most 200 characters"); return }
   setID, err := uuid.Parse(r.PathValue("set_id"))
   if err != nil { writeError(w, 400, "invalid_variant_set_id", "invalid variant set id"); return }
   variantID, err := uuid.Parse(r.PathValue("variant_id"))
@@ -272,6 +274,13 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
       in.RejectSeverity = &value
     }
   }
+  requestHash:=mutationRequestHash("patch_variant", map[string]any{"project_id":projectID,"variant_set_id":setID,"variant_id":variantID,"patch":in})
+  operation:=fmt.Sprintf("patch_variant:%s:%s",setID,variantID)
+  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"variant_update_failed","could not start transaction");return}
+  defer tx.Rollback()
+  replay,response,err:=claimVariantMutation(r.Context(),tx,userID,projectID,operation,key,requestHash)
+  if err!=nil { if errors.Is(err,ErrIdempotencyConflict){writeError(w,409,"idempotency_conflict",err.Error())}else{writeError(w,500,"variant_idempotency_failed","could not claim idempotency key")};return }
+  if replay { w.Header().Set("Content-Type","application/json"); w.WriteHeader(200); _,_=w.Write(response); return }
   current, err := h.loadVariant(r.Context(),userID,projectID,setID,variantID)
   if errors.Is(err,ErrNotFound) { writeError(w,404,"variant_not_found","variant not found"); return }
   if err != nil { writeError(w,500,"variant_get_failed","could not load variant"); return }
@@ -294,7 +303,7 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   var comment any; if nextComment!=nil { comment=*nextComment }
   var severity any; if nextSeverity!=nil { severity=*nextSeverity }
   var v Variant; var raw []byte
-  err=h.db.QueryRowContext(r.Context(), `UPDATE variants
+  err=tx.QueryRowContext(r.Context(), `UPDATE variants
     SET decision=$1,favorite=$2,compare_selected=$3,reject_reason=$4,reject_comment=$5,reject_severity=$6,reject_reason_skipped=$7,updated_at=now()
     WHERE id=$8 AND variant_set_id=$9 AND project_id=$10 AND user_id=$11
     RETURNING id,variant_set_id,generation_id,asset_id,ordinal,decision,favorite,compare_selected,reject_reason,reject_comment,reject_severity,reject_reason_skipped,created_at,updated_at`,
@@ -308,7 +317,10 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
     h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"decision":v.Decision,"reject_reason":v.RejectReason,"reject_comment":v.RejectComment,"reject_severity":v.RejectSeverity,"reject_reason_skipped":v.RejectReasonSkipped},oldState,newState)
   }
   if in.Favorite!=nil { action:="VARIANT_UNFAVORITED"; if nextFavorite { action="VARIANT_FAVORITED" }; h.audit(r.Context(),userID,projectID,v.ID,action,map[string]any{"variant_id":v.ID,"variant_set_id":setID,"favorite":nextFavorite}) }
-  writeJSON(w,200,v)
+  response,_:=json.Marshal(v)
+  if err=storeVariantMutationResponse(r.Context(),tx,userID,operation,key,v.ID,response);err!=nil{writeError(w,500,"variant_idempotency_failed","could not persist idempotency response");return}
+  if err:=tx.Commit();err!=nil{writeError(w,500,"variant_update_failed","could not commit variant update");return}
+  w.Header().Set("Content-Type","application/json"); w.WriteHeader(200); _,_=w.Write(response)
 }
 func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   userID,projectID,ok:=h.authProject(w,r);if !ok{return}
