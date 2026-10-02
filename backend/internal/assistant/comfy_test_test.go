@@ -48,7 +48,9 @@ func TestClassifyComfyRuntimeDetails(t *testing.T) {
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            _, code, _ := classifyComfyError(fmtErr(comfyui.ErrProviderUnavailable, tt.message))
+            base := comfyui.ErrProviderUnavailable
+            if tt.name == "node" { base = comfyui.ErrProviderInvalid }
+            _, code, _ := classifyComfyError(fmtErr(base, tt.message))
             if code != tt.want {
                 t.Fatalf("code=%q want %q", code, tt.want)
             }
