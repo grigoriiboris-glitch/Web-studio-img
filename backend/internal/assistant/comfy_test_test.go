@@ -33,3 +33,25 @@ func TestComfyRepairStrategy(t *testing.T) {
 }
 
 func fmtErr(base error, message string) error { return errors.Join(base, errors.New(message)) }
+
+func TestClassifyComfyRuntimeDetails(t *testing.T) {
+    tests := []struct {
+        name string
+        message string
+        want string
+    }{
+        {"timeout", "execution timeout after 20ms", "comfy_timeout"},
+        {"oom", "CUDA out of memory while allocating tensor", "comfy_oom"},
+        {"cuda", "CUDA error: device-side assert", "comfy_cuda"},
+        {"node", "node execution failed in KSampler", "comfy_node_execution"},
+        {"dependency", "dependency module not found: xformers", "comfy_dependency"},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            _, code, _ := classifyComfyError(fmtErr(comfyui.ErrProviderUnavailable, tt.message))
+            if code != tt.want {
+                t.Fatalf("code=%q want %q", code, tt.want)
+            }
+        })
+    }
+}
