@@ -361,6 +361,23 @@ onMounted(async () => {
       version: item.version,
       cards: Array.isArray(item.state.cards) ? item.state.cards as CardItem[] : [],
     }))
+    if (!batches.value.length) {
+      const legacy = JSON.parse(localStorage.getItem(storageKey.value) || '[]') as Batch[]
+      for (const item of legacy) {
+        const created = await cardBatchApi.create(routeProjectId.value, {
+          name: item.name,
+          source_file: item.sourceFile,
+          sheet: item.sheet,
+          mapping: {},
+          state: { cards: item.cards },
+        })
+        item.id = created.id
+        item.version = created.version
+        item.createdAt = created.created_at
+        item.updatedAt = created.updated_at
+        batches.value.push(item)
+      }
+    }
     activeBatchId.value = batches.value[0]?.id || ''
     localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
     recipes.value = (await recipesApi.list(routeProjectId.value)).recipes
