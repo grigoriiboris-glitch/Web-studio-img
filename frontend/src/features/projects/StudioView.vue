@@ -1296,27 +1296,27 @@ onUnmounted(() => {
         </el-card>
 
         <el-card class="create-card flow-planner-card">
-          <template #header>✨ Create ComfyUI flow with AI</template>
+          <template #header>✨ Создать процесс иллюстрации</template>
           <el-form label-position="top" @submit.prevent="createComfyFlow">
-            <el-form-item label="What should the AI flow do?">
+            <el-form-item label="Что хотите получить?">
               <el-input v-model="comfyFlowTask" type="textarea" :rows="4" maxlength="12000" show-word-limit />
             </el-form-item>
             <el-row :gutter="12">
               <el-col :span="12">
-                <el-form-item label="Sketch asset ID">
-                  <el-input v-model="comfyFlowSketchAssetId" placeholder="Optional; last imported asset is used by default" />
+                <el-form-item label="Скетч">
+                  <el-input v-model="comfyFlowSketchAssetId" placeholder="Последний загруженный скетч используется автоматически" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="Color reference asset ID">
-                  <el-input v-model="comfyFlowReferenceAssetId" placeholder="Optional; selected reference asset is used by default" />
+                <el-form-item label="Цветной референс">
+                  <el-input v-model="comfyFlowReferenceAssetId" placeholder="Выбранный референс используется автоматически" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-space wrap>
-              <el-button type="primary" :loading="comfyFlowPlanning" @click="createComfyFlow">Create compatible flow</el-button>
-              <el-button v-if="comfyFlowPlan" :loading="comfyFlowRunning" @click="runComfyFlow">Create &amp; run</el-button>
-              <el-button v-if="comfyFlowPlan" :loading="comfyFlowSaving" @click="saveComfyFlowAsRecipe">Save as Recipe</el-button>
+              <el-button type="primary" :loading="comfyFlowPlanning" @click="createComfyFlow">Подготовить процесс</el-button>
+              <el-button v-if="comfyFlowPlan" :loading="comfyFlowRunning" @click="runComfyFlow">Создать иллюстрацию</el-button>
+              <el-button v-if="comfyFlowPlan" :loading="comfyFlowSaving" @click="saveComfyFlowAsRecipe">Сохранить процесс</el-button>
             </el-space>
           </el-form>
           <template v-if="comfyFlowPlan">
@@ -1329,13 +1329,12 @@ onUnmounted(() => {
                 </el-tag>
               </div>
               <p>{{ comfyFlowPlan.description }}</p>
-              <p v-if="comfyFlowPlan.reasoning"><strong>Plan:</strong> {{ comfyFlowPlan.reasoning }}</p>
-              <p v-if="comfyFlowPlan.source === 'existing_recipe'"><strong>Source:</strong> existing validated Recipe</p>
-              <p v-else><strong>Source:</strong> AI-generated from live ComfyUI capabilities</p>
-              <p v-if="comfyFlowPlan.selected_model?.filename"><strong>Model:</strong> {{ comfyFlowPlan.selected_model.filename }}</p>
+              
+              
+              
               <el-alert
                 v-if="comfyFlowPlan.compatibility.warnings.length"
-                :title="'Warnings: ' + comfyFlowPlan.compatibility.warnings.join('; ')"
+                :title="'Дополнительные подсказки: ' + comfyFlowPlan.compatibility.warnings.join('; ')"
                 type="warning"
                 :closable="false"
               />
@@ -1344,7 +1343,7 @@ onUnmounted(() => {
         </el-card>
 
         <el-card v-if="comfyFlowPlan" class="create-card flow-lab-card">
-          <template #header>Flow Lab</template>
+          <template #header>🎨 Творческий процесс</template>
           <FlowLab
             :project-id="projectId()"
             :plan="comfyFlowPlan"
