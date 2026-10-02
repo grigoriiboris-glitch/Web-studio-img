@@ -48,13 +48,18 @@ func classifyComfyError(err error) (ComfyTestCategory, string, bool) {
 	lower := strings.ToLower(message)
 	switch {
 	case errors.Is(err, comfyui.ErrProviderUnavailable):
+		if strings.Contains(lower, "timeout") || strings.Contains(lower, "deadline exceeded") { return ComfyRuntimeCategory, "comfy_timeout", true }
 		if strings.Contains(lower, "connection refused") || strings.Contains(lower, "no such host") || strings.Contains(lower, "dial ") { return ComfyConnectionCategory, "comfy_connection", true }
-		if strings.Contains(lower, "container") || strings.Contains(lower, "startup") || strings.Contains(lower, "import") || strings.Contains(lower, "dependency") { return ComfyContainerCategory, "comfy_container", true }
+		if strings.Contains(lower, "out of memory") || strings.Contains(lower, "oom") || strings.Contains(lower, "cuda out of memory") { return ComfyRuntimeCategory, "comfy_oom", true }
+		if strings.Contains(lower, "cuda") || strings.Contains(lower, "cudnn") || strings.Contains(lower, "gpu") { return ComfyRuntimeCategory, "comfy_cuda", true }
+		if strings.Contains(lower, "dependency") || strings.Contains(lower, "module not found") || strings.Contains(lower, "no module named") { return ComfyContainerCategory, "comfy_dependency", true }
+		if strings.Contains(lower, "container") || strings.Contains(lower, "startup") || strings.Contains(lower, "import") { return ComfyContainerCategory, "comfy_container", true }
 		return ComfyRuntimeCategory, "comfy_runtime", true
 	case errors.Is(err, comfyui.ErrProviderCancelled):
 		return ComfyRuntimeCategory, "comfy_cancelled", true
 	case errors.Is(err, comfyui.ErrProviderInvalid):
 		if strings.Contains(lower, "model") || strings.Contains(lower, "checkpoint") || strings.Contains(lower, "vae") || strings.Contains(lower, "lora") { return ComfyModelCategory, "comfy_model", true }
+		if strings.Contains(lower, "node execution") || strings.Contains(lower, "executing node") || strings.Contains(lower, "node error") { return ComfyRuntimeCategory, "comfy_node_execution", true }
 		if strings.Contains(lower, "node") || strings.Contains(lower, "input") || strings.Contains(lower, "connection") || strings.Contains(lower, "unknown class") { return ComfyWorkflowCategory, "comfy_workflow", true }
 		return ComfyRuntimeCategory, "comfy_execution", true
 	default:
