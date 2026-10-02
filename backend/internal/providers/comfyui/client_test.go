@@ -15,8 +15,7 @@ func TestClientMatchesComfyUIHTTPContract(t *testing.T) {
 	var uploaded bool
 	var submitted bool
 	var interrupted bool
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/upload/image":
 			if err := r.ParseMultipartForm(2 << 20); err != nil {
