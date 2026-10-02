@@ -26,6 +26,7 @@ import {
   resolveDefaultRecipeId,
   suggestColumnMapping,
   templateForType,
+  productionDefaults,
   validateCardData,
   type CardTypeKey,
 } from './cardBatchTypes'
@@ -37,6 +38,10 @@ interface CardItem {
   typeOverride?: CardTypeKey
   fields?: Record<string, string>
   templateOverrideId?: string
+  targetWidth?: number
+  targetHeight?: number
+  aspectRatio?: string
+  negativePrompt?: string
   cardTypeVersion?: number
   sourceRow: number
   status: CardStatus
@@ -62,6 +67,8 @@ type BatchState = Record<string, unknown> & {
   referenceIds?: string[]
   targetWidth?: number
   targetHeight?: number
+  aspectRatio?: string
+  negativePrompt?: string
   cardType?: CardTypeKey
   cardTypeVersion?: number
   templateId?: string
@@ -117,6 +124,8 @@ const recipeId = ref('')
 const referenceIdsText = ref('')
 const targetWidth = ref<number | undefined>()
 const targetHeight = ref<number | undefined>()
+const aspectRatio = ref('')
+const negativePrompt = ref('')
 const generations = ref<Record<string, Generation>>({})
 const downloads = ref<Record<string, string>>({})
 const importMode = ref<'new' | 'diff'>('new')
@@ -217,6 +226,18 @@ function typeRecipe(type: CardTypeKey) {
   return resolveDefaultRecipeId(recipes.value, type)
 }
 
+function effectiveDimensions(card: CardItem) {
+  const defaults = productionDefaults(resolvedCardType(card))
+  return {
+    width: card.targetWidth || activeBatch.value?.targetWidth || defaults.width,
+    height: card.targetHeight || activeBatch.value?.targetHeight || defaults.height,
+    aspectRatio: card.aspectRatio || activeBatch.value?.aspectRatio || defaults.aspectRatio,
+    negativePrompt: card.negativePrompt || activeBatch.value?.negativePrompt || defaults.negativePrompt,
+    referenceIds: card.referenceIds?.length ? card.referenceIds : (activeBatch.value?.referenceIds?.length ? activeBatch.value.referenceIds : defaults.referenceIds),
+    generationParameters: defaults.generationParameters,
+  }
+}
+
 function effectiveRecipeSelection(card: CardItem): { id?: string; version?: number } | undefined {
   if (card.recipeId) return { id: card.recipeId, version: card.recipeVersion }
   if (activeBatch.value?.recipeId) return { id: activeBatch.value.recipeId, version: activeBatch.value.recipeVersion }
@@ -238,6 +259,8 @@ function batchState(batch: Batch): BatchState {
     referenceIds: batch.referenceIds,
     targetWidth: batch.targetWidth,
     targetHeight: batch.targetHeight,
+    aspectRatio: batch.aspectRatio,
+    negativePrompt: batch.negativePrompt,
     cardType: batch.cardType || 'custom',
     cardTypeVersion: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
     templateId: batch.templateId || templateForType(batch.cardType || 'custom').id,
@@ -280,6 +303,7 @@ function checklist(card: CardItem) {
   const params = generation?.final_parameters || generation?.parameters || {}
   const width = Number(params.width ?? params.target_width ?? params['output_width'] ?? 0)
   const height = Number(params.height ?? params.target_height ?? params['output_height'] ?? 0)
+  const target = effectiveDimensions(card)
   const validation = cardValidation(card)
   return [
     { key: 'schema', label: 'Card type schema', status: validation.length ? 'blocked' : 'passed' },
@@ -287,7 +311,7 @@ function checklist(card: CardItem) {
     { key: 'success', label: 'Generation succeeded', status: generation?.status === 'succeeded' ? 'passed' : 'blocked' },
     { key: 'prompt', label: 'Prompt revision recorded', status: card.promptRevision > 0 ? 'passed' : 'blocked' },
     { key: 'provenance', label: 'Generation provenance', status: generation?.parameters?.card_batch_id === activeBatch.value?.id ? 'passed' : 'warning' },
-    { key: 'dimensions', label: 'Print dimensions', status: (activeBatch.value?.targetWidth && activeBatch.value?.targetHeight) ? (width >= activeBatch.value.targetWidth && height >= activeBatch.value.targetHeight ? 'passed' : 'blocked') : 'warning' },
+    { key: 'dimensions', label: 'Print dimensions', status: (target.width && target.height) ? (width >= target.width && height >= target.height ? 'passed' : 'blocked') : 'warning' },
     { key: 'identity', label: 'Stable card number', status: card.cardNumber ? 'passed' : 'blocked' },
   ] as Array<{ key: string; label: string; status: 'passed' | 'warning' | 'blocked' }>
 }
@@ -341,13 +365,16 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
   const version = card.generationIds.length + 1
   const recipeSelection = effectiveRecipeSelection(card)
   const selectedRecipe = recipeSelection?.id
-  const refs = card.referenceIds?.length ? card.referenceIds : activeBatch.value?.referenceIds
+  const effective = effectiveDimensions(card)
+  const refs = effective.referenceIds
   const resolvedType = resolvedCardType(card)
   const assembledPrompt = assembleCardPrompt(prompt, resolvedType, card.fields)
   const generation = await generationsApi.create(routeProjectId.value, {
     prompt: assembledPrompt,
     recipe_id: selectedRecipe,
     recipe_version: recipeSelection?.version,
+    negative_prompt: effective.negativePrompt,
+    aspect_ratio: effective.aspectRatio,
     reference_ids: refs,
     parameters: {
       card_batch_id: activeBatch.value?.id,
@@ -365,8 +392,11 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       recipe_version: recipeSelection?.version,
       original_prompt: prompt,
       version,
-      target_width: activeBatch.value?.targetWidth,
-      target_height: activeBatch.value?.targetHeight,
+      target_width: effective.width,
+      target_height: effective.height,
+      aspect_ratio: effective.aspectRatio,
+      negative_prompt: effective.negativePrompt,
+      generation_parameters: effective.generationParameters,
       reference_ids: refs,
       rejection_reason: card.rejectReason,
       rejection_comment: card.rejectComment,
@@ -586,6 +616,8 @@ async function createBatch() {
     referenceIds: parsedReferenceIds(referenceIdsText.value),
     targetWidth: targetWidth.value,
     targetHeight: targetHeight.value,
+    aspectRatio: aspectRatio.value || undefined,
+    negativePrompt: negativePrompt.value || undefined,
     cardType: newBatchType.value,
     cardTypeVersion: cardTypeDefinition(newBatchType.value).version,
     templateId: templateForType(newBatchType.value).id,
@@ -648,6 +680,8 @@ function selectBatch(id: string) {
   referenceIdsText.value = (batch.referenceIds || []).join(', ')
   targetWidth.value = batch.targetWidth
   targetHeight.value = batch.targetHeight
+  aspectRatio.value = batch.aspectRatio || ''
+  negativePrompt.value = batch.negativePrompt || ''
   columnMapping.value = batch ? { ...columnMapping.value } : {}
   newBatchType.value = batch.cardType || 'custom'
 }
@@ -665,6 +699,8 @@ function updateBatchSettings() {
   activeBatch.value.referenceIds = parsedReferenceIds(referenceIdsText.value)
   activeBatch.value.targetWidth = targetWidth.value
   activeBatch.value.targetHeight = targetHeight.value
+  activeBatch.value.aspectRatio = aspectRatio.value || undefined
+  activeBatch.value.negativePrompt = negativePrompt.value || undefined
   activeBatch.value.mapping = { ...columnMapping.value, card_number: cardColumn.value, prompt: promptColumn.value }
   activeBatch.value.cardTypeVersion = cardTypeDefinition(activeBatch.value.cardType || 'custom').version
   activeBatch.value.templateId = activeBatch.value.templateId || templateForType(activeBatch.value.cardType || 'custom').id
@@ -760,6 +796,11 @@ function manifest() {
       prompt: c.prompt,
       recipeId: c.recipeId || batch.recipeId,
       recipeVersion: c.recipeVersion || batch.recipeVersion,
+      targetWidth: effectiveDimensions(c).width,
+      targetHeight: effectiveDimensions(c).height,
+      aspectRatio: effectiveDimensions(c).aspectRatio,
+      negativePrompt: effectiveDimensions(c).negativePrompt,
+      referenceIds: c.recipeVersion || batch.recipeVersion,
       referenceIds: c.referenceIds?.length ? c.referenceIds : batch.referenceIds || [],
       sourceRow: c.sourceRow,
       rejectReason: c.rejectReason,
@@ -819,6 +860,8 @@ onMounted(async () => {
         referenceIds: state.referenceIds,
         targetWidth: state.targetWidth,
         targetHeight: state.targetHeight,
+        aspectRatio: state.aspectRatio,
+        negativePrompt: state.negativePrompt,
         cardType: state.cardType || 'custom',
         cardTypeVersion: state.cardTypeVersion || cardTypeDefinition(state.cardType || 'custom').version,
         templateId: state.templateId || templateForType(state.cardType || 'custom').id,
@@ -849,6 +892,8 @@ onMounted(async () => {
       referenceIdsText.value = (first.referenceIds || []).join(', ')
       targetWidth.value = first.targetWidth
       targetHeight.value = first.targetHeight
+      aspectRatio.value = first.aspectRatio || ''
+      negativePrompt.value = first.negativePrompt || ''
       columnMapping.value = first.mapping || { ...columnMapping.value }
       if (!first.cardType) first.cardType = 'custom'
       newBatchType.value = first.cardType
