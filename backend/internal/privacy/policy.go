@@ -51,8 +51,18 @@ func (p *Policy) AllowsPlannerEndpoint(ctx context.Context, userID, projectID uu
 		return false, mode, nil
 	}
 	host := strings.ToLower(u.Hostname())
-	if host == "localhost" || host == "::1" || net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback() {
+	if isLocalEndpointHost(host) {
 		return true, mode, nil
 	}
 	return false, mode, nil
+}
+
+
+func isLocalEndpointHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "localhost" || host == "::1" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
