@@ -151,7 +151,7 @@ export function cardTypeDefinition(key?: CardTypeKey): CardTypeDefinition {
 export function templateForType(key: CardTypeKey, templateId?: string): CardTemplateDefinition {
   if (templateId) {
     const exact = CARD_TEMPLATES.find(template => template.id === templateId)
-    if (exact) return exact
+    if (exact && (exact.typeKeys.includes(key) || exact.id === 'custom')) return exact
   }
   return CARD_TEMPLATES.find(template => template.id === cardTypeDefinition(key).defaultTemplateId) || CARD_TEMPLATES[CARD_TEMPLATES.length - 1]
 }
