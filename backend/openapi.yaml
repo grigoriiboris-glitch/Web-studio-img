@@ -392,6 +392,7 @@ paths:
                   iteration_id: {type: string, format: uuid}
                   title: {type: string}
                   description: {type: string}
+                  decisions: {$ref: '#/components/schemas/VariantIterationDecisions'}
   /projects/{project_id}/variant-rejection-summary:
     get:
       operationId: getVariantRejectionSummary
@@ -3260,7 +3261,7 @@ components:
         compare_selected: {type: boolean}
         reject_reason: {type: array, items: {type: string}}
         reject_comment: {type: string, maxLength: 2000}
-        reject_severity: {type: string, enum: [low, medium, high]}
+        reject_severity: {type: string, enum: ['', low, medium, high]}
         reject_reason_skipped: {type: boolean}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -3288,6 +3289,22 @@ components:
         reject_comment: {type: string, maxLength: 2000}
         reject_severity: {type: string, enum: [low, medium, high]}
         skip_reason: {type: boolean}
+    RejectConstraint:
+      type: object
+      additionalProperties: false
+      required: [reason, count, percent]
+      properties:
+        reason: {type: string, enum: [composition, subject, pose, lighting, color, material, background, object, style, prompt, quality, other]}
+        count: {type: integer, minimum: 0}
+        percent: {type: number, format: double, minimum: 0}
+    VariantIterationDecisions:
+      type: object
+      additionalProperties: false
+      properties:
+        reject_constraints:
+          type: array
+          maxItems: 5
+          items: {$ref: '#/components/schemas/RejectConstraint'}
     CreateVariantIterationInput:
       type: object
       additionalProperties: false
@@ -3300,6 +3317,7 @@ components:
           uniqueItems: true
           items: {type: string, format: uuid}
         title: {type: string, maxLength: 200}
+        decisions: {$ref: '#/components/schemas/VariantIterationDecisions'}
     ProjectList:
       type: object
       required: [projects]

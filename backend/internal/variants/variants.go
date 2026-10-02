@@ -8,7 +8,6 @@ import (
   "io"
   "net/http"
   "strconv"
-  "sort"
   "strings"
   "time"
 
@@ -17,7 +16,9 @@ import (
   "github.com/oleg3190/Web-studio-img/backend/internal/auth"
   "github.com/oleg3190/Web-studio-img/backend/internal/events"
   "github.com/oleg3190/Web-studio-img/backend/internal/humanactions"
+  "github.com/oleg3190/Web-studio-img/backend/internal/iterations"
   "github.com/oleg3190/Web-studio-img/backend/internal/provenance"
+  "github.com/oleg3190/Web-studio-img/backend/internal/rejectreasons"
 )
 
 var ErrNotFound = errors.New("variant board resource not found")
@@ -32,9 +33,6 @@ func validateSelectionResult(selectedCount, requestedCount, branchCount int, par
   }
   return nil
 }
-
-var allowedRejectReasons = map[string]bool{"composition":true,"subject":true,"pose":true,"lighting":true,"color":true,"material":true,"background":true,"object":true,"style":true,"prompt":true,"quality":true,"other":true}
-var allowedRejectSeverities = map[string]bool{"low":true,"medium":true,"high":true}
 
 type Handler struct {
   db *sql.DB
@@ -234,7 +232,7 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   if err := decode(r, &in); err != nil { writeError(w, 400, "invalid_variant_patch", "invalid variant update"); return }
   if in.Decision != nil && !map[string]bool{"candidate":true,"kept":true,"rejected":true,"selected":true}[*in.Decision] { writeError(w,400,"invalid_variant_decision","invalid variant decision"); return }
   if in.RejectReason != nil {
-    normalized, err := normalizeRejectReasons(in.RejectReason)
+    normalized, err := rejectreasons.Normalize(in.RejectReason)
     if err != nil {
       writeError(w,400,"invalid_reject_reason",err.Error())
       return
@@ -243,9 +241,16 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   }
   if in.RejectComment != nil && len([]rune(*in.RejectComment)) > 2000 { writeError(w,400,"invalid_reject_comment","reject comment is limited to 2000 characters"); return }
   if in.RejectSeverity != nil {
-    value := strings.ToLower(strings.TrimSpace(*in.RejectSeverity));
-    if !allowedRejectSeverities[value] { writeError(w,400,"invalid_reject_severity","severity must be low, medium or high"); return };
-    in.RejectSeverity = &value
+    value := strings.ToLower(strings.TrimSpace(*in.RejectSeverity))
+    if value == "" {
+      in.RejectSeverity = nil
+    } else {
+      if value != "low" && value != "medium" && value != "high" {
+        writeError(w,400,"invalid_reject_severity","severity must be low, medium or high")
+        return
+      }
+      in.RejectSeverity = &value
+    }
   }
   current, err := h.loadVariant(r.Context(),userID,projectID,setID,variantID)
   if errors.Is(err,ErrNotFound) { writeError(w,404,"variant_not_found","variant not found"); return }
@@ -288,8 +293,9 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   userID,projectID,ok:=h.authProject(w,r);if !ok{return}
   setID,err:=uuid.Parse(r.PathValue("set_id"));if err!=nil{writeError(w,400,"invalid_variant_set_id","invalid variant set id");return}
-  var in struct{VariantIDs []uuid.UUID `json:"variant_ids"`;Title string `json:"title"`}
+  var in struct{VariantIDs []uuid.UUID `json:"variant_ids"`;Title string `json:"title"`;Decisions map[string]any `json:"decisions,omitempty"`}
   if err:=decode(r,&in);err!=nil||len(in.VariantIDs)<1||len(in.VariantIDs)>50{writeError(w,400,"invalid_selection","variant_ids must contain 1..50 values");return}
+  if err:=iterations.ValidateDecisions(in.Decisions);err!=nil{writeError(w,400,"invalid_selection","invalid iteration decisions");return}
   seen:=map[uuid.UUID]bool{};for _,id:=range in.VariantIDs{if id==uuid.Nil||seen[id]{writeError(w,400,"invalid_selection","variant_ids must be unique valid UUIDs");return};seen[id]=true}
   tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"iteration_create_failed","could not start transaction");return};defer func(){_=tx.Rollback()}()
   var parent sql.NullString;var branchID sql.NullString;var branchCount int;selectedJSON:=[]byte{}
@@ -301,12 +307,14 @@ func (h *Handler) createIteration(w http.ResponseWriter,r *http.Request){
   if !parent.Valid || !branchID.Valid || branchCount != 1 {writeError(w,400,"invalid_selection","selected variants must share one valid iteration branch lineage");return}
   title:=strings.TrimSpace(in.Title);if title==""{title="Selection from Variant Board"}
   description:="Created from variant set "+setID.String()+"; selected variants: "+strings.Join(selected,", ")
+  decisions:=in.Decisions;if decisions==nil{decisions=map[string]any{}}
+  rawDecisions,_:=json.Marshal(decisions)
   var iterationID uuid.UUID
-  if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description) VALUES($1,$2::uuid,$3::uuid,'selection',$4,$5) RETURNING id`,projectID,branchID.String,parent.String,title,description).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
-  h.audit(r.Context(),userID,projectID,iterationID,"VARIANT_SELECTED",map[string]any{"variant_set_id":setID,"variant_ids":in.VariantIDs,"created_iteration_id":iterationID})
-  writeJSON(w,201,map[string]any{"iteration_id":iterationID,"title":title,"description":description})
+  if err:=tx.QueryRowContext(r.Context(),`INSERT INTO iterations(project_id,branch_id,parent_iteration_id,type,title,description,decisions) VALUES($1,$2::uuid,$3::uuid,'selection',$4,$5,$6) RETURNING id`,projectID,branchID.String,parent.String,title,description,rawDecisions).Scan(&iterationID);err!=nil{writeError(w,500,"iteration_create_failed","could not create selection iteration");return}
+  if err:=tx.Commit();err!=nil{writeError(w,500,"iteration_create_failed","could not commit selection iteration");return}
+  h.audit(r.Context(),userID,projectID,iterationID,"VARIANT_SELECTED",map[string]any{"variant_set_id":setID,"variant_ids":in.VariantIDs,"created_iteration_id":iterationID,"decisions":decisions})
+  writeJSON(w,201,map[string]any{"iteration_id":iterationID,"title":title,"description":description,"decisions":decisions})
 }
-
 func (h *Handler) loadSet(ctx context.Context,userID,projectID,setID uuid.UUID)(VariantSet,error){
   var x VariantSet;var raw []byte
   err:=h.db.QueryRowContext(ctx,`SELECT id,project_id,user_id,name,metadata,created_at FROM variant_sets WHERE id=$1 AND project_id=$2 AND user_id=$3`,setID,projectID,userID).Scan(&x.ID,&x.ProjectID,&x.UserID,&x.Name,&raw,&x.CreatedAt)
@@ -337,16 +345,7 @@ func (h *Handler) loadVariants(ctx context.Context,userID,projectID,setID uuid.U
 }
 
 func normalizeRejectReasons(input []string) ([]string, error) {
-  if len(input) > 12 { return nil, errors.New("at most 12 reject reasons are allowed") }
-  normalized := make([]string, 0, len(input)); seen := map[string]bool{}
-  for _, reason := range input {
-    value := strings.ToLower(strings.TrimSpace(reason))
-    if !allowedRejectReasons[value] { return nil, errors.New("unknown reject reason") }
-    if seen[value] { return nil, errors.New("duplicated reject reason") }
-    seen[value] = true; normalized = append(normalized, value)
-  }
-  sort.Strings(normalized)
-  return normalized, nil
+  return rejectreasons.Normalize(input)
 }
 
 func variantDecisionState(v Variant) map[string]any {
