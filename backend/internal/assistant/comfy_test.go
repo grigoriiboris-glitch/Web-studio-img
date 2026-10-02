@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/providers/comfyui"
- )
+)
 
 type ComfyTestCategory string
 
