@@ -1078,6 +1078,7 @@ export interface ComfyFlowPlan {
   recipe_version?: number
   compatibility: ComfyFlowCompatibility
   flow_steps?: ComfyFlowStep[]
+  compiled_flow_steps?: ComfyFlowStep[]
 }
 
 export interface AssistantToolDescriptor {
