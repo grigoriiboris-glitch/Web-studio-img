@@ -759,6 +759,7 @@ function manifest() {
       promptRevision: c.promptRevision,
       prompt: c.prompt,
       recipeId: c.recipeId || batch.recipeId,
+      recipeVersion: c.recipeVersion || batch.recipeVersion,
       referenceIds: c.referenceIds?.length ? c.referenceIds : batch.referenceIds || [],
       sourceRow: c.sourceRow,
       rejectReason: c.rejectReason,
