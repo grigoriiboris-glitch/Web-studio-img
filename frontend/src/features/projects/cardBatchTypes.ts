@@ -24,6 +24,10 @@ export interface CardTypeDefinition {
   defaultTemplateId: string
   defaultWidth?: number
   defaultHeight?: number
+  defaultAspectRatio?: string
+  defaultNegativePrompt?: string
+  defaultGenerationParameters?: Record<string, unknown>
+  defaultReferenceIds?: string[]
 }
 
 export interface CardTemplateDefinition {
@@ -53,7 +57,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     ],
     promptInstructions: 'Board-game character illustration. Make the character identity, silhouette and readable role cues clear.',
     recipeKeywords: ['character', 'role', 'персонаж'],
-    defaultTemplateId: 'standard-role',
+    defaultTemplateId: 'standard-role', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
   },
   {
     key: 'item', name: 'Item / Equipment', version: 1,
@@ -66,7 +70,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     ],
     promptInstructions: 'Board-game item illustration. Keep the object as the unmistakable visual subject with a readable silhouette.',
     recipeKeywords: ['item', 'equipment', 'object', 'предмет'],
-    defaultTemplateId: 'standard-item',
+    defaultTemplateId: 'standard-item', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
   },
   {
     key: 'world', name: 'World / Location', version: 1,
@@ -79,7 +83,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     ],
     promptInstructions: 'Board-game location illustration. Establish a clear place, spatial depth and environmental storytelling.',
     recipeKeywords: ['world', 'location', 'environment', 'landscape', 'локация'],
-    defaultTemplateId: 'standard-world',
+    defaultTemplateId: 'standard-world', defaultWidth: 1200, defaultHeight: 800, defaultAspectRatio: '3:2',
   },
   {
     key: 'event', name: 'Event', version: 1,
@@ -92,7 +96,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     ],
     promptInstructions: 'Board-game event illustration. Show the event as a readable narrative moment rather than an abstract symbol.',
     recipeKeywords: ['event', 'scene', 'событие'],
-    defaultTemplateId: 'standard-event',
+    defaultTemplateId: 'standard-event', defaultWidth: 1200, defaultHeight: 800, defaultAspectRatio: '3:2',
   },
   {
     key: 'faction', name: 'Faction', version: 1,
@@ -105,7 +109,7 @@ export const CARD_TYPES: CardTypeDefinition[] = [
     ],
     promptInstructions: 'Board-game faction illustration. Make faction identity and visual symbols coherent and immediately recognizable.',
     recipeKeywords: ['faction', 'group', 'фракция'],
-    defaultTemplateId: 'standard-faction',
+    defaultTemplateId: 'standard-faction', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
   },
   {
     key: 'resource', name: 'Resource', version: 1,
@@ -252,6 +256,18 @@ export function assembleCardPrompt(prompt: string, type: CardTypeKey, fields: Re
   if (definition.promptInstructions) sections.push('Type direction: ' + definition.promptInstructions)
   if (context.length) sections.push('Card data:\n' + context.join('\n'))
   return sections.filter(Boolean).join('\n\n')
+}
+
+export function productionDefaults(type: CardTypeKey) {
+  const definition = cardTypeDefinition(type)
+  return {
+    width: definition.defaultWidth,
+    height: definition.defaultHeight,
+    aspectRatio: definition.defaultAspectRatio,
+    negativePrompt: definition.defaultNegativePrompt,
+    generationParameters: definition.defaultGenerationParameters || {},
+    referenceIds: definition.defaultReferenceIds || [],
+  }
 }
 
 export function cardTypeSchemaVersion(type: CardTypeKey): string {
