@@ -272,7 +272,7 @@ func (h *Handler) testComfyFlow(ctx context.Context,userID,projectID uuid.UUID,i
 				if strings.Contains(lower,"model ") { category=ComfyModelCategory; break }
 			}
 		}
-		return map[string]any{"ok":false,"category":category,"errors":errorsOut,"warnings":validation.Warnings,"repair":comfyRepairFor(category),"repair_lifecycle":map[string]any{"state":"failed","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0)},"audit":map[string]any{"workflow_fingerprint_after":hashWorkflow(workflow)}}, "ComfyUI validation failed before execution.", 0.99, "Fix the reported workflow or model issue before running a real execution test.", nil
+		return map[string]any{"ok":false,"category":category,"errors":errorsOut,"warnings":validation.Warnings,"repair":comfyRepairFor(category),"repair_lifecycle":map[string]any{"state":"failed","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0)},"audit":map[string]any{"workflow_fingerprint_before":assistantStringValue(in["workflow_fingerprint_before"]),"workflow_fingerprint_after":hashWorkflow(workflow)}}, "ComfyUI validation failed before execution.", 0.99, "Fix the reported workflow or model issue before running a real execution test.", nil
 	}
 	params:=assistantCloneMap(in["parameters"]);if params==nil{params=map[string]any{}}
 	params["validate_runtime"]=false
