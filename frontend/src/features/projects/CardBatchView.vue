@@ -79,6 +79,8 @@ interface Batch {
   targetWidth?: number
   targetHeight?: number
   cardType?: CardTypeKey
+  cardTypeVersion?: number
+  templateId?: string
 }
 
 interface ImportDiff {
@@ -169,6 +171,18 @@ function typeSchema(type: CardTypeKey) {
 
 function mappingFor(type: CardTypeKey) {
   return suggestColumnMapping(columns.value, type)
+}
+
+function setNewBatchType(value: CardTypeKey) {
+  newBatchType.value = value
+  columnMapping.value = { ...suggestColumnMapping(columns.value, value) }
+  if (columnMapping.value.card_number) cardColumn.value = columnMapping.value.card_number
+  if (columnMapping.value.prompt) promptColumn.value = columnMapping.value.prompt
+}
+
+function mappingLabel(fieldKey: string) {
+  const field = cardTypeDefinition(newBatchType.value).fields.find(item => item.key === fieldKey)
+  return field?.label || fieldKey
 }
 
 function cardValidation(card: CardItem) {
@@ -457,6 +471,7 @@ async function importFile(event: Event) {
   error.value = ''
   try {
     const parsed = await parseSpreadsheet(file)
+    const mappingType = activeBatch.value?.cardType || newBatchType.value
     sheets.value = parsed.sheets
     rowsBySheet.value = parsed.rowsBySheet
     sheet.value = parsed.sheets[0] || ''
@@ -464,10 +479,11 @@ async function importFile(event: Event) {
     fileName.value = file.name
     cardColumn.value = columns.value.find(c => /card|number|номер/i.test(c)) || columns.value[0] || ''
     promptColumn.value = columns.value.find(c => /prompt|промт/i.test(c)) || columns.value.find(c => c !== cardColumn.value) || ''
-    columnMapping.value = { ...suggestColumnMapping(columns.value, newBatchType.value), card_number: cardColumn.value, prompt: promptColumn.value }
+    columnMapping.value = { ...suggestColumnMapping(columns.value, mappingType), card_number: cardColumn.value, prompt: promptColumn.value }
     importedRows.value = rows.value
     importedFileName.value = file.name
     importMode.value = activeBatch.value ? 'diff' : 'new'
+    if (activeBatch.value) newBatchType.value = activeBatch.value.cardType || 'custom'
     info.value = 'Loaded ' + rows.value.length + ' rows'
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -492,7 +508,6 @@ function cardFromRow(row: SpreadsheetRow, sourceRow: number): CardItem {
     cardNumber: String(row[cardColumn.value] ?? '').trim(),
     prompt: String(row[promptColumn.value] ?? '').trim(),
     fields: fieldsFromRow(row, newBatchType.value, columnMapping.value),
-    templateId: templateForType(newBatchType.value).id,
     cardTypeVersion: cardTypeDefinition(newBatchType.value).version,
     sourceRow,
     status: 'pending',
@@ -741,6 +756,8 @@ onMounted(async () => {
         targetWidth: state.targetWidth,
         targetHeight: state.targetHeight,
         cardType: state.cardType || 'custom',
+        cardTypeVersion: state.cardTypeVersion || cardTypeDefinition(state.cardType || 'custom').version,
+        templateId: state.templateId || templateForType(state.cardType || 'custom').id,
         cardTypeVersion: state.cardTypeVersion || cardTypeDefinition(state.cardType || 'custom').version,
         templateId: state.templateId || templateForType(state.cardType || 'custom').id,
       }
