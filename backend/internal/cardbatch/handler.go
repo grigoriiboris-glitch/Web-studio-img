@@ -77,7 +77,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
   projectID, ok := h.authProject(w, r); if !ok { return }
   rows, err := h.db.QueryContext(r.Context(), `SELECT id,project_id,user_id,name,source_file,sheet,mapping,state,version,created_at,updated_at FROM card_batches WHERE project_id=$1 ORDER BY updated_at DESC,id DESC`, projectID)
   if err != nil { writeError(w, 500, "card_batch_list_failed", "could not list card batches"); return }
-  defer rows.Close()
+  defer func() { _ = rows.Close() }()
   out := []Batch{}
   for rows.Next() {
     item, err := scan(rows); if err != nil { writeError(w, 500, "card_batch_list_failed", "could not read card batch"); return }
@@ -129,7 +129,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   if in.Mapping != nil && !validJSON(in.Mapping) { writeError(w, 400, "invalid_mapping", "mapping is not valid JSON"); return }
 
   tx, err := h.db.BeginTx(r.Context(), nil); if err != nil { writeError(w, 500, "card_batch_update_failed", "could not start transaction"); return }
-  defer tx.Rollback()
+  defer func() { _ = tx.Rollback() }()
   var item Batch
   query := `UPDATE card_batches SET source_file=COALESCE($4,source_file),sheet=COALESCE($5,sheet),mapping=COALESCE($6::jsonb,mapping),state=COALESCE($7::jsonb,state),version=version+1,updated_at=now() WHERE id=$1 AND project_id=$2 AND version=$3 RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,created_at,updated_at`
   var mapping, state []byte
