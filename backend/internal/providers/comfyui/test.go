@@ -81,7 +81,7 @@ func (p *Provider) TestWorkflow(ctx context.Context, req generation.Request) (Te
 			if history.Status != nil && history.Status.StatusStr == "error" {
 				return TestResult{}, fmt.Errorf("%w: workflow execution failed for prompt %s", ErrProviderInvalid, response.PromptID)
 			}
-			if len(history.Outputs) > 0 {
+			if (history.Status != nil && history.Status.Completed) || len(history.Outputs) > 0 {
 				return TestResult{PromptID: response.PromptID, Duration: time.Since(started)}, nil
 			}
 		} else if !strings.Contains(historyErr.Error(), "history not found") {
