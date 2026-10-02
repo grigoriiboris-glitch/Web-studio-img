@@ -34,6 +34,7 @@ const error = ref('')
 const technicalOpen = ref(false)
 const draggedStep = ref<string | null>(null)
 const testRunAt = ref<string | null>(null)
+const formattedTestRunAt = computed(() => testRunAt.value ? new Date(testRunAt.value).toLocaleTimeString() : '')
 
 const stepCatalog: ArtistStep[] = [
   { id: 'sketch', icon: '✏️', title: 'Скетч', description: 'Сохраняем композицию и важные линии.', enabled: true },
@@ -233,7 +234,7 @@ watch(() => props.plan.workflow, () => {
       class="test-errors"
     >
       <ul>
-        <li v-for="item in validation.errors" :key="item">{{ item }}</li>
+        <li v-for="(item, index) in validation.errors" :key="`error-${index}`">{{ item }}</li>
       </ul>
     </el-alert>
 
@@ -246,7 +247,7 @@ watch(() => props.plan.workflow, () => {
       class="test-errors"
     >
       <ul>
-        <li v-for="item in validation.warnings" :key="item">{{ item }}</li>
+        <li v-for="(item, index) in validation.warnings" :key="`warning-${index}`">{{ item }}</li>
       </ul>
     </el-alert>
 
@@ -324,7 +325,7 @@ watch(() => props.plan.workflow, () => {
       <el-button :loading="validating" type="info" @click="validateFlow">
         🧪 {{ validating ? 'Тест выполняется…' : 'Запустить тест' }}
       </el-button>
-      <span v-if="testRunAt && !validating" class="test-time">Последний тест: {{ new Date(testRunAt).toLocaleTimeString() }}</span>
+      <span v-if="testRunAt && !validating" class="test-time">Последний тест: {{ formattedTestRunAt }}</span>
       <el-button
         v-if="validation?.errors.length"
         :loading="fixing"
