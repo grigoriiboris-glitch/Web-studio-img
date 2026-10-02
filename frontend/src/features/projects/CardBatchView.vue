@@ -171,10 +171,6 @@ function now() { return new Date().toISOString() }
 function uid(prefix: string) { return prefix + '_' + crypto.randomUUID() }
 function parsedReferenceIds(text: string) { return text.split(/[\s,]+/).map(x => x.trim()).filter(Boolean) }
 
-function fieldsFromRowForCard(row: SpreadsheetRow, card: CardItem): Record<string, string> {
-  return fieldsFromRow(row, resolvedCardType(card), columnMapping.value)
-}
-
 function typeSchema(type: CardTypeKey) {
   return cardTypeDefinition(type)
 }
