@@ -127,7 +127,8 @@ func (h *Handler) execute(w http.ResponseWriter,r *http.Request){
 	input:=map[string]any{}
 	if r.Body!=nil&&r.ContentLength!=0{if e:=decode(r,&input);e!=nil{errJSON(w,400,"invalid_request","invalid tool input");return}}
 	key:=strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-	if d.Mutating&&key==""{errJSON(w,400,"missing_idempotency_key","Idempotency-Key header is required for mutating assistant tools");return}
+	requiresLifecycleKey := tool == "test_comfy_flow" || tool == "create_comfy_flow"
+	if (d.Mutating || requiresLifecycleKey) && key==""{errJSON(w,400,"missing_idempotency_key","Idempotency-Key header is required for mutating or self-healing assistant tools");return}
 	if key!=""{if existing,e:=h.actions.GetByIdempotencyKey(r.Context(),p.UserID,pid,key);e==nil{writeJSON(w,200,map[string]any{"action":existing,"result":existing.Output,"explanation":existing.Explanation,"confidence":existing.Confidence,"uncertainty":existing.Uncertainty});return}}
 	var result map[string]any;var explanation,uncertainty string;var confidence float64;kind:=kindTool
 	switch tool{
@@ -173,6 +174,7 @@ func (h *Handler) comfyRuntime() (comfyFlowRuntime,error) {
 }
 
 func (h *Handler) inspectComfyUICapabilities(ctx context.Context,userID,projectID uuid.UUID)(map[string]any,string,float64,string,error) {
+	if err:=h.checkPrivacy(ctx,userID,projectID); err!=nil{return nil,"",0,"",err}
 	if !h.ownedProject(ctx,userID,projectID){return nil,"",0,"",errors.New("project not found")}
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
 	snapshot,err:=runtime.CapabilitySnapshot(ctx);if err!=nil{return nil,"",0,"",err}
@@ -180,6 +182,7 @@ func (h *Handler) inspectComfyUICapabilities(ctx context.Context,userID,projectI
 }
 
 func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error) {
+	if err:=h.checkPrivacy(ctx,userID,projectID); err!=nil{return nil,"",0,"",err}
 	task,_:=in["task"].(string);task=strings.TrimSpace(task);if task==""{return nil,"",0,"",errors.New("task is required")}
 	flowSteps:=normalizeFlowSteps(in["flow_steps"])
 	if len(flowSteps)>0 { task += "\n\nArtist flow is authoritative. Compile the execution workflow to match this exact order and enabled state:\n" + formatFlowSteps(flowSteps) }
@@ -201,6 +204,19 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 		inputErrors:=colorReferenceContractErrors(flowSteps, plan.Inputs, plan.Workflow)
 		for ref:=range assetRefs{if _,ok:=declared[ref];!ok{inputErrors=append(inputErrors,"workflow uses undeclared asset input "+ref)}}
 		if len(inputErrors)>0{validationErrors=inputErrors;continue}
+		if len(currentWorkflow)>0 {
+			guard:=checkRepairInvariants(RepairInvariantInput{
+				FlowSteps: flowSteps,
+				Inputs: in["inputs"],
+				CreativeBrief: in["creative_brief"],
+				ColorReferenceContract: in["color_reference_contract"],
+				ArtistIntent: in["artist_intent"],
+			}, currentWorkflow, plan.Workflow)
+			if !guard.Valid {
+				validationErrors=append(validationErrors, guard.Violations...)
+				continue
+			}
+		}
 		validation,validationErr:=runtime.ValidateWorkflow(ctx,plan.Workflow);if validationErr!=nil{return nil,"",0,"",validationErr}
 		if validation.Compatible{
 			if len(flowSteps)>0 {
@@ -212,6 +228,8 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 			if len(flowSteps)>0 { result["flow_steps"]=flowSteps; result["compiled_flow_steps"]=flowSteps }
 			result["compatibility"]=map[string]any{"compatible":true,"errors":validation.Errors,"warnings":validation.Warnings,"referenced_nodes":validation.ReferencedNodes,"referenced_models":validation.ReferencedModels}
 			result["runtime_retrieved_at"]=snapshot.RetrievedAt
+			result["repair_lifecycle"]=map[string]any{"state":"ready","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0),"workflow_fingerprint":hashWorkflow(plan.Workflow)}
+			result["audit"]=map[string]any{"workflow_fingerprint_before":hashWorkflow(currentWorkflow),"workflow_fingerprint_after":hashWorkflow(plan.Workflow),"protected_fingerprint":hashProtectedRepairState(RepairInvariantInput{FlowSteps:flowSteps,Inputs:in["inputs"],CreativeBrief:in["creative_brief"],ColorReferenceContract:in["color_reference_contract"],ArtistIntent:in["artist_intent"]})}
 			if len(flowSteps)>0 { result["flow_fingerprint"]=flowFingerprint(flowSteps); result["artist_flow_validated"]=true }
 			return result,"AI generated a flow constrained to the live ComfyUI node and model catalog.",0.9,"The planner is retried with concrete runtime validation errors when needed.",nil
 		}
@@ -221,6 +239,7 @@ func (h *Handler) createComfyFlow(ctx context.Context,userID,projectID uuid.UUID
 }
 
 func (h *Handler) validateComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any)(map[string]any,string,float64,string,error) {
+	if err:=h.checkPrivacy(ctx,userID,projectID); err!=nil{return nil,"",0,"",err}
 	workflow,_:=in["workflow"].(map[string]any);if len(workflow)==0{return nil,"",0,"",errors.New("workflow is required")}
 	runtime,err:=h.comfyRuntime();if err!=nil{return nil,"",0,"",err}
 	validation,err:=runtime.ValidateWorkflow(ctx,workflow);if err!=nil{return nil,"",0,"",err}
@@ -239,7 +258,7 @@ func (h *Handler) testComfyFlow(ctx context.Context,userID,projectID uuid.UUID,i
 	validation,err:=runtime.ValidateWorkflow(ctx,workflow)
 	if err!=nil {
 		category,code,recoverable:=classifyComfyError(err)
-		return map[string]any{"ok":false,"category":category,"errors":[]ComfyTestError{{Code:code,Message:err.Error(),Recoverable:recoverable}},"warnings":[]string{},"repair":comfyRepairFor(category)}, "ComfyUI validation failed before execution.", 0.99, "The workflow was not executed because live runtime validation failed.", nil
+		return map[string]any{"ok":false,"category":category,"errors":[]ComfyTestError{{Code:code,Message:err.Error(),Recoverable:recoverable}},"repair_lifecycle":map[string]any{"state":"failed","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0)},"warnings":[]string{},"repair":comfyRepairFor(category)}, "ComfyUI validation failed before execution.", 0.99, "The workflow was not executed because live runtime validation failed.", nil
 	}
 	if !validation.Compatible {
 		category:=ComfyWorkflowCategory
@@ -253,7 +272,7 @@ func (h *Handler) testComfyFlow(ctx context.Context,userID,projectID uuid.UUID,i
 				if strings.Contains(lower,"model ") { category=ComfyModelCategory; break }
 			}
 		}
-		return map[string]any{"ok":false,"category":category,"errors":errorsOut,"warnings":validation.Warnings,"repair":comfyRepairFor(category)}, "ComfyUI validation failed before execution.", 0.99, "Fix the reported workflow or model issue before running a real execution test.", nil
+		return map[string]any{"ok":false,"category":category,"errors":errorsOut,"warnings":validation.Warnings,"repair":comfyRepairFor(category),"repair_lifecycle":map[string]any{"state":"failed","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0)},"audit":map[string]any{"workflow_fingerprint_after":hashWorkflow(workflow)}}, "ComfyUI validation failed before execution.", 0.99, "Fix the reported workflow or model issue before running a real execution test.", nil
 	}
 	params:=assistantCloneMap(in["parameters"]);if params==nil{params=map[string]any{}}
 	params["validate_runtime"]=false
@@ -275,9 +294,9 @@ func (h *Handler) testComfyFlow(ctx context.Context,userID,projectID uuid.UUID,i
 	test,err:=runtime.TestWorkflow(ctx,request)
 	if err!=nil {
 		category,_,_:=classifyComfyError(err)
-		return map[string]any{"ok":false,"category":category,"errors":[]ComfyTestError{comfyTestError(err)},"warnings":validation.Warnings,"repair":comfyRepairFor(category)}, "ComfyUI execution test failed.", 0.99, "The backend classified the real provider error; no generation record was created.", nil
+		return map[string]any{"ok":false,"category":category,"errors":[]ComfyTestError{comfyTestError(err)},"warnings":validation.Warnings,"repair":comfyRepairFor(category),"repair_lifecycle":map[string]any{"state":"failed","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0)},"audit":map[string]any{"workflow_fingerprint_after":hashWorkflow(workflow)}}, "ComfyUI execution test failed.", 0.99, "The backend classified the real provider error; no generation record was created.", nil
 	}
-	return map[string]any{"ok":true,"category":"unknown","errors":[]ComfyTestError{},"warnings":validation.Warnings,"repair":ComfyTestRepair{Available:false,Strategy:"manual"},"test_id":test.PromptID,"duration_ms":test.Duration.Milliseconds()}, "ComfyUI real execution test passed.", 0.99, "The workflow completed in ComfyUI without creating a normal generation record.", nil
+	return map[string]any{"ok":true,"category":"unknown","errors":[]ComfyTestError{},"warnings":validation.Warnings,"repair":ComfyTestRepair{Available:false,Strategy:"manual"},"test_id":test.PromptID,"duration_ms":test.Duration.Milliseconds(),"repair_lifecycle":map[string]any{"state":"ready","session_id":assistantStringValue(in["repair_session_id"]),"attempt":intValueAny(in["repair_attempt"],0)},"audit":map[string]any{"workflow_fingerprint_after":hashWorkflow(workflow)}}, "ComfyUI real execution test passed.", 0.99, "The workflow completed in ComfyUI without creating a normal generation record.", nil
 }
 
 func (h *Handler) runComfyFlow(ctx context.Context,userID,projectID uuid.UUID,in map[string]any,key string)(map[string]any,string,float64,string,error) {
@@ -684,6 +703,7 @@ func valueOr(v *string)string{if v==nil{return ""};return *v}
 func valueOrString(v *string)string{if v==nil{return ""};return *v}
 func uuidString(v *uuid.UUID)any{if v==nil{return nil};return v.String()}
 func stringValue(v any)string{if s,ok:=v.(string);ok{return strings.TrimSpace(s)};return ""}
+func intValueAny(value any, fallback int) int { if n,ok:=value.(float64); ok { return int(n) }; if n,ok:=value.(int); ok { return n }; return fallback }
 func parsePathUUID(r *http.Request,name string)uuid.UUID{id,e:=uuid.Parse(r.PathValue(name));if e!=nil{return uuid.Nil};return id}
 func errJSON(w http.ResponseWriter,status int,code,msg string){writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"message":msg,"request_id":uuid.NewString()}})}
 func writeJSON(w http.ResponseWriter,status int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(status);_=json.NewEncoder(w).Encode(v)}
