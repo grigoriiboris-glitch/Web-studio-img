@@ -14,6 +14,8 @@ import (
 
   "github.com/google/uuid"
 
+  "github.com/oleg3190/Web-studio-img/backend/internal/generation"
+
   "github.com/oleg3190/Web-studio-img/backend/internal/auth"
   "github.com/oleg3190/Web-studio-img/backend/internal/events"
   "github.com/oleg3190/Web-studio-img/backend/internal/humanactions"
@@ -40,6 +42,9 @@ type Handler struct {
   actions *humanactions.Store
   provenance *provenance.Store
   events *events.Store
+  generationCreator interface {
+    Create(context.Context, uuid.UUID, generation.Request) (generation.Generation, bool, error)
+  }
 }
 
 type VariantSet struct {
@@ -98,6 +103,8 @@ type VariantPatch struct {
   SkipReason *bool `json:"skip_reason,omitempty"`
 }
 
+func (h *Handler) SetGenerationCreator(creator interface { Create(context.Context, uuid.UUID, generation.Request) (generation.Generation, bool, error) }) { h.generationCreator = creator }
+
 func NewHandler(db *sql.DB, actions *humanactions.Store, provenanceStore *provenance.Store, eventStore *events.Store) (*Handler, error) {
   if db == nil { return nil, errors.New("variant handler requires database") }
   return &Handler{db: db, actions: actions, provenance: provenanceStore, events: eventStore}, nil
@@ -110,6 +117,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
   mux.HandleFunc("GET /api/v1/projects/{project_id}/variant-sets/{set_id}", h.getSet)
   mux.HandleFunc("GET /api/v1/projects/{project_id}/variant-sets/{set_id}/compare", h.compare)
   mux.HandleFunc("PATCH /api/v1/projects/{project_id}/variant-sets/{set_id}/variants/{variant_id}", h.patchVariant)
+  mux.HandleFunc("POST /api/v1/projects/{project_id}/variant-sets/{set_id}/variants/{variant_id}/regenerate", h.regenerateVariant)
   mux.HandleFunc("POST /api/v1/projects/{project_id}/variant-sets/{set_id}/iterations", h.createIteration)
   mux.HandleFunc("GET /api/v1/projects/{project_id}/variant-rejection-summary", h.rejectionSummary)
   mux.HandleFunc("GET /api/v1/projects/{project_id}/variant-rejection-timeline", h.rejectionTimeline)

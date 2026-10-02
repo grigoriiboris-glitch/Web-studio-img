@@ -22,6 +22,7 @@ const variants = ref<Variant[]>([])
 const error = ref('')
 const loading = ref(false)
 const creating = ref(false)
+const regenerating = ref<Set<string>>(new Set())
 const setName = ref('')
 const selectedSourceIds = ref<string[]>([])
 const compareIds = ref<string[]>([])
@@ -159,6 +160,22 @@ async function createSet() {
     error.value = e.message
   } finally {
     creating.value = false
+  }
+}
+
+async function regenerate(item: Variant) {
+  if (regenerating.value.has(item.id)) return
+  regenerating.value = new Set(regenerating.value).add(item.id)
+  error.value = ''
+  try {
+    await variantBoardApi.regenerate(projectId, item.variant_set_id, item.id)
+    if (activeSet.value) await openSet(activeSet.value)
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    const next = new Set(regenerating.value)
+    next.delete(item.id)
+    regenerating.value = next
   }
 }
 
@@ -454,6 +471,13 @@ onMounted(async () => {
               </div>
 
               <div class="actions">
+                <button
+                  type="button"
+                  :disabled="regenerating.has(item.id)"
+                  @click="regenerate(item)"
+                >
+                  {{ regenerating.has(item.id) ? 'Regenerating…' : 'Regenerate' }}
+                </button>
                 <button type="button" @click="patch(item, { decision: 'kept' })">
                   Keep
                 </button>
