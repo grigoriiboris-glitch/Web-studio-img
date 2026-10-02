@@ -1509,7 +1509,7 @@ paths:
   /projects/{project_id}/assistant/tools/{tool}:
     post:
       operationId: executeAssistantTool
-      summary: Execute one allowlisted AI assistant tool; compare_iterations returns deterministic visual/composition scores and structured observations.
+      summary: Execute one allowlisted AI assistant tool; ComfyUI flow tools inspect live runtime capabilities, generate/validate API workflows and can queue a validated flow.
       parameters:
         - name: project_id
           in: path
@@ -1520,11 +1520,11 @@ paths:
           required: true
           schema:
             type: string
-            enum: [create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance, fact_check]
+            enum: [inspect_comfyui_capabilities, create_comfy_flow, validate_comfy_flow, run_comfy_flow, create_iteration, get_project_history, analyze_composition, search_references, check_similarity, suggest_prompt, suggest_materials, create_generation, compare_iterations, verify_provenance, fact_check]
         - name: Idempotency-Key
           in: header
           required: false
-          description: Required for mutating assistant tools such as create_iteration and create_generation. fact_check is read-only and stores its structured result in the assistant action log.
+          description: Required for mutating assistant tools such as create_iteration and create_generation. fact_check is read-only and stores its structured result in the assistant action log. ComfyUI flow generation uses the live local node/model catalog and never assumes unavailable dependencies.
           schema: {type: string, maxLength: 200}
       requestBody:
         required: false
@@ -2779,6 +2779,42 @@ components:
       properties:
         iteration_a_id: {type: string, format: uuid}
         iteration_b_id: {type: string, format: uuid}
+    ComfyFlowInput:
+      type: object
+      required: [id, type, label, required]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [image, mask, string, number, integer, boolean]}
+        label: {type: string}
+        required: {type: boolean}
+    ComfyFlowCompatibility:
+      type: object
+      required: [compatible, errors, warnings, referenced_nodes, referenced_models]
+      properties:
+        compatible: {type: boolean}
+        errors: {type: array, items: {type: string}}
+        warnings: {type: array, items: {type: string}}
+        referenced_nodes: {type: array, items: {type: string}}
+        referenced_models: {type: array, items: {type: string}}
+    ComfyFlowPlan:
+      type: object
+      required: [name, description, prompt, negative_prompt, inputs, parameters, selected_model, workflow, reasoning, compatibility]
+      properties:
+        name: {type: string}
+        description: {type: string}
+        prompt: {type: string}
+        negative_prompt: {type: string}
+        inputs:
+          type: array
+          items: {$ref: '#/components/schemas/ComfyFlowInput'}
+        parameters: {type: object, additionalProperties: true}
+        selected_model: {type: object, additionalProperties: {type: string}}
+        workflow: {type: object, additionalProperties: true}
+        reasoning: {type: string}
+        source: {type: string, enum: [ai_generated, existing_recipe]}
+        recipe_id: {type: string, format: uuid}
+        recipe_version: {type: integer, minimum: 1}
+        compatibility: {$ref: '#/components/schemas/ComfyFlowCompatibility'}
     AssistantRecommendation:
       type: object
       required: [recommendation, reason, evidence, confidence, affected_entity, expected_effect]
