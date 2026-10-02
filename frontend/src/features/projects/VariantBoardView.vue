@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { REJECT_REASONS, buildRejectConstraints, canSubmitReject } from './rejectReasons'
+import { CARD_TYPES, cardTypeDefinition, type CardTypeKey } from './cardBatchTypes'
 
 import {
   assetsApi,
@@ -25,6 +26,7 @@ const creating = ref(false)
 const regenerating = ref<Set<string>>(new Set())
 const setName = ref('')
 const selectedSourceIds = ref<string[]>([])
+const sourceTypeFilter = ref<CardTypeKey | 'all'>('all')
 const compareIds = ref<string[]>([])
 const compareVariants = ref<Variant[]>([])
 const imageUrls = ref<Record<string, string>>({})
@@ -43,6 +45,15 @@ const rejectionSummary = ref<Awaited<ReturnType<typeof variantBoardApi.rejection
 const rejectionTimeline = ref<Awaited<ReturnType<typeof variantBoardApi.rejectionTimeline>>['items']>([])
 const carryRejectConstraints = ref(true)
 const iterationMessage = ref('')
+
+function sourceCardType(source: VariantSource): CardTypeKey | 'unknown' {
+  const value = source.context?.final_parameters?.card_type
+  return typeof value === 'string' && CARD_TYPES.some(type => type.key === value) ? value as CardTypeKey : 'unknown'
+}
+
+const filteredSources = computed(() =>
+  sources.value.filter(source => sourceTypeFilter.value === 'all' || sourceCardType(source) === sourceTypeFilter.value),
+)
 
 const selectedVariantIds = computed(() =>
   variants.value
@@ -351,8 +362,15 @@ onMounted(async () => {
           Set name
           <input v-model="setName" maxlength="200" placeholder="Product hero — round 1">
         </label>
+        <label>
+          Card type
+          <select v-model="sourceTypeFilter">
+            <option value="all">All types</option>
+            <option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option>
+          </select>
+        </label>
         <div class="source-list">
-          <div v-for="source in sources" :key="source.generation_id" class="source-row">
+          <div v-for="source in filteredSources" :key="source.generation_id" class="source-row">
             <label class="checkbox-row">
               <input
                 v-model="selectedSourceIds"
@@ -362,6 +380,7 @@ onMounted(async () => {
               >
               <span>
                 <strong>{{ source.provider }} / {{ source.model }}</strong>
+                <small>Type: {{ sourceCardType(source) === 'unknown' ? 'Unknown / legacy' : cardTypeDefinition(sourceCardType(source)).name }}</small>
                 <small>{{ new Date(source.created_at).toLocaleString() }}</small>
                 <small>{{ source.prompt.slice(0, 120) }}</small>
               </span>
@@ -422,6 +441,7 @@ onMounted(async () => {
                 No image
               </div>
               <span class="ordinal">#{{ item.ordinal }}</span>
+              <span v-if="item.source" class="type-badge">{{ sourceCardType(item.source) === 'unknown' ? 'Unknown' : cardTypeDefinition(sourceCardType(item.source)).name }}</span>
               <span v-if="item.favorite" class="favorite">★</span>
             </div>
 
