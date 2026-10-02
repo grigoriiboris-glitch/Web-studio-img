@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestClientMatchesComfyUIHTTPContract(t *testing.T) {
@@ -67,7 +68,7 @@ func TestClientMatchesComfyUIHTTPContract(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := newClient(server.URL, 5)
+	client, err := newClient(server.URL, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
