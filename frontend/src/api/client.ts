@@ -1040,6 +1040,14 @@ export const texturesApi = {
 }
 
 
+export type ComfyFlowStepId = 'sketch' | 'reference' | 'structure' | 'final'
+
+export interface ComfyFlowStep {
+  id: ComfyFlowStepId
+  enabled: boolean
+  order: number
+}
+
 export interface ComfyFlowInput {
   id: string
   type: 'image' | 'mask' | 'string' | 'number' | 'integer' | 'boolean'
@@ -1069,6 +1077,7 @@ export interface ComfyFlowPlan {
   recipe_id?: string
   recipe_version?: number
   compatibility: ComfyFlowCompatibility
+  flow_steps?: ComfyFlowStep[]
 }
 
 export interface AssistantToolDescriptor {
