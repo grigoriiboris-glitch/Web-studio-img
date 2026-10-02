@@ -81,7 +81,7 @@ function setParameter(key: string, value: number) {
 }
 
 function inputLabel(input: { id: string; label?: string }) {
-  return input.label || inputLabels[input.id] || input.id.replaceAll('_', ' ')
+  return input.label || inputLabels[input.id] || input.id.split('_').join(' ')
 }
 
 function moveStep(from: number, to: number) {
@@ -259,7 +259,7 @@ watch(() => props.plan.workflow, () => {
             <span>{{ key === 'reference_strength' ? 'Влияние референса' : key === 'color_strength' ? 'Влияние цвета' : key === 'line_strength' ? 'Сохранение линий' : key === 'creativity' ? 'Степень изменений' : 'Сила изменения' }}</span>
             <strong>{{ Math.round(parameterValue(key) * 100) }}%</strong>
           </div>
-          <el-slider :model-value="parameterValue(key)" :min="0" :max="1" :step="0.01" @update:model-value="(value) => setParameter(key, Number(value))" />
+          <el-slider :model-value="parameterValue(key)" :min="0" :max="1" :step="0.01" @update:model-value="(value: string | number) => setParameter(key, Number(value))" />
         </div>
       </div>
     </section>
