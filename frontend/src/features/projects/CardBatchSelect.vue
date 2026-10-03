@@ -14,6 +14,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 </script>
 
 <template>
+  <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order -->
   <select :value="modelValue" :disabled="disabled" @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)">
     <option v-if="placeholder !== undefined" value="">{{ placeholder }}</option>
     <option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option>
