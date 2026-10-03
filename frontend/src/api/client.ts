@@ -198,6 +198,8 @@ export interface CardBatch {
   mapping: Record<string, unknown>
   state: Record<string, unknown>
   version: number
+  card_type_id?: string
+  card_type_version?: number
   created_at: string
   updated_at: string
 }
