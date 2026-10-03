@@ -126,6 +126,9 @@ func ValidateRequest(r Request) error {
 	if len([]rune(r.NegativePrompt)) > 10000 || len(r.IdempotencyKey) > 200 || len(r.ReferenceIDs) > 50 {
 		return ErrInvalidGeneration
 	}
+	if r.RecipeID != nil && r.RecipeVersion < 1 {
+		return ErrInvalidGeneration
+	}
 	if r.AspectRatio == "" {
 		r.AspectRatio = "1:1"
 	}
