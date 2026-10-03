@@ -19,6 +19,7 @@ export interface CardFieldSchema {
 }
 
 export interface CardTypeDefinition {
+  id?: string
   key: CardTypeKey
   name: string
   description: string
