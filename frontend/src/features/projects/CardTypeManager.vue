@@ -47,6 +47,7 @@ function registerServerType(type: ServerCardType, version: CardTypeVersion) {
   const schema = version.schema || {}
   const fields = Array.isArray(schema.fields) ? schema.fields as CardFieldSchema[] : []
   const definition: CardTypeDefinition = {
+    id: type.id,
     key: type.key,
     name: type.name,
     description: type.description,
