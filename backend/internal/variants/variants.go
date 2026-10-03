@@ -303,6 +303,10 @@ func (h *Handler) patchVariant(w http.ResponseWriter, r *http.Request) {
   if in.RejectComment != nil { value:=strings.TrimSpace(*in.RejectComment); if value=="" { nextComment=nil } else { nextComment=&value } }
   if in.RejectSeverity != nil { nextSeverity=in.RejectSeverity }
   if in.SkipReason != nil { nextSkipped=*in.SkipReason; if *in.SkipReason { nextReasons=[]string{} } }
+  if err := validateDecisionTransition(current.Decision, nextDecision); err != nil {
+    writeError(w, 409, "invalid_variant_transition", "invalid variant decision transition")
+    return
+  }
   if nextDecision=="rejected" {
     if !nextSkipped && len(nextReasons)==0 { writeError(w,400,"reject_reason_required","choose at least one reject reason or explicitly skip reason"); return }
   } else {
@@ -406,6 +410,22 @@ func (h *Handler) loadVariants(ctx context.Context,userID,projectID,setID uuid.U
 
 func normalizeRejectReasons(input []string) ([]string, error) {
   return rejectreasons.Normalize(input)
+}
+
+func validateDecisionTransition(from, to string) error {
+  if from == to {
+    return nil
+  }
+  allowed := map[string]map[string]bool{
+    "candidate": {"kept": true, "selected": true, "rejected": true},
+    "kept":      {"selected": true, "rejected": true},
+    "selected":  {"rejected": true},
+    "rejected":  {"candidate": true},
+  }
+  if allowed[from][to] {
+    return nil
+  }
+  return ErrInvalidSelection
 }
 
 func variantDecisionState(v Variant) map[string]any {

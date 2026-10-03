@@ -115,7 +115,36 @@ func TestMutationRequestHashIncludesOperation(t *testing.T) {
   }
 }
 
+func TestValidateDecisionTransition(t *testing.T) {
+  allowed := [][2]string{
+    {"candidate", "kept"},
+    {"candidate", "selected"},
+    {"candidate", "rejected"},
+    {"kept", "selected"},
+    {"kept", "rejected"},
+    {"selected", "rejected"},
+    {"rejected", "candidate"},
+    {"candidate", "candidate"},
+    {"kept", "kept"},
+    {"selected", "selected"},
+    {"rejected", "rejected"},
+  }
+  for _, pair := range allowed {
+    if err := validateDecisionTransition(pair[0], pair[1]); err != nil {
+      t.Fatalf("expected transition %s -> %s to be allowed: %v", pair[0], pair[1], err)
+    }
+  }
 
-
-
-
+  rejected := [][2]string{
+    {"kept", "candidate"},
+    {"selected", "candidate"},
+    {"selected", "kept"},
+    {"rejected", "kept"},
+    {"rejected", "selected"},
+  }
+  for _, pair := range rejected {
+    if err := validateDecisionTransition(pair[0], pair[1]); err == nil {
+      t.Fatalf("expected transition %s -> %s to be rejected", pair[0], pair[1])
+    }
+  }
+}
