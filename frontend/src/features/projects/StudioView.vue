@@ -1645,7 +1645,7 @@ onUnmounted(() => {
           </el-button>
         </el-card>
 
-        <el-card id="variants" v-if="generations.length" class="timeline-card">
+        <el-card v-if="generations.length" id="variants" class="timeline-card">
           <template #header>Generation Queue</template>
           <el-timeline>
             <el-timeline-item v-for="item in generations" :key="item.id" :timestamp="new Date(item.created_at).toLocaleString()" placement="top">
