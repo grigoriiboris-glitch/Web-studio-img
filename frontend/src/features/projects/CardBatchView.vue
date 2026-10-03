@@ -74,6 +74,7 @@ type BatchState = Record<string, unknown> & {
   aspectRatio?: string
   negativePrompt?: string
   cardType?: CardTypeKey
+  cardTypeId?: string
   cardTypeVersion?: number
   templateId?: string
   mapping?: Record<string, string>
@@ -97,6 +98,7 @@ interface Batch {
   aspectRatio?: string
   negativePrompt?: string
   cardType?: CardTypeKey
+  cardTypeId?: string
   cardTypeVersion?: number
   templateId?: string
   mapping?: Record<string, string>
@@ -286,6 +288,7 @@ function batchState(batch: Batch): BatchState {
     aspectRatio: batch.aspectRatio,
     negativePrompt: batch.negativePrompt,
     cardType: batch.cardType || 'custom',
+    cardTypeId: batch.cardTypeId || cardTypeDefinition(batch.cardType).id,
     cardTypeVersion: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
     templateId: batch.templateId || templateForType(batch.cardType || 'custom').id,
     mapping: batch.mapping,
@@ -304,6 +307,8 @@ function save() {
       sheet: batch.sheet,
       mapping: { card_number_column: cardColumn.value, prompt_column: promptColumn.value, ...columnMapping.value },
       state: batchState(batch),
+      card_type_id: batch.cardTypeId || cardTypeDefinition(batch.cardType).id,
+      card_type_version: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
     })
     batch.version = remote.version
     batch.updatedAt = remote.updated_at
@@ -661,6 +666,8 @@ async function createBatch() {
       sheet: batch.sheet,
       mapping: { card_number_column: cardColumn.value, prompt_column: promptColumn.value, ...columnMapping.value },
       state: batchState(batch),
+      card_type_id: batch.cardTypeId || cardTypeDefinition(batch.cardType).id,
+      card_type_version: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
     })
     batch.id = remote.id
     batch.version = remote.version
@@ -902,7 +909,8 @@ onMounted(async () => {
         aspectRatio: state.aspectRatio,
         negativePrompt: state.negativePrompt,
         cardType: state.cardType || 'custom',
-        cardTypeVersion: state.cardTypeVersion ?? 1,
+        cardTypeId: item.card_type_id || state.cardTypeId,
+        cardTypeVersion: state.cardTypeVersion ?? item.card_type_version ?? 1,
         templateId: state.templateId || templateForType(state.cardType || 'custom').id,
         mapping: item.mapping || {},
         cardTypeDefinition: state.cardTypeDefinition,
