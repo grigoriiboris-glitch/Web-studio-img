@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { REJECT_REASONS, buildRejectConstraints, canSubmitReject } from './rejectReasons'
-import { rejectReasonsForType } from './cardBatchTypes'
+import { cardTypeDefinition, rejectReasonsForType } from './cardBatchTypes'
 
 import {
   assetsApi,
@@ -54,6 +54,11 @@ function sourceCardType(source?: VariantSource): string {
   const value = source.context?.card_type || source.context?.final_parameters?.card_type || (typeof source.context?.final_parameters?.parameters === 'object' && source.context.final_parameters.parameters ? (source.context.final_parameters.parameters as Record<string, unknown>).card_type : undefined)
   return typeof value === 'string' && value.trim() ? value : 'unknown'
 }
+
+const sourceTypes = computed(() => {
+  const seen = new Set<string>()
+  return sources.value.map(sourceCardType).filter(type => type !== 'unknown' && !seen.has(type) && seen.add(type))
+})
 
 const filteredSources = computed(() =>
   sources.value.filter(source => sourceTypeFilter.value === 'all' || sourceCardType(source) === sourceTypeFilter.value),
@@ -370,7 +375,7 @@ onMounted(async () => {
           Card type
           <select v-model="sourceTypeFilter">
             <option value="all">All types</option>
-            <option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option>
+            <option v-for="type in sourceTypes" :key="type" :value="type">{{ cardTypeDefinition(type).name }}</option>
           </select>
         </label>
         <div class="source-list">
