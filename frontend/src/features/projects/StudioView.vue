@@ -1667,7 +1667,7 @@ onUnmounted(() => {
         <el-card id="select" class="create-card">
           <template #header>Human creative actions</template>
           <el-space wrap>
-            <el-button type="success" @click="approveProject">Approve final result</el-button>
+            <el-button id="finalize" type="success" @click="approveProject">Approve final result</el-button>
             <span>Create an <strong>idea</strong>, <strong>manual_edit</strong> or <strong>composition</strong> iteration below to create a provenance-backed human action.</span>
           </el-space>
         </el-card>
