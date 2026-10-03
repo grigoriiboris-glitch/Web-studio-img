@@ -15,6 +15,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/brief"
 	"github.com/oleg3190/Web-studio-img/backend/internal/cardbatch"
+	"github.com/oleg3190/Web-studio-img/backend/internal/cardtypes"
 	"github.com/oleg3190/Web-studio-img/backend/internal/branches"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assistant"
 	"github.com/oleg3190/Web-studio-img/backend/internal/composition"
