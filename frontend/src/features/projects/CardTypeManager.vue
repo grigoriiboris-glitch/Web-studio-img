@@ -1,3 +1,4 @@
+/* eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order */
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { cardTypesApi, type CardTypeDefinition as ServerCardType, type CardTypeVersion } from '../../api/client'
