@@ -170,7 +170,8 @@ func (h *Handler) fromGeneration(w http.ResponseWriter,r *http.Request) {
 }
 
 func (h *Handler) Resolve(ctx context.Context,userID,projectID,recipeID uuid.UUID,version int,params map[string]any)(generation.RecipeResolution,error) {
-  x,err:=h.load(ctx,userID,projectID,recipeID);if err!=nil{return generation.RecipeResolution{},err};if x.Version==nil{return generation.RecipeResolution{},ErrNotFound};if version==0{version=x.CurrentVersion};if version!=x.Version.Version{return generation.RecipeResolution{},errors.New("requested recipe version is not current")}
+  if version < 1 { return generation.RecipeResolution{}, errors.New("recipe version is required") }
+  x,err:=h.load(ctx,userID,projectID,recipeID,version);if err!=nil{return generation.RecipeResolution{},err};if x.Version==nil{return generation.RecipeResolution{},ErrNotFound}
   final:=map[string]any{};for k,v:=range x.Version.DefaultParameters{final[k]=v};for k,v:=range params{final[k]=v}
   for _,p:=range x.Version.ExposedParameters{if p.Required{v,ok:=final[p.Name];if !ok||v==nil||strings.TrimSpace(fmt.Sprint(v))==""{return generation.RecipeResolution{},fmt.Errorf("required recipe parameter %s is missing",p.Name)}}}
   wf:=deepCopy(x.Version.Workflow);for name,path:=range x.Version.InputMappings{if value,ok:=final[name];ok{if err:=setPath(wf,path,value);err!=nil{return generation.RecipeResolution{},fmt.Errorf("recipe parameter %s: %w",name,err)}}}

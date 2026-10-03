@@ -160,6 +160,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Parameters: input.Parameters, FinalParameters: input.Parameters, ReferenceIDs: input.ReferenceIDs, ResolvedReferenceInfluence: input.ReferenceInfluence,
 		IdempotencyKey: r.Header.Get("Idempotency-Key"), RecipeID: input.RecipeID, RecipeVersion: input.RecipeVersion,
 	}
+	if input.RecipeID != nil && input.RecipeVersion < 1 {
+		writeError(w, http.StatusBadRequest, "recipe_version_required", "recipe_version is required when recipe_id is provided")
+		return
+	}
 	if input.RecipeID != nil {
 		if h.recipes == nil {
 			writeError(w, http.StatusServiceUnavailable, "recipe_unavailable", "recipe resolver is not configured")
