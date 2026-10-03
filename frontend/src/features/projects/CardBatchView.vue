@@ -18,7 +18,10 @@ type RejectReason = 'wrong_composition' | 'wrong_style' | 'wrong_subject' | 'wro
 import {
   CARD_TEMPLATES,
   CARD_TYPES,
-  REJECT_REASONS_BY_TYPE,
+  cardTypeDefinitions,
+  ensureCardTypeDefinition,
+  registerCardTypeDefinition,
+  rejectReasonsForType,
   assembleCardPrompt,
   cardTypeDefinition,
   cardTypeSchemaVersion,
@@ -29,6 +32,7 @@ import {
   productionDefaults,
   validateCardData,
   type CardTypeKey,
+  type CardTypeDefinition,
 } from './cardBatchTypes'
 
 interface CardItem {
@@ -73,6 +77,7 @@ type BatchState = Record<string, unknown> & {
   cardTypeVersion?: number
   templateId?: string
   mapping?: Record<string, string>
+  cardTypeDefinition?: CardTypeDefinition
 }
 
 interface Batch {
@@ -136,6 +141,8 @@ const importedFileName = ref('')
 const rejectedOpen = ref(true)
 const batchTypeFilter = ref<CardTypeKey | 'all'>('all')
 const newBatchType = ref<CardTypeKey>('custom')
+const newCardTypeName = ref('')
+const availableCardTypes = computed(() => cardTypeDefinitions())
 const columnMapping = ref<Record<string, string>>({})
 let saveQueue: Promise<void> = Promise.resolve()
 
@@ -190,6 +197,14 @@ function typeSchema(type: CardTypeKey) {
   return cardTypeDefinition(type)
 }
 
+function ensureSelectedTypeDefinition() {
+  const key = newBatchType.value.trim()
+  if (!key) return cardTypeDefinition('custom')
+  const existing = cardTypeDefinitions().find(type => type.key === key)
+  if (existing) return existing
+  return ensureCardTypeDefinition(key, columns.value)
+}
+
 function mappingFor(type: CardTypeKey) {
   return suggestColumnMapping(columns.value, type)
 }
@@ -205,6 +220,8 @@ function setColumnMapping(field: string, value: string) {
 
 function setNewBatchType(value: CardTypeKey) {
   newBatchType.value = value
+  ensureSelectedTypeDefinition()
+  if (value !== 'custom') newCardTypeName.value = ''
   columnMapping.value = { ...suggestColumnMapping(columns.value, value) }
   if (columnMapping.value.card_number) cardColumn.value = columnMapping.value.card_number
   if (columnMapping.value.prompt) promptColumn.value = columnMapping.value.prompt
@@ -267,6 +284,7 @@ function batchState(batch: Batch): BatchState {
     cardTypeVersion: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
     templateId: batch.templateId || templateForType(batch.cardType || 'custom').id,
     mapping: batch.mapping,
+    cardTypeDefinition: batch.cardTypeDefinition,
   }
 }
 
@@ -577,6 +595,7 @@ function changeSheet() {
 }
 
 function cardFromRow(row: SpreadsheetRow, sourceRow: number): CardItem {
+  ensureSelectedTypeDefinition()
   return {
     id: uid('card'),
     cardNumber: String(row[cardColumn.value] ?? '').trim(),
@@ -609,6 +628,7 @@ async function createBatch() {
     cards.push(card)
   }
   if (!cards.length) throw new Error('No valid card rows found')
+  const selectedDefinition = ensureSelectedTypeDefinition()
   const batch: Batch = {
     id: uid('batch'),
     name: name.value.trim(),
@@ -627,6 +647,7 @@ async function createBatch() {
     cardTypeVersion: cardTypeDefinition(newBatchType.value).version,
     templateId: templateForType(newBatchType.value).id,
     mapping: { ...columnMapping.value, card_number: cardColumn.value, prompt: promptColumn.value },
+    cardTypeDefinition: selectedDefinition,
   }
   try {
     const remote = await cardBatchApi.create(routeProjectId.value, {
@@ -644,6 +665,7 @@ async function createBatch() {
     activeBatchId.value = batch.id
     name.value = ''
     newBatchType.value = 'custom'
+    newCardTypeName.value = ''
     save()
     info.value = 'Batch created: ' + cards.length + ' cards'
   } catch (e) {
@@ -689,6 +711,8 @@ function selectBatch(id: string) {
   negativePrompt.value = batch.negativePrompt || ''
   columnMapping.value = batch ? { ...columnMapping.value } : {}
   newBatchType.value = batch.cardType || 'custom'
+  if (batch.cardTypeDefinition) registerCardTypeDefinition(batch.cardTypeDefinition)
+  newCardTypeName.value = availableCardTypes.value.some(type => type.key === newBatchType.value) ? '' : newBatchType.value
 }
 
 function restoreArchived(card: CardItem) {
@@ -708,6 +732,7 @@ function updateBatchSettings() {
   activeBatch.value.negativePrompt = negativePrompt.value || undefined
   activeBatch.value.mapping = { ...columnMapping.value, card_number: cardColumn.value, prompt: promptColumn.value }
   activeBatch.value.cardTypeVersion = cardTypeDefinition(activeBatch.value.cardType || 'custom').version
+  activeBatch.value.cardTypeDefinition = cardTypeDefinition(activeBatch.value.cardType || 'custom')
   activeBatch.value.templateId = activeBatch.value.templateId || templateForType(activeBatch.value.cardType || 'custom').id
   save()
 }
@@ -729,6 +754,7 @@ function migrateBatchSchema() {
 function setBatchType(value: CardTypeKey) {
   if (!activeBatch.value) return
   activeBatch.value.cardType = value
+  activeBatch.value.cardTypeDefinition = cardTypeDefinition(value)
   activeBatch.value.cardTypeVersion = cardTypeDefinition(value).version
   activeBatch.value.templateId = templateForType(value).id
   newBatchType.value = value
@@ -757,7 +783,7 @@ function setCardRecipe(card: CardItem, value: string) {
 }
 
 function templatesFor(type: CardTypeKey) {
-  return CARD_TEMPLATES.filter(template => template.typeKeys.includes(type) || template.id === 'custom')
+  return CARD_TEMPLATES.filter(template => !template.typeKeys?.length || template.typeKeys.includes(type) || template.id === 'custom')
 }
 
 function setCardTemplate(card: CardItem, value: string) {
@@ -874,6 +900,7 @@ onMounted(async () => {
         cardTypeVersion: state.cardTypeVersion ?? 1,
         templateId: state.templateId || templateForType(state.cardType || 'custom').id,
         mapping: item.mapping || {},
+        cardTypeDefinition: state.cardTypeDefinition,
       }
     })
     if (!batches.value.length) {
@@ -905,11 +932,13 @@ onMounted(async () => {
       columnMapping.value = first.mapping || { ...columnMapping.value }
       if (!first.cardType) first.cardType = 'custom'
       newBatchType.value = first.cardType
+      if (first.cardTypeDefinition) registerCardTypeDefinition(first.cardTypeDefinition)
     }
     const remoteFirst = remote.batches[0]
     cardColumn.value = String(remoteFirst?.mapping.card_number_column ?? '')
     promptColumn.value = String(remoteFirst?.mapping.prompt_column ?? '')
     columnMapping.value = { ...((remoteFirst?.mapping || {}) as Record<string, string>) }
+    for (const batch of batches.value) if (batch.cardTypeDefinition) registerCardTypeDefinition(batch.cardTypeDefinition)
     localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
     recipes.value = (await recipesApi.list(routeProjectId.value)).recipes
     await refreshBatch()
@@ -961,7 +990,8 @@ onMounted(async () => {
         <label>Card number<select v-model="cardColumn"><option v-for="item in columns" :key="item" :value="item">{{ item }}</option></select></label>
         <label>Prompt<select v-model="promptColumn"><option v-for="item in columns" :key="item" :value="item">{{ item }}</option></select></label>
         <label v-if="!activeBatch || importMode === 'new'">Batch name<input v-model="name" placeholder="THE-PRICE-OF-ONE cards"></label>
-        <label v-if="!activeBatch || importMode === 'new'">Card type<select :value="newBatchType" @change="setNewBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
+        <label v-if="!activeBatch || importMode === 'new'">Card type<select :value="CARD_TYPES.some(type => type.key === newBatchType) ? newBatchType : 'custom'" @change="setNewBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
+        <label v-if="!activeBatch || importMode === 'new'">Custom type name<input v-model="newCardTypeName" placeholder="Weapon, Spell, NPC, Building..." @input="setNewBatchType(newCardTypeName.trim() || 'custom')"></label>
         <div v-if="!activeBatch || importMode === 'new'" class="schema-box">
           <strong>{{ typeSchema(newBatchType).name }} schema v{{ typeSchema(newBatchType).version }}</strong>
           <small>{{ typeSchema(newBatchType).description }}</small>
@@ -1002,7 +1032,7 @@ onMounted(async () => {
     <section class="panel" v-if="activeBatch">
       <h2>2. Production settings</h2>
       <div class="settings">
-        <label>Card type<select :value="activeBatch.cardType || 'custom'" @change="setBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in CARD_TYPES" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
+        <label>Card type<select :value="activeBatch.cardType || 'custom'" @change="setBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in availableCardTypes" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
         <label>Batch Template<select :value="activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="activeBatch.templateId = ($event.target as HTMLSelectElement).value; save()"><option v-for="template in templatesFor(activeBatch.cardType || 'custom')" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
         <label>Batch Recipe<select v-model="recipeId" @change="updateBatchSettings"><option value="">Type default (auto)</option><option v-for="recipe in recipes" :key="recipe.id" :value="recipe.id">{{ recipe.name }} · v{{ recipe.current_version }}</option></select></label>
         <label>Reference asset IDs<input :value="referenceIdsText" placeholder="asset/reference IDs, comma separated" @change="referenceIdsText = ($event.target as HTMLInputElement).value; updateBatchSettings"></label>
