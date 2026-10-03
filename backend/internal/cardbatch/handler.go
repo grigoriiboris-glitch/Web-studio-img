@@ -141,7 +141,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   if in.Version < 1 { writeError(w, 400, "invalid_version", "version must be positive"); return }
   if in.State != nil && !validJSON(in.State) { writeError(w, 400, "invalid_state", "state is not valid JSON"); return }
   if in.Mapping != nil && !validJSON(in.Mapping) { writeError(w, 400, "invalid_mapping", "mapping is not valid JSON"); return }
-  if in.CardTypeID != nil || in.CardTypeVersion != nil { if err := h.validateCardTypeReference(r.Context(), projectID, in.CardTypeID, in.CardTypeVersion); err != nil { writeError(w, 400, "invalid_card_type_reference", err.Error()); return } }\n  if in.PrintProfileID != nil || in.PrintProfileVersion != nil { if err := h.validatePrintProfileReference(r.Context(), projectID, in.PrintProfileID, in.PrintProfileVersion); err != nil { writeError(w, 400, "invalid_print_profile_reference", err.Error()); return } }
+  if in.CardTypeID != nil || in.CardTypeVersion != nil { if err := h.validateCardTypeReference(r.Context(), projectID, in.CardTypeID, in.CardTypeVersion); err != nil { writeError(w, 400, "invalid_card_type_reference", err.Error()); return } }
+  if in.PrintProfileID != nil || in.PrintProfileVersion != nil { if err := h.validatePrintProfileReference(r.Context(), projectID, in.PrintProfileID, in.PrintProfileVersion); err != nil { writeError(w, 400, "invalid_print_profile_reference", err.Error()); return } }
 
   tx, err := h.db.BeginTx(r.Context(), nil); if err != nil { writeError(w, 500, "card_batch_update_failed", "could not start transaction"); return }
   defer func() { _ = tx.Rollback() }()
