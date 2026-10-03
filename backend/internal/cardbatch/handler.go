@@ -129,7 +129,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
   principal, _ := auth.PrincipalFromContext(r.Context())
   var item Batch
   var mappingBytes, stateBytes []byte
-  err := h.db.QueryRowContext(r.Context(), `INSERT INTO card_batches(project_id,user_id,name,source_file,sheet,mapping,state,card_type_id,card_type_version,print_profile_id,print_profile_version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11) RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,template_id,template_version,created_at,updated_at`, projectID, principal.UserID, in.Name, in.SourceFile, in.Sheet, mustJSON(in.Mapping), mustJSON(in.State), in.CardTypeID, in.CardTypeVersion, in.PrintProfileID, in.PrintProfileVersion, in.TemplateID, in.TemplateVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
+  err := h.db.QueryRowContext(r.Context(), `INSERT INTO card_batches(project_id,user_id,name,source_file,sheet,mapping,state,card_type_id,card_type_version,print_profile_id,print_profile_version,template_id,template_version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13) RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,template_id,template_version,created_at,updated_at`, projectID, principal.UserID, in.Name, in.SourceFile, in.Sheet, mustJSON(in.Mapping), mustJSON(in.State), in.CardTypeID, in.CardTypeVersion, in.PrintProfileID, in.PrintProfileVersion, in.TemplateID, in.TemplateVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
   if err == nil { _ = json.Unmarshal(mappingBytes, &item.Mapping); _ = json.Unmarshal(stateBytes, &item.State) }
   if err != nil {
     if strings.Contains(err.Error(), "card_batches_project_name_uq") { writeError(w, 409, "card_batch_name_conflict", "a card batch with this name already exists"); return }
@@ -148,6 +148,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   if in.Mapping != nil && !validJSON(in.Mapping) { writeError(w, 400, "invalid_mapping", "mapping is not valid JSON"); return }
   if in.CardTypeID != nil || in.CardTypeVersion != nil { if err := h.validateCardTypeReference(r.Context(), projectID, in.CardTypeID, in.CardTypeVersion); err != nil { writeError(w, 400, "invalid_card_type_reference", err.Error()); return } }
   if in.PrintProfileID != nil || in.PrintProfileVersion != nil { if err := h.validatePrintProfileReference(r.Context(), projectID, in.PrintProfileID, in.PrintProfileVersion); err != nil { writeError(w, 400, "invalid_print_profile_reference", err.Error()); return } }
+  if in.TemplateID != nil || in.TemplateVersion != nil { if err := h.validateTemplateReference(r.Context(), projectID, in.TemplateID, in.TemplateVersion); err != nil { writeError(w, 400, "invalid_template_reference", err.Error()); return } }
 
   tx, err := h.db.BeginTx(r.Context(), nil); if err != nil { writeError(w, 500, "card_batch_update_failed", "could not start transaction"); return }
   defer func() { _ = tx.Rollback() }()
@@ -182,7 +183,7 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) load(ctx context.Context, projectID, id uuid.UUID) (Batch, error) {
   var item Batch
   var mapping, state []byte
-  err := h.db.QueryRowContext(ctx, "SELECT id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at FROM card_batches WHERE id=$1 AND project_id=$2", id, projectID).Scan(scanArgs(&item, &mapping, &state)...)
+  err := h.db.QueryRowContext(ctx, "SELECT id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,template_id,template_version,created_at,updated_at FROM card_batches WHERE id=$1 AND project_id=$2", id, projectID).Scan(scanArgs(&item, &mapping, &state)...)
   if err != nil { return Batch{}, err }
   if err := json.Unmarshal(mapping, &item.Mapping); err != nil { return Batch{}, err }
   if err := json.Unmarshal(state, &item.State); err != nil { return Batch{}, err }
