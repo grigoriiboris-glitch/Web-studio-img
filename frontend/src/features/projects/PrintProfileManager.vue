@@ -95,6 +95,7 @@ onMounted(load)
 </script>
 
 <template>
+  <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order, vue/html-self-closing -->
   <section class="print-profiles">
     <div class="head">
       <div><h2>Print Profiles</h2><p>Physical production constraints are versioned separately from generation defaults.</p></div>
