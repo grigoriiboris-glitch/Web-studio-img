@@ -54,9 +54,13 @@ const props = defineProps<{
   projectId: string
   plan: ComfyFlowPlan
   inputAssets?: Record<string, string>
+  processStage?: 'brief' | 'references' | 'generate' | 'variants' | 'select' | 'finalize'
+  processHint?: string
+  selectedVariantLabel?: string
+  finalApproved?: boolean
 }>()
 
-const emit = defineEmits(['update:plan', 'run', 'save'])
+const emit = defineEmits(['update:plan', 'run', 'save', 'navigate'])
 
 const validation = ref<Validation | null>(null)
 const validating = ref(false)
@@ -73,6 +77,23 @@ const piRepairing = ref(false)
 const repairSessionId = ref<string | null>(null)
 let activeRequestController: AbortController | null = null
 const formattedTestRunAt = computed(() => testRunAt.value ? new Date(testRunAt.value).toLocaleTimeString() : '')
+
+const processStageLabels: Record<NonNullable<typeof props.processStage>, string> = {
+  brief: 'Brief — сформулируй задачу',
+  references: 'References — добавь материалы',
+  generate: 'Generate — создай варианты',
+  variants: 'Variants — сравни результаты',
+  select: 'Select — выбери кандидата',
+  finalize: 'Finalize — проверь и утверди',
+}
+const processStageLabel = computed(() => processStageLabels[props.processStage ?? 'generate'])
+const processHintText = computed(() => props.processHint || (
+  props.finalApproved
+    ? 'Творческий цикл завершён. Flow и история остаются доступны для повторной итерации.'
+    : props.selectedVariantLabel
+      ? 'Кандидат выбран. Следующий шаг — финальная проверка и утверждение.'
+      : 'Следующий шаг определяется состоянием проекта в Studio.'
+))
 
 const stepCatalog: ArtistStep[] = [
   { id: 'sketch', icon: '✏️', title: 'Скетч', description: 'Сохраняем композицию и важные линии.', enabled: true },
@@ -486,6 +507,21 @@ watch(() => props.plan.workflow, () => {
       <el-tag :type="readiness.kind">{{ readiness.title }}</el-tag>
     </div>
 
+    <section class="process-status" aria-label="Состояние творческого процесса">
+      <div class="process-copy">
+        <span class="process-kicker">Flow управляет процессом</span>
+        <strong>{{ processStageLabel }}</strong>
+        <span>{{ processHintText }}</span>
+      </div>
+      <div class="process-meta">
+        <el-tag v-if="selectedVariantLabel" type="success">Кандидат: {{ selectedVariantLabel }}</el-tag>
+        <el-tag :type="finalApproved ? 'success' : 'warning'">
+          {{ finalApproved ? 'Финал утверждён' : 'Финал ещё не утверждён' }}
+        </el-tag>
+        <el-button size="small" @click="emit('navigate', processStage || 'generate')">Открыть этап</el-button>
+      </div>
+    </section>
+
     <el-alert
       v-if="error"
       title="Тест не выполнен"
@@ -678,6 +714,11 @@ watch(() => props.plan.workflow, () => {
 
 <style scoped>
 .artist-flow { display: grid; gap: 18px; }
+.process-status { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid var(--el-border-color); border-radius: 12px; background: var(--el-fill-color-lighter); }
+.process-copy { display: grid; gap: 3px; min-width: 0; }
+.process-copy > span:last-child { color: var(--el-text-color-secondary); font-size: 13px; }
+.process-kicker { color: var(--el-color-primary); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.process-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .artist-intro, .section-title, .control-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .artist-intro { padding: 18px; border-radius: 14px; background: var(--el-fill-color-lighter); }
 .artist-intro h3 { margin: 4px 0; font-size: 20px; }
@@ -709,5 +750,5 @@ watch(() => props.plan.workflow, () => {
 .technical { border-top: 1px solid var(--el-border-color); padding-top: 10px; color: var(--el-text-color-secondary); }
 .technical summary { cursor: pointer; }
 .technical-content pre { max-height: 360px; overflow: auto; padding: 12px; border-radius: 8px; background: var(--el-fill-color-darker); color: var(--el-color-white); }
-@media (max-width: 700px) { .artist-intro, .section-title { align-items: flex-start; flex-direction: column; } .artist-step { grid-template-columns: 28px 38px minmax(0,1fr); } .artist-step :deep(.el-switch) { grid-column: 3; justify-self: start; } }
+@media (max-width: 700px) { .artist-intro, .section-title, .process-status { align-items: flex-start; flex-direction: column; } .artist-step { grid-template-columns: 28px 38px minmax(0,1fr); } .artist-step :deep(.el-switch) { grid-column: 3; justify-self: start; } }
 </style>
