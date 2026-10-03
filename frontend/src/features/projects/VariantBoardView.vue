@@ -72,7 +72,6 @@ const selectedVariantIds = computed(() =>
 
 const selectionStatus = computed(() => {
   const selected = selectedVariantIds.value.length
-  const rejected = variants.value.filter(item => item.decision === 'rejected').length
   if (!variants.value.length) return { kind: 'info', title: 'Добавь варианты', text: 'Создай Variant Set из завершённых генераций.' }
   if (selected === 0) return { kind: 'warning', title: 'Выбери варианты', text: 'Используй Keep или Select. После этого можно создать следующую итерацию.' }
   if (selected === 1) return { kind: 'success', title: 'Есть кандидат', text: 'Проверь его и создай selection iteration, если готов продолжать.' }
