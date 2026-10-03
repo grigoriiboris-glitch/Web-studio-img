@@ -46,9 +46,10 @@ type updateInput struct {
 }
 type Handler struct{ db *sql.DB }
 
-func NewHandler(db *sql.DB) (*Handler,error) {
-  if db == nil { return nil, errors.New("print profile handler requires database") }
-  return &Handler{db:db},nil
+func NewHandler(db *sql.DB) (*Handler, error) {
+  if db == nil { return nil, errors.New("print profile handler requires database")
+  }
+  return &Handler{db: db}, nil
 }
 func (h *Handler) Register(mux *http.ServeMux) {
   mux.HandleFunc("GET /api/v1/projects/{project_id}/print-profiles", h.list)
