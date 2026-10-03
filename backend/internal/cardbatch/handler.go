@@ -179,7 +179,7 @@ type scanner interface{ Scan(...any) error }
 func scan(row scanner) (Batch, error) {
   var item Batch
   var mapping, state []byte
-  err := row.Scan(&item.ID,&item.ProjectID,&item.UserID,&item.Name,&item.SourceFile,&item.Sheet,&mapping,&state,&item.Version,&item.CreatedAt,&item.UpdatedAt)
+  err := row.Scan(&item.ID,&item.ProjectID,&item.UserID,&item.Name,&item.SourceFile,&item.Sheet,&mapping,&state,&item.Version,&item.CardTypeID,&item.CardTypeVersion,&item.CreatedAt,&item.UpdatedAt)
   if err != nil { return Batch{}, err }
   if err := json.Unmarshal(mapping,&item.Mapping); err != nil { return Batch{}, err }
   if err := json.Unmarshal(state,&item.State); err != nil { return Batch{}, err }
