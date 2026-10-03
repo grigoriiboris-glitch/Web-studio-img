@@ -81,6 +81,13 @@ describe('card batch type schemas', () => {
     })
   })
 
+  it('does not crash for an unknown type id', () => {
+    const definition = cardTypeDefinition('NPC')
+    expect(definition.key).toBe('NPC')
+    expect(definition.fields).toEqual([])
+    expect(validateCardData('001', 'prompt', { faction: 'neutral' }, 'NPC')).toEqual([])
+  })
+
   it('accepts arbitrary field kinds as UI metadata without blocking card validation', () => {
     const definition = cardTypeDefinition('item')
     definition.fields.push({ key: 'custom_data', label: 'Custom data', type: 'some_future_widget' })
