@@ -10,9 +10,13 @@ import {
   variantBoardApi,
   type Generation,
   type Recipe,
+  type PrintProfile,
+  printProfilesApi,
 } from '../../api/client'
 import { parseSpreadsheet, type SpreadsheetRow } from './cardBatchSpreadsheet'
 import CardTypeManager from './CardTypeManager.vue'
+import PrintProfileManager from './PrintProfileManager.vue'
+import CardBatchSelect, { type SelectOption } from './CardBatchSelect.vue'
 import CardBatchSelect, { type SelectOption } from './CardBatchSelect.vue'
 
 type CardStatus = 'draft' | 'pending' | 'queued' | 'running' | 'succeeded' | 'needs_revision' | 'failed' | 'finalized'
@@ -79,6 +83,8 @@ type BatchState = Record<string, unknown> & {
   cardType?: CardTypeKey
   cardTypeId?: string
   cardTypeVersion?: number
+  printProfileId?: string
+  printProfileVersion?: number
   templateId?: string
   mapping?: Record<string, string>
   cardTypeDefinition?: CardTypeDefinition
@@ -103,6 +109,8 @@ interface Batch {
   cardType?: CardTypeKey
   cardTypeId?: string
   cardTypeVersion?: number
+  printProfileId?: string
+  printProfileVersion?: number
   templateId?: string
   mapping?: Record<string, string>
   cardTypeDefinition?: CardTypeDefinition
@@ -133,6 +141,8 @@ const stopRequested = ref(false)
 const error = ref('')
 const info = ref('')
 const recipes = ref<Recipe[]>([])
+const printProfiles = ref<PrintProfile[]>([])
+const printProfileId = ref('')
 const recipeId = ref('')
 const referenceIdsText = ref('')
 const targetWidth = ref<number | undefined>()
@@ -209,6 +219,7 @@ function typeSchema(type: CardTypeKey) {
 
 const cardTypeOptions = computed<SelectOption[]>(() => CARD_TYPES.map(item => ({ value: item.key, label: item.name })))
 const recipeOptions = computed<SelectOption[]>(() => recipes.value.map(item => ({ value: item.id, label: item.name + ' · v' + item.current_version })))
+const printProfileOptions = computed<SelectOption[]>(() => printProfiles.value.map(item => ({ value: item.id, label: item.name + ' · v' + item.current_version })))
 function templateOptionsFor(type: CardTypeKey): SelectOption[] {
   return templatesFor(type).map(item => ({ value: item.id, label: item.name }))
 }
@@ -271,14 +282,27 @@ function typeRecipe(type: CardTypeKey) {
 
 function effectiveDimensions(card: CardItem) {
   const defaults = productionDefaults(resolvedCardType(card))
+  const profile = printProfiles.value.find(item => item.id === activeBatch.value?.printProfileId)
+  const profileSpec = selectedPrintProfileSpec()
+  const profileDpi = Number(profileSpec?.dpi || 0)
+  const profileBleed = Number(profileSpec?.bleed_mm || 0)
+  const profileWidth = Number(profileSpec?.width_mm || 0)
+  const profileHeight = Number(profileSpec?.height_mm || 0)
+  const profileRasterWidth = profileDpi > 0 && profileWidth > 0 ? Math.round((profileWidth + profileBleed * 2) / 25.4 * profileDpi) : undefined
+  const profileRasterHeight = profileDpi > 0 && profileHeight > 0 ? Math.round((profileHeight + profileBleed * 2) / 25.4 * profileDpi) : undefined
   return {
-    width: card.targetWidth || activeBatch.value?.targetWidth || defaults.width,
-    height: card.targetHeight || activeBatch.value?.targetHeight || defaults.height,
+    width: card.targetWidth || activeBatch.value?.targetWidth || profileRasterWidth || defaults.width,
+    height: card.targetHeight || activeBatch.value?.targetHeight || profileRasterHeight || defaults.height,
     aspectRatio: card.aspectRatio || activeBatch.value?.aspectRatio || defaults.aspectRatio,
     negativePrompt: card.negativePrompt || activeBatch.value?.negativePrompt || defaults.negativePrompt,
     referenceIds: card.referenceIds !== undefined ? card.referenceIds : (activeBatch.value?.referenceIds !== undefined ? activeBatch.value.referenceIds : defaults.referenceIds),
     generationParameters: defaults.generationParameters,
   }
+}
+
+function selectedPrintProfileSpec(): Record<string, unknown> | undefined {
+  const profile = printProfiles.value.find(item => item.id === activeBatch.value?.printProfileId) as (PrintProfile & { spec?: Record<string, unknown> }) | undefined
+  return profile?.spec
 }
 
 function effectiveRecipeSelection(card: CardItem): { id?: string; version?: number } | undefined {
@@ -307,6 +331,8 @@ function batchState(batch: Batch): BatchState {
     cardType: batch.cardType || 'custom',
     cardTypeId: batch.cardTypeId || cardTypeDefinition(batch.cardType).id,
     cardTypeVersion: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
+    printProfileId: batch.printProfileId,
+    printProfileVersion: batch.printProfileVersion,
     templateId: batch.templateId || templateForType(batch.cardType || 'custom').id,
     mapping: batch.mapping,
     cardTypeDefinition: batch.cardTypeDefinition,
@@ -326,6 +352,8 @@ function save() {
       state: batchState(batch),
       card_type_id: batch.cardTypeId || cardTypeDefinition(batch.cardType).id,
       card_type_version: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
+      print_profile_id: batch.printProfileId,
+      print_profile_version: batch.printProfileVersion,
     })
     batch.version = remote.version
     batch.updatedAt = remote.updated_at
@@ -437,6 +465,9 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
       card_type_fields: cardTypeDefinition(resolvedType).fields.map(field => field.key),
       card_template_id: resolvedTemplate(card).id,
       card_template_name: resolvedTemplate(card).name,
+      print_profile_id: activeBatch.value?.printProfileId,
+      print_profile_version: activeBatch.value?.printProfileVersion,
+      print_profile_spec: profileSpec,
       recipe_version: recipeSelection?.version,
       original_prompt: prompt,
       version,
@@ -927,6 +958,8 @@ onMounted(async () => {
         cardType: state.cardType || 'custom',
         cardTypeId: item.card_type_id || state.cardTypeId,
         cardTypeVersion: state.cardTypeVersion ?? item.card_type_version ?? 1,
+        printProfileId: item.print_profile_id || (state as BatchState).printProfileId,
+        printProfileVersion: item.print_profile_version || (state as BatchState).printProfileVersion,
         templateId: state.templateId || templateForType(state.cardType || 'custom').id,
         mapping: (item.mapping || {}) as Record<string, string>,
       cardTypeDefinition: state.cardTypeDefinition,
@@ -953,11 +986,13 @@ onMounted(async () => {
     const first = batches.value[0]
     if (first) {
       recipeId.value = first.recipeId || ''
+      printProfileId.value = first.printProfileId || ''
       referenceIdsText.value = (first.referenceIds || []).join(', ')
       targetWidth.value = first.targetWidth
       targetHeight.value = first.targetHeight
       aspectRatio.value = first.aspectRatio || ''
       negativePrompt.value = first.negativePrompt || ''
+      printProfileId.value = first.printProfileId || ''
       columnMapping.value = first.mapping || { ...columnMapping.value }
       if (!first.cardType) first.cardType = 'custom'
       newBatchType.value = first.cardType
@@ -970,11 +1005,13 @@ onMounted(async () => {
     for (const batch of batches.value) if (batch.cardTypeDefinition) registerCardTypeDefinition(batch.cardTypeDefinition)
     localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
     recipes.value = (await recipesApi.list(routeProjectId.value)).recipes
+    printProfiles.value = (await printProfilesApi.list(routeProjectId.value)).print_profiles
     await refreshBatch()
   } catch (e) {
     batches.value = JSON.parse(localStorage.getItem(storageKey.value) || '[]') as Batch[]
     activeBatchId.value = batches.value[0]?.id || ''
     try { recipes.value = (await recipesApi.list(routeProjectId.value)).recipes } catch { /* keep empty */ }
+    try { printProfiles.value = (await printProfilesApi.list(routeProjectId.value)).print_profiles } catch { /* keep empty */ }
     await refreshBatch()
     error.value = e instanceof Error ? e.message : String(e)
   }
