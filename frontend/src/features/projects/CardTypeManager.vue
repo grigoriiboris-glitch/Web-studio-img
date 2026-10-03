@@ -180,6 +180,7 @@ onMounted(load)
 </script>
 
 <template>
+  <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order -->
   <section class="card-type-manager panel">
     <div class="manager-head">
       <div>
