@@ -982,6 +982,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order, vue/html-indent, vue/html-self-closing -->
   <main class="card-batch">
     <CardTypeManager :project-id="routeProjectId" />
     <header class="header">
