@@ -218,44 +218,6 @@ export const cardBatchApi = {
   remove: (projectId: string, batchId: string) => apiRequest<void>(`/projects/${projectId}/card-batches/${batchId}`, { method: 'DELETE' }),
 }
 
-export interface CardTemplateVersion {
-  id: string
-  card_template_id: string
-  version: number
-  spec: Record<string, unknown>
-  created_at: string
-}
-
-export interface CardTemplate {
-  id: string
-  project_id: string
-  key: string
-  name: string
-  description: string
-  current_version: number
-  archived_at?: string
-  created_at: string
-  updated_at: string
-  version?: CardTemplateVersion
-}
-
-export type CardTemplateInput = {
-  key: string
-  name: string
-  description?: string
-  spec: Record<string, unknown>
-}
-
-export const cardTemplatesApi = {
-  list: (projectId: string) => apiRequest<{ templates: CardTemplate[] }>(`/projects/${projectId}/templates`),
-  get: (projectId: string, templateId: string) => apiRequest<{ template: CardTemplate; version: CardTemplateVersion }>(`/projects/${projectId}/templates/${templateId}`),
-  versions: (projectId: string, templateId: string) => apiRequest<{ versions: CardTemplateVersion[] }>(`/projects/${projectId}/templates/${templateId}/versions`),
-  create: (projectId: string, input: CardTemplateInput) => apiRequest<{ template: CardTemplate; version: CardTemplateVersion }>(`/projects/${projectId}/templates`, { method: 'POST', body: JSON.stringify(input) }),
-  update: (projectId: string, templateId: string, input: { name?: string; description?: string; spec: Record<string, unknown> }) =>
-    apiRequest<{ template: CardTemplate; version: CardTemplateVersion }>(`/projects/${projectId}/templates/${templateId}`, { method: 'PATCH', body: JSON.stringify(input) }),
-  archive: (projectId: string, templateId: string) => apiRequest<void>(`/projects/${projectId}/templates/${templateId}/archive`, { method: 'POST' }),
-}
-
 export interface RecipeParameter {
   name: string
   type: 'string' | 'number' | 'integer' | 'boolean' | 'image' | 'mask'
