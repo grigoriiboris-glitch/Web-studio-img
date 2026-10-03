@@ -1277,3 +1277,43 @@ export const assistantApi = {
     body: JSON.stringify({ decision, ...input }),
   }),
 }
+
+
+export interface PrintProfileVersion {
+  id: string
+  print_profile_id: string
+  version: number
+  spec: Record<string, unknown>
+  created_at: string
+}
+
+export interface PrintProfile {
+  id: string
+  project_id: string
+  key: string
+  name: string
+  current_version: number
+  archived_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PrintProfileDetails {
+  print_profile: PrintProfile
+  version: PrintProfileVersion
+}
+
+export const printProfilesApi = {
+  list: (projectId: string) =>
+    apiRequest<{ print_profiles: PrintProfile[] }>(`/projects/${projectId}/print-profiles`),
+  get: (projectId: string, id: string) =>
+    apiRequest<PrintProfileDetails>(`/projects/${projectId}/print-profiles/${id}`),
+  versions: (projectId: string, id: string) =>
+    apiRequest<{ versions: PrintProfileVersion[] }>(`/projects/${projectId}/print-profiles/${id}/versions`),
+  create: (projectId: string, input: { key: string; name: string; spec: Record<string, unknown> }) =>
+    apiRequest<PrintProfileDetails>(`/projects/${projectId}/print-profiles`, { method: 'POST', body: JSON.stringify(input) }),
+  update: (projectId: string, id: string, input: { name?: string; spec: Record<string, unknown> }) =>
+    apiRequest<PrintProfileDetails>(`/projects/${projectId}/print-profiles/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  archive: (projectId: string, id: string) =>
+    apiRequest<void>(`/projects/${projectId}/print-profiles/${id}/archive`, { method: 'POST' }),
+}
