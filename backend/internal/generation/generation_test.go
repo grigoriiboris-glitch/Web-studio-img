@@ -38,3 +38,15 @@ func TestValidateRequestAcceptsReproducibilityMetadata(t *testing.T) {
 		t.Fatalf("expected valid reference metadata, got %v", err)
 	}
 }
+
+func TestValidateRequestRequiresRecipeVersion(t *testing.T) {
+	id := uuid.New()
+	req := Request{ProjectID: uuid.New(), Prompt: "test", IdempotencyKey: "key", RecipeID: &id}
+	if err := ValidateRequest(req); err != ErrInvalidGeneration {
+		t.Fatalf("expected recipe version to be required, got %v", err)
+	}
+	req.RecipeVersion = 2
+	if err := ValidateRequest(req); err != nil {
+		t.Fatalf("expected explicit recipe version to be accepted, got %v", err)
+	}
+}
