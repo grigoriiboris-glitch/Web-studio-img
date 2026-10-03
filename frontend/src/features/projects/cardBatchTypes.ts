@@ -1,16 +1,21 @@
-export type CardTypeKey = 'role' | 'item' | 'world' | 'event' | 'faction' | 'resource' | 'custom'
-export type CardFieldType = 'text' | 'number' | 'select' | 'textarea'
+export type CardTypeKey = string
 
+/**
+ * Field metadata is intentionally optional. Card data is JSON-like and may contain
+ * arbitrary columns from a spreadsheet. Legacy field types remain supported only
+ * as UI/validation hints for existing schemas.
+ */
 export interface CardFieldSchema {
   key: string
   label: string
-  type: CardFieldType
+  type?: string
   required?: boolean
   options?: string[]
-  defaultValue?: string
+  defaultValue?: unknown
   aliases?: string[]
   min?: number
   max?: number
+  includeInPrompt?: boolean
 }
 
 export interface CardTypeDefinition {
@@ -34,7 +39,7 @@ export interface CardTemplateDefinition {
   id: string
   name: string
   description: string
-  typeKeys: CardTypeKey[]
+  typeKeys?: string[]
 }
 
 export const CARD_TEMPLATES: CardTemplateDefinition[] = [
@@ -43,102 +48,87 @@ export const CARD_TEMPLATES: CardTemplateDefinition[] = [
   { id: 'standard-world', name: 'Standard Location', description: 'Environment-focused composition.', typeKeys: ['world'] },
   { id: 'standard-event', name: 'Standard Event', description: 'Narrative scene composition.', typeKeys: ['event'] },
   { id: 'standard-faction', name: 'Standard Faction', description: 'Faction identity composition.', typeKeys: ['faction'] },
-  { id: 'custom', name: 'Custom Template', description: 'No type-specific template.', typeKeys: ['custom'] },
+  { id: 'custom', name: 'Custom Template', description: 'No type-specific template.' },
 ]
 
+const legacy = (key: string, name: string, description: string, fields: CardFieldSchema[], promptInstructions: string, recipeKeywords: string[], template: string, width?: number, height?: number, aspectRatio?: string): CardTypeDefinition => ({
+  key, name, description, version: 1, fields, promptInstructions, recipeKeywords, defaultTemplateId: template,
+  defaultWidth: width, defaultHeight: height, defaultAspectRatio: aspectRatio,
+})
+
+const commonName: CardFieldSchema = { key: 'name', label: 'Name', aliases: ['card name', 'название', 'имя'] }
+const commonDescription: CardFieldSchema = { key: 'description', label: 'Description', aliases: ['desc', 'описание'] }
+const commonPrompt: CardFieldSchema = { key: 'prompt', label: 'Prompt', required: true, aliases: ['prompt', 'промт', 'image prompt'], includeInPrompt: false }
+
 export const CARD_TYPES: CardTypeDefinition[] = [
-  {
-    key: 'role', name: 'Role / Character', version: 1,
-    description: 'Персонажи, роли, классы и способности.',
-    fields: [
-      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
-      { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['prompt', 'промт', 'image prompt'] },
-    ],
-    promptInstructions: 'Board-game character illustration. Make the character identity, silhouette and readable role cues clear.',
-    recipeKeywords: ['character', 'role', 'персонаж'],
-    defaultTemplateId: 'standard-role', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
-  },
-  {
-    key: 'item', name: 'Item / Equipment', version: 1,
-    description: 'Предметы, оружие, экипировка и артефакты.',
-    fields: [
-      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'rarity', label: 'Rarity', type: 'select', options: ['common', 'uncommon', 'rare', 'epic', 'legendary'], aliases: ['редкость', 'уровень'] },
-      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
-      { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
-    ],
-    promptInstructions: 'Board-game item illustration. Keep the object as the unmistakable visual subject with a readable silhouette.',
-    recipeKeywords: ['item', 'equipment', 'object', 'предмет'],
-    defaultTemplateId: 'standard-item', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
-  },
-  {
-    key: 'world', name: 'World / Location', version: 1,
-    description: 'Локации, места и окружение.',
-    fields: [
-      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'region', label: 'Region', type: 'text', aliases: ['район', 'регион', 'местность'] },
-      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
-      { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
-    ],
-    promptInstructions: 'Board-game location illustration. Establish a clear place, spatial depth and environmental storytelling.',
-    recipeKeywords: ['world', 'location', 'environment', 'landscape', 'локация'],
-    defaultTemplateId: 'standard-world', defaultWidth: 1200, defaultHeight: 800, defaultAspectRatio: '3:2',
-  },
-  {
-    key: 'event', name: 'Event', version: 1,
-    description: 'События, происшествия и условия раунда.',
-    fields: [
-      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
-      { key: 'effect', label: 'Effect', type: 'textarea', aliases: ['эффект', 'effect text'] },
-      { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
-    ],
-    promptInstructions: 'Board-game event illustration. Show the event as a readable narrative moment rather than an abstract symbol.',
-    recipeKeywords: ['event', 'scene', 'событие'],
-    defaultTemplateId: 'standard-event', defaultWidth: 1200, defaultHeight: 800, defaultAspectRatio: '3:2',
-  },
-  {
-    key: 'faction', name: 'Faction', version: 1,
-    description: 'Фракции, группы и стороны.',
-    fields: [
-      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
-      { key: 'ability', label: 'Ability', type: 'textarea', aliases: ['способность', 'ability text'] },
-      { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
-    ],
-    promptInstructions: 'Board-game faction illustration. Make faction identity and visual symbols coherent and immediately recognizable.',
-    recipeKeywords: ['faction', 'group', 'фракция'],
-    defaultTemplateId: 'standard-faction', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
-  },
-  {
-    key: 'resource', name: 'Resource', version: 1,
-    description: 'Ресурсы, жетоны и игровые материалы.',
-    fields: [
-      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'rarity', label: 'Rarity', type: 'select', options: ['common', 'uncommon', 'rare', 'epic', 'legendary'], aliases: ['редкость', 'уровень'] },
-      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
-      { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
-    ],
-    promptInstructions: 'Board-game resource illustration. Keep the resource visually distinct and easy to identify at card size.',
-    recipeKeywords: ['resource', 'token', 'material', 'ресурс'],
-    defaultTemplateId: 'standard-item', defaultWidth: 750, defaultHeight: 1050, defaultAspectRatio: '5:7',
-  },
-  {
-    key: 'custom', name: 'Custom', version: 1,
-    description: 'Произвольный тип карточек.',
-    fields: [
-      { key: 'name', label: 'Name', type: 'text', aliases: ['card name', 'название', 'имя'] },
-      { key: 'description', label: 'Description', type: 'textarea', aliases: ['desc', 'описание'] },
-      { key: 'prompt', label: 'Prompt', type: 'textarea', required: true, aliases: ['промт', 'image prompt'] },
-    ],
+  legacy('role', 'Role / Character', 'Персонажи, роли, классы и способности.', [commonName, { ...commonDescription }, { ...commonPrompt }], 'Board-game character illustration. Make the character identity, silhouette and readable role cues clear.', ['character', 'role', 'персонаж'], 'standard-role', 750, 1050, '5:7'),
+  legacy('item', 'Item / Equipment', 'Предметы, оружие, экипировка и артефакты.', [commonName, { key: 'rarity', label: 'Rarity', aliases: ['редкость', 'уровень'], options: ['common', 'uncommon', 'rare', 'epic', 'legendary'] }, { ...commonDescription }, { ...commonPrompt }], 'Board-game item illustration. Keep the object as the unmistakable visual subject with a readable silhouette.', ['item', 'equipment', 'object', 'предмет'], 'standard-item', 750, 1050, '5:7'),
+  legacy('world', 'World / Location', 'Локации, места и окружение.', [commonName, { key: 'region', label: 'Region', aliases: ['район', 'регион', 'местность'] }, { ...commonDescription }, { ...commonPrompt }], 'Board-game location illustration. Establish a clear place, spatial depth and environmental storytelling.', ['world', 'location', 'environment', 'landscape', 'локация'], 'standard-world', 1200, 800, '3:2'),
+  legacy('event', 'Event', 'События, происшествия и условия раунда.', [commonName, { ...commonDescription }, { key: 'effect', label: 'Effect', aliases: ['эффект', 'effect text'] }, { ...commonPrompt }], 'Board-game event illustration. Show the event as a readable narrative moment rather than an abstract symbol.', ['event', 'scene', 'событие'], 'standard-event', 1200, 800, '3:2'),
+  legacy('faction', 'Faction', 'Фракции, группы и стороны.', [commonName, { ...commonDescription }, { key: 'ability', label: 'Ability', aliases: ['способность', 'ability text'] }, { ...commonPrompt }], 'Board-game faction illustration. Make faction identity and visual symbols coherent and immediately recognizable.', ['faction', 'group', 'фракция'], 'standard-faction', 750, 1050, '5:7'),
+  legacy('resource', 'Resource', 'Ресурсы, жетоны и игровые материалы.', [commonName, { key: 'rarity', label: 'Rarity', aliases: ['редкость', 'уровень'], options: ['common', 'uncommon', 'rare', 'epic', 'legendary'] }, { ...commonDescription }, { ...commonPrompt }], 'Board-game resource illustration. Keep the resource visually distinct and easy to identify at card size.', ['resource', 'token', 'material', 'ресурс'], 'standard-item', 750, 1050, '5:7'),
+  legacy('custom', 'Custom', 'Произвольный тип карточек.', [commonName, { ...commonDescription }, { ...commonPrompt }], 'Board-game card illustration with a clear central subject and readable silhouette.', [], 'custom'),
+]
+
+const runtimeDefinitions = new Map<string, CardTypeDefinition>()
+for (const definition of CARD_TYPES) runtimeDefinitions.set(definition.key, definition)
+
+export function registerCardTypeDefinition(definition: CardTypeDefinition): void {
+  if (!definition.key.trim()) return
+  runtimeDefinitions.set(definition.key, {
+    ...definition,
+    fields: (definition.fields || []).map(field => ({ ...field })),
+  })
+}
+
+export function registerCardTypeDefinitions(definitions: CardTypeDefinition[]): void {
+  definitions.forEach(registerCardTypeDefinition)
+}
+
+export function cardTypeDefinitions(): CardTypeDefinition[] {
+  return [...runtimeDefinitions.values()]
+}
+
+export function cardTypeDefinition(key?: CardTypeKey): CardTypeDefinition {
+  const normalized = String(key || 'custom').trim() || 'custom'
+  return runtimeDefinitions.get(normalized) || {
+    key: normalized,
+    name: normalized,
+    description: 'Custom card type. Fields are data columns; no field type is required.',
+    version: 1,
+    fields: [],
     promptInstructions: 'Board-game card illustration with a clear central subject and readable silhouette.',
     recipeKeywords: [],
     defaultTemplateId: 'custom',
-  },
-]
+  }
+}
 
-export const REJECT_REASONS_BY_TYPE: Record<CardTypeKey, string[]> = {
+export function ensureCardTypeDefinition(key: string, columns: string[] = []): CardTypeDefinition {
+  const existing = runtimeDefinitions.get(key)
+  if (existing) return existing
+  const excluded = new Set(['card_number', 'card number', 'number', 'prompt', 'image prompt', 'промт', 'номер'])
+  const fields = columns
+    .filter(column => !excluded.has(column.trim().toLowerCase()))
+    .map(column => ({
+      key: column.trim(),
+      label: column.trim(),
+      aliases: [column.trim()],
+    }))
+  const definition: CardTypeDefinition = {
+    key,
+    name: key,
+    description: 'Custom card type created from spreadsheet columns.',
+    version: 1,
+    fields,
+    promptInstructions: 'Board-game card illustration with a clear central subject and readable silhouette.',
+    recipeKeywords: [],
+    defaultTemplateId: 'custom',
+  }
+  registerCardTypeDefinition(definition)
+  return definition
+}
+
+export const REJECT_REASONS_BY_TYPE: Record<string, string[]> = {
   role: ['wrong_composition', 'wrong_style', 'wrong_subject', 'wrong_detail', 'technical', 'other'],
   item: ['wrong_composition', 'wrong_style', 'wrong_subject', 'wrong_color', 'wrong_detail', 'technical', 'other'],
   world: ['wrong_composition', 'wrong_style', 'wrong_subject', 'wrong_color', 'wrong_detail', 'technical', 'other'],
@@ -148,16 +138,17 @@ export const REJECT_REASONS_BY_TYPE: Record<CardTypeKey, string[]> = {
   custom: ['wrong_composition', 'wrong_style', 'wrong_subject', 'wrong_color', 'wrong_detail', 'technical', 'other'],
 }
 
-export function cardTypeDefinition(key?: CardTypeKey): CardTypeDefinition {
-  return CARD_TYPES.find(type => type.key === key) || CARD_TYPES.find(type => type.key === 'custom')!
+export function rejectReasonsForType(type: string): string[] {
+  return REJECT_REASONS_BY_TYPE[type] || REJECT_REASONS_BY_TYPE.custom
 }
 
 export function templateForType(key: CardTypeKey, templateId?: string): CardTemplateDefinition {
+  const definition = cardTypeDefinition(key)
   if (templateId) {
     const exact = CARD_TEMPLATES.find(template => template.id === templateId)
-    if (exact && (exact.typeKeys.includes(key) || exact.id === 'custom')) return exact
+    if (exact && (!exact.typeKeys?.length || exact.typeKeys.includes(key) || exact.id === 'custom')) return exact
   }
-  return CARD_TEMPLATES.find(template => template.id === cardTypeDefinition(key).defaultTemplateId) || CARD_TEMPLATES[CARD_TEMPLATES.length - 1]
+  return CARD_TEMPLATES.find(template => template.id === definition.defaultTemplateId) || CARD_TEMPLATES[CARD_TEMPLATES.length - 1]
 }
 
 function normalizeHeader(value: string): string {
@@ -191,12 +182,26 @@ export function suggestColumnMapping(columns: string[], type: CardTypeKey): Reco
 }
 
 export function fieldsFromRow(row: Record<string, string>, type: CardTypeKey, mapping?: Record<string, string>): Record<string, string> {
+  const definition = cardTypeDefinition(type)
   const result: Record<string, string> = {}
-  for (const field of cardTypeDefinition(type).fields) {
+  const effectiveMapping = mapping || suggestColumnMapping(Object.keys(row), type)
+  const mappedColumns = new Set(Object.values(effectiveMapping))
+  for (const field of definition.fields) {
     if (field.key === 'prompt') continue
-    const column = mapping?.[field.key] || suggestColumnMapping(Object.keys(row), type)[field.key]
+    const column = effectiveMapping[field.key] || (Object.prototype.hasOwnProperty.call(row, field.key) ? field.key : undefined)
     const value = column ? String(row[column] ?? '').trim() : ''
     if (value) result[field.key] = value
+  }
+  // Dynamic types may have no schema fields yet. Preserve every unmapped spreadsheet
+  // column as card data rather than silently dropping it.
+  if (!definition.fields.length) {
+    for (const [column, value] of Object.entries(row)) {
+      if (mappedColumns.has(column)) continue
+      const normalized = normalizeHeader(column)
+      if (['prompt', 'image prompt', 'промт', 'card number', 'card_number', 'number', 'номер'].includes(normalized)) continue
+      const text = String(value ?? '').trim()
+      if (text) result[column] = text
+    }
   }
   return result
 }
@@ -206,18 +211,19 @@ export interface CardValidation {
   message: string
 }
 
-export function validateCardData(cardNumber: string, prompt: string, fields: Record<string, string> | undefined, type: CardTypeKey): CardValidation[] {
+export function validateCardData(cardNumber: string, prompt: string, fields: Record<string, unknown> | undefined, type: CardTypeKey): CardValidation[] {
   const definition = cardTypeDefinition(type)
   const values = fields || {}
   const errors: CardValidation[] = []
   if (!cardNumber.trim()) errors.push({ field: 'cardNumber', message: 'Card number is required.' })
   for (const field of definition.fields) {
-    const value = field.key === 'prompt' ? prompt : field.key === 'name' ? values.name || '' : values[field.key] || ''
-    if (field.required && !String(value).trim()) errors.push({ field: field.key, message: field.label + ' is required.' })
+    const value = field.key === 'prompt' ? prompt : values[field.key]
+    if (field.required && !String(value ?? '').trim()) errors.push({ field: field.key, message: field.label + ' is required.' })
+    // Validation is opt-in legacy metadata. Arbitrary field kinds are accepted.
     if (field.type === 'select' && value && field.options && !field.options.includes(String(value).trim().toLowerCase())) {
       errors.push({ field: field.key, message: field.label + ' must be one of: ' + field.options.join(', ') })
     }
-    if (field.type === 'number' && value) {
+    if (field.type === 'number' && value !== undefined && value !== null && String(value) !== '') {
       const n = Number(value)
       if (!Number.isFinite(n) || (field.min !== undefined && n < field.min) || (field.max !== undefined && n > field.max)) {
         errors.push({ field: field.key, message: field.label + ' is outside its allowed range.' })
@@ -247,11 +253,17 @@ export function resolveDefaultRecipeId(recipes: Array<{ id: string; name: string
   return scored[0].recipe.id
 }
 
-export function assembleCardPrompt(prompt: string, type: CardTypeKey, fields: Record<string, string> | undefined): string {
+export function assembleCardPrompt(prompt: string, type: CardTypeKey, fields: Record<string, unknown> | undefined): string {
   const definition = cardTypeDefinition(type)
   const context = definition.fields
-    .filter(field => field.key !== 'prompt' && fields?.[field.key])
-    .map(field => field.label + ': ' + fields![field.key])
+    .filter(field => field.key !== 'prompt' && field.includeInPrompt !== false && fields?.[field.key] !== undefined && String(fields[field.key]).trim())
+    .map(field => field.label + ': ' + String(fields![field.key]))
+  // Dynamic/untyped fields are still useful prompt context.
+  if (!definition.fields.length && fields) {
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined && value !== null && String(value).trim()) context.push(key + ': ' + String(value))
+    }
+  }
   const sections = [prompt.trim()]
   if (definition.promptInstructions) sections.push('Type direction: ' + definition.promptInstructions)
   if (context.length) sections.push('Card data:\n' + context.join('\n'))
@@ -271,5 +283,6 @@ export function productionDefaults(type: CardTypeKey) {
 }
 
 export function cardTypeSchemaVersion(type: CardTypeKey): string {
-  return cardTypeDefinition(type).key + '@' + cardTypeDefinition(type).version
+  const definition = cardTypeDefinition(type)
+  return definition.key + '@' + definition.version
 }
