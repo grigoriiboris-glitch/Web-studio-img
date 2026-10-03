@@ -1021,6 +1021,35 @@ async function selectReference(reference: Reference) {
   }
 }
 
+const isFinalApproved = computed(() => humanActions.value.some(action => action.action_type === 'APPROVED'))
+
+const selectedVariantLabel = computed(() => {
+  const selected = generations.value.find(item => item.id === selectedGenerationId.value)
+  return selected?.prompt?.slice(0, 80) || ''
+})
+
+const processStage = computed<'brief' | 'references' | 'generate' | 'variants' | 'select' | 'finalize'>(() => {
+  if (isFinalApproved.value) return 'finalize'
+  if (selectedGenerationId.value) return 'finalize'
+  if (generations.value.some(item => item.status === 'succeeded')) return 'select'
+  if (generations.value.length) return 'variants'
+  if (references.value.length) return 'generate'
+  return 'references'
+})
+
+const processHint = computed(() => {
+  if (isFinalApproved.value) return 'Финальный результат утверждён. Можно вернуться в Flow и начать новую итерацию.'
+  if (selectedGenerationId.value) return 'Выбран кандидат. Проверь результат и нажми Approve final result.'
+  if (generations.value.some(item => item.status === 'succeeded')) return 'Варианты готовы. Выбери один кандидат.'
+  if (generations.value.length) return 'Генерация запущена или ещё выполняется.'
+  if (references.value.length) return 'Материалы готовы. Следующий шаг — генерация.'
+  return 'Добавь скетч или референс, затем сформулируй задачу.'
+})
+
+function scrollToStudioSection(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 async function approveProject() {
   const previous = Boolean(humanActions.value.find(action => action.action_type === 'APPROVED'))
   try {
@@ -1285,6 +1314,7 @@ onUnmounted(() => {
           :selected-variant-count="selectedGenerationId ? 1 : 0"
           :has-references="references.length > 0"
           :has-final-candidate="Boolean(selectedGenerationId)"
+          :final-approved="isFinalApproved"
         />
 
         <BranchPanel :project-id="projectId()" @merged="loadStudio" />
@@ -1400,7 +1430,12 @@ onUnmounted(() => {
             :project-id="projectId()"
             :plan="comfyFlowPlan"
             :input-assets="flowInputAssets()"
+            :process-stage="processStage"
+            :process-hint="processHint"
+            :selected-variant-label="selectedVariantLabel"
+            :final-approved="isFinalApproved"
             @update:plan="comfyFlowPlan = $event"
+            @navigate="scrollToStudioSection"
             @run="runComfyFlow"
             @save="saveComfyFlowAsRecipe"
           />
