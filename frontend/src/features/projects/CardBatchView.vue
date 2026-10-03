@@ -17,7 +17,6 @@ import { parseSpreadsheet, type SpreadsheetRow } from './cardBatchSpreadsheet'
 import CardTypeManager from './CardTypeManager.vue'
 import PrintProfileManager from './PrintProfileManager.vue'
 import CardBatchSelect, { type SelectOption } from './CardBatchSelect.vue'
-import CardBatchSelect, { type SelectOption } from './CardBatchSelect.vue'
 
 type CardStatus = 'draft' | 'pending' | 'queued' | 'running' | 'succeeded' | 'needs_revision' | 'failed' | 'finalized'
 type RejectReason = 'wrong_composition' | 'wrong_style' | 'wrong_subject' | 'wrong_color' | 'wrong_detail' | 'technical' | 'other'
@@ -884,6 +883,9 @@ function manifest() {
     sourceFile: batch.sourceFile,
     cardType: batch.cardType || 'custom',
     cardTypeName: cardTypeDefinition(batch.cardType).name,
+    printProfileId: batch.printProfileId,
+    printProfileVersion: batch.printProfileVersion,
+    printProfileSpec: selectedPrintProfileSpec(),
     exportedAt: now(),
     cards: batch.cards.filter(c => c.status === 'finalized' && c.finalizedGenerationId).map(c => ({
       cardNumber: c.cardNumber,
@@ -1112,7 +1114,7 @@ onMounted(async () => {
         <label>Card type<select :value="activeBatch.cardType || 'custom'" @change="setBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in availableCardTypes" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
         <label>Batch Template<select :value="activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="activeBatch.templateId = ($event.target as HTMLSelectElement).value; save()"><option v-for="template in templatesFor(activeBatch.cardType || 'custom')" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
         <label>Print Profile
-          <CardBatchSelect :model-value="printProfileId" :options="printProfileOptions" placeholder="No print profile" @update:model-value="printProfileId = $event; updateBatchSettings" />
+          <CardBatchSelect :model-value="printProfileId" :options="printProfileOptions" placeholder="No print profile" @update:model-value="printProfileId = $event; updateBatchSettings()" />
         </label>
         <label>Batch Recipe<select v-model="recipeId" @change="updateBatchSettings"><option value="">Type default (auto)</option><option v-for="index in recipes.length" :key="recipes[index - 1].id" :value="recipes[index - 1].id">{{ recipes[index - 1].name }} · v{{ recipes[index - 1].current_version }}</option></select></label>
         <label>Reference asset IDs<input :value="referenceIdsText" placeholder="asset/reference IDs, comma separated" @change="referenceIdsText = ($event.target as HTMLInputElement).value; updateBatchSettings"></label>
