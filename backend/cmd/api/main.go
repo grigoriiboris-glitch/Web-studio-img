@@ -39,6 +39,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
 	"github.com/oleg3190/Web-studio-img/backend/internal/printprofiles"
+	"github.com/oleg3190/Web-studio-img/backend/internal/templates"
 	"github.com/oleg3190/Web-studio-img/backend/internal/privacy"
 	"github.com/oleg3190/Web-studio-img/backend/internal/prompts"
 	imageproviders "github.com/oleg3190/Web-studio-img/backend/internal/providers"
@@ -88,6 +89,7 @@ func main() {
 	var cardBatchHandler *cardbatch.Handler
 	var cardTypesHandler *cardtypes.Handler
 	var printProfilesHandler *printprofiles.Handler
+	var templatesHandler *templates.Handler
 	var recipeHandler *recipes.Handler
 	var iterationHandler *iterations.Handler
 	var generationHandler *generation.Handler
@@ -200,6 +202,11 @@ func main() {
 		printProfilesHandler, err = printprofiles.NewHandler(projectDB)
 		if err != nil {
 			logger.Error("print profile handler initialization failed", "error", err)
+			os.Exit(1)
+		}
+		templatesHandler, err = templates.NewHandler(projectDB)
+		if err != nil {
+			logger.Error("template handler initialization failed", "error", err)
 			os.Exit(1)
 		}
 
@@ -378,7 +385,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservabilityAndStatic(
 		logger, cfg.CORSOrigins, limiter, metrics, cfg.WebStaticDir,
 		projectHandler, iterationHandler, generationHandler, branchHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, cardBatchHandler, cardTypesHandler, printProfilesHandler, variantHandler, recipeHandler, assetLibraryHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, cardBatchHandler, cardTypesHandler, printProfilesHandler, templatesHandler, variantHandler, recipeHandler, assetLibraryHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 

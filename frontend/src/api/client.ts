@@ -202,6 +202,8 @@ export interface CardBatch {
   card_type_version?: number
   print_profile_id?: string
   print_profile_version?: number
+  template_id?: string
+  template_version?: number
   created_at: string
   updated_at: string
 }
@@ -209,9 +211,9 @@ export interface CardBatch {
 export const cardBatchApi = {
   list: (projectId: string) => apiRequest<{ batches: CardBatch[] }>(`/projects/${projectId}/card-batches`),
   get: (projectId: string, batchId: string) => apiRequest<CardBatch>(`/projects/${projectId}/card-batches/${batchId}`),
-  create: (projectId: string, input: { name: string; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state: Record<string, unknown>; card_type_id?: string; card_type_version?: number; print_profile_id?: string; print_profile_version?: number }) =>
+  create: (projectId: string, input: { name: string; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state: Record<string, unknown>; card_type_id?: string; card_type_version?: number; print_profile_id?: string; print_profile_version?: number; template_id?: string; template_version?: number }) =>
     apiRequest<CardBatch>(`/projects/${projectId}/card-batches`, { method: 'POST', body: JSON.stringify(input) }),
-  update: (projectId: string, batchId: string, input: { version: number; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state?: Record<string, unknown>; card_type_id?: string; card_type_version?: number; print_profile_id?: string; print_profile_version?: number }) =>
+  update: (projectId: string, batchId: string, input: { version: number; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state?: Record<string, unknown>; card_type_id?: string; card_type_version?: number; print_profile_id?: string; print_profile_version?: number; template_id?: string; template_version?: number }) =>
     apiRequest<CardBatch>(`/projects/${projectId}/card-batches/${batchId}`, { method: 'PATCH', body: JSON.stringify(input) }),
   remove: (projectId: string, batchId: string) => apiRequest<void>(`/projects/${projectId}/card-batches/${batchId}`, { method: 'DELETE' }),
 }
@@ -1280,6 +1282,46 @@ export const assistantApi = {
   }),
 }
 
+
+export interface CardTemplateVersion {
+  id: string
+  template_id: string
+  version: number
+  spec: Record<string, unknown>
+  created_at: string
+}
+
+export interface CardTemplate {
+  id: string
+  project_id: string
+  key: string
+  name: string
+  description: string
+  current_version: number
+  archived_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CardTemplateDetails {
+  template: CardTemplate
+  version: CardTemplateVersion
+}
+
+export const templatesApi = {
+  list: (projectId: string) =>
+    apiRequest<{ templates: CardTemplate[] }>(`/projects/${projectId}/templates`),
+  get: (projectId: string, id: string) =>
+    apiRequest<CardTemplateDetails>(`/projects/${projectId}/templates/${id}`),
+  versions: (projectId: string, id: string) =>
+    apiRequest<{ versions: CardTemplateVersion[] }>(`/projects/${projectId}/templates/${id}/versions`),
+  create: (projectId: string, input: { key: string; name: string; description?: string; spec: Record<string, unknown> }) =>
+    apiRequest<CardTemplateDetails>(`/projects/${projectId}/templates`, { method: 'POST', body: JSON.stringify(input) }),
+  update: (projectId: string, id: string, input: { name?: string; description?: string; spec: Record<string, unknown> }) =>
+    apiRequest<CardTemplateDetails>(`/projects/${projectId}/templates/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  archive: (projectId: string, id: string) =>
+    apiRequest<void>(`/projects/${projectId}/templates/${id}/archive`, { method: 'POST' }),
+}
 
 export interface PrintProfileVersion {
   id: string
