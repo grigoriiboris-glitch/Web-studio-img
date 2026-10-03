@@ -30,8 +30,6 @@ type Batch struct {
   CardTypeVersion *int `json:"card_type_version,omitempty"`
   PrintProfileID *uuid.UUID `json:"print_profile_id,omitempty"`
   PrintProfileVersion *int `json:"print_profile_version,omitempty"`
-  PrintProfileID *uuid.UUID `json:"print_profile_id,omitempty"`
-  PrintProfileVersion *int `json:"print_profile_version,omitempty"`
   CreatedAt time.Time `json:"created_at"`
   UpdatedAt time.Time `json:"updated_at"`
 }
@@ -56,6 +54,8 @@ type updateInput struct {
   State map[string]any `json:"state,omitempty"`
   CardTypeID *uuid.UUID `json:"card_type_id,omitempty"`
   CardTypeVersion *int `json:"card_type_version,omitempty"`
+  PrintProfileID *uuid.UUID `json:"print_profile_id,omitempty"`
+  PrintProfileVersion *int `json:"print_profile_version,omitempty"`
 }
 
 type Handler struct{ db *sql.DB }
@@ -119,11 +119,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
   if in.State == nil { in.State = map[string]any{} }
   if !validJSON(in.Mapping) || !validJSON(in.State) { writeError(w, 400, "invalid_card_batch", "mapping or state is not valid JSON"); return }
   if err := h.validateCardTypeReference(r.Context(), projectID, in.CardTypeID, in.CardTypeVersion); err != nil { writeError(w, 400, "invalid_card_type_reference", err.Error()); return }
+  if err := h.validatePrintProfileReference(r.Context(), projectID, in.PrintProfileID, in.PrintProfileVersion); err != nil { writeError(w, 400, "invalid_print_profile_reference", err.Error()); return }
 
   principal, _ := auth.PrincipalFromContext(r.Context())
   var item Batch
   var mappingBytes, stateBytes []byte
-  err := h.db.QueryRowContext(r.Context(), `INSERT INTO card_batches(project_id,user_id,name,source_file,sheet,mapping,state,card_type_id,card_type_version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9) RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at`, projectID, principal.UserID, in.Name, in.SourceFile, in.Sheet, mustJSON(in.Mapping), mustJSON(in.State), in.CardTypeID, in.CardTypeVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
+  err := h.db.QueryRowContext(r.Context(), `INSERT INTO card_batches(project_id,user_id,name,source_file,sheet,mapping,state,card_type_id,card_type_version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11) RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at`, projectID, principal.UserID, in.Name, in.SourceFile, in.Sheet, mustJSON(in.Mapping), mustJSON(in.State), in.CardTypeID, in.CardTypeVersion, in.PrintProfileID, in.PrintProfileVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
   if err == nil { _ = json.Unmarshal(mappingBytes, &item.Mapping); _ = json.Unmarshal(stateBytes, &item.State) }
   if err != nil {
     if strings.Contains(err.Error(), "card_batches_project_name_uq") { writeError(w, 409, "card_batch_name_conflict", "a card batch with this name already exists"); return }
@@ -145,12 +146,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   tx, err := h.db.BeginTx(r.Context(), nil); if err != nil { writeError(w, 500, "card_batch_update_failed", "could not start transaction"); return }
   defer func() { _ = tx.Rollback() }()
   var item Batch
-  query := `UPDATE card_batches SET source_file=COALESCE($4,source_file),sheet=COALESCE($5,sheet),mapping=COALESCE($6::jsonb,mapping),state=COALESCE($7::jsonb,state),card_type_id=COALESCE($8,card_type_id),card_type_version=COALESCE($9,card_type_version),version=version+1,updated_at=now() WHERE id=$1 AND project_id=$2 AND version=$3 RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,created_at,updated_at`
+  query := `UPDATE card_batches SET source_file=COALESCE($4,source_file),sheet=COALESCE($5,sheet),mapping=COALESCE($6::jsonb,mapping),state=COALESCE($7::jsonb,state),card_type_id=COALESCE($8,card_type_id),card_type_version=COALESCE($9,card_type_version),print_profile_id=COALESCE($10,print_profile_id),print_profile_version=COALESCE($11,print_profile_version),version=version+1,updated_at=now() WHERE id=$1 AND project_id=$2 AND version=$3 RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,created_at,updated_at`
   var mapping, state []byte
   if in.Mapping != nil { mapping = mustJSON(in.Mapping) }
   if in.State != nil { state = mustJSON(in.State) }
   var mappingBytes, stateBytes []byte
-  err = tx.QueryRowContext(r.Context(), query, id, projectID, in.Version, nullableString(in.SourceFile), nullableString(in.Sheet), nullableJSON(mapping), nullableJSON(state), in.CardTypeID, in.CardTypeVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
+  err = tx.QueryRowContext(r.Context(), query, id, projectID, in.Version, nullableString(in.SourceFile), nullableString(in.Sheet), nullableJSON(mapping), nullableJSON(state), in.CardTypeID, in.CardTypeVersion, in.PrintProfileID, in.PrintProfileVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
   if err == nil { _ = json.Unmarshal(mappingBytes, &item.Mapping); _ = json.Unmarshal(stateBytes, &item.State) }
   if errors.Is(err, sql.ErrNoRows) {
     var current int64
@@ -175,7 +176,7 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) load(ctx context.Context, projectID, id uuid.UUID) (Batch, error) {
   var item Batch
   var mapping, state []byte
-  err := h.db.QueryRowContext(ctx, "SELECT id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,created_at,updated_at FROM card_batches WHERE id=$1 AND project_id=$2", id, projectID).Scan(scanArgs(&item, &mapping, &state)...)
+  err := h.db.QueryRowContext(ctx, "SELECT id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at FROM card_batches WHERE id=$1 AND project_id=$2", id, projectID).Scan(scanArgs(&item, &mapping, &state)...)
   if err != nil { return Batch{}, err }
   if err := json.Unmarshal(mapping, &item.Mapping); err != nil { return Batch{}, err }
   if err := json.Unmarshal(state, &item.State); err != nil { return Batch{}, err }
@@ -209,7 +210,7 @@ func scan(row scanner) (Batch, error) {
   return item,nil
 }
 func scanArgs(item *Batch, mapping, state *[]byte) []any {
-  return []any{&item.ID,&item.ProjectID,&item.UserID,&item.Name,&item.SourceFile,&item.Sheet,mapping,state,&item.Version,&item.CardTypeID,&item.CardTypeVersion,&item.CreatedAt,&item.UpdatedAt}
+  return []any{&item.ID,&item.ProjectID,&item.UserID,&item.Name,&item.SourceFile,&item.Sheet,mapping,state,&item.Version,&item.CardTypeID,&item.CardTypeVersion,&item.PrintProfileID,&item.PrintProfileVersion,&item.CreatedAt,&item.UpdatedAt}
 }
 func mustJSON(v any) []byte { b,_:=json.Marshal(v); return b }
 func validJSON(v any) bool { b,err:=json.Marshal(v); return err==nil && len(b)<=maxJSONBytes }
