@@ -84,6 +84,7 @@ func main() {
 	var variantHandler *variants.Handler
 	var briefHandler *brief.Handler
 	var cardBatchHandler *cardbatch.Handler
+	var cardTypesHandler *cardtypes.Handler
 	var recipeHandler *recipes.Handler
 	var iterationHandler *iterations.Handler
 	var generationHandler *generation.Handler
@@ -184,6 +185,11 @@ func main() {
 			os.Exit(1)
 		}
 		cardBatchHandler, err = cardbatch.NewHandler(projectDB)
+		cardTypesHandler, err = cardtypes.NewHandler(projectDB)
+		if err != nil {
+			logger.Error("card type handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 		if err != nil {
 			logger.Error("card batch handler initialization failed", "error", err)
 			os.Exit(1)
@@ -364,7 +370,7 @@ func main() {
 	api := httpapi.NewServerWithStudioAndObservabilityAndStatic(
 		logger, cfg.CORSOrigins, limiter, metrics, cfg.WebStaticDir,
 		projectHandler, iterationHandler, generationHandler, branchHandler,
-		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, cardBatchHandler, variantHandler, recipeHandler, assetLibraryHandler,
+		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, cardBatchHandler, cardTypesHandler, variantHandler, recipeHandler, assetLibraryHandler,
 	)
 	srv := api.HTTPServer(":"+cfg.Port, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 

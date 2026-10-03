@@ -13,6 +13,8 @@ export interface Project {
   privacy_mode: PrivacyMode
   created_at: string
   updated_at: string
+  card_type_id?: string
+  card_type_version?: number
 }
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '')
@@ -140,6 +142,52 @@ export const approvalGateApi = {
 }
 
 
+export interface CardTypeVersion {
+  id: string
+  card_type_id: string
+  version: number
+  schema: Record<string, unknown>
+  production_defaults: Record<string, unknown>
+  default_recipe_id?: string
+  default_recipe_version?: number
+  default_template_id?: string
+  default_template_version?: number
+  prompt_rules: Record<string, unknown>
+  reject_reason_profile_id?: string
+  created_at: string
+}
+
+export interface CardTypeDefinition {
+  id: string
+  project_id: string
+  key: string
+  name: string
+  description: string
+  current_version: number
+  archived_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CardTypeDetails {
+  card_type: CardTypeDefinition
+  version: CardTypeVersion
+}
+
+export const cardTypesApi = {
+  list: (projectId: string) => apiRequest<{ card_types: CardTypeDefinition[] }>(`/projects/${projectId}/card-types`),
+  get: (projectId: string, id: string) => apiRequest<CardTypeDetails>(`/projects/${projectId}/card-types/${id}`),
+  versions: (projectId: string, id: string) => apiRequest<{ versions: CardTypeVersion[] }>(`/projects/${projectId}/card-types/${id}/versions`),
+  create: (projectId: string, input: Record<string, unknown>) =>
+    apiRequest<CardTypeDetails>(`/projects/${projectId}/card-types`, { method: 'POST', body: JSON.stringify(input) }),
+  update: (projectId: string, id: string, input: Record<string, unknown>) =>
+    apiRequest<CardTypeDetails>(`/projects/${projectId}/card-types/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  clone: (projectId: string, id: string, input: { key?: string; name?: string } = {}) =>
+    apiRequest<CardTypeDetails>(`/projects/${projectId}/card-types/${id}/clone`, { method: 'POST', body: JSON.stringify(input) }),
+  archive: (projectId: string, id: string) =>
+    apiRequest<void>(`/projects/${projectId}/card-types/${id}/archive`, { method: 'POST' }),
+}
+
 export interface CardBatch {
   id: string
   project_id: string
@@ -150,6 +198,8 @@ export interface CardBatch {
   mapping: Record<string, unknown>
   state: Record<string, unknown>
   version: number
+  card_type_id?: string
+  card_type_version?: number
   created_at: string
   updated_at: string
 }
@@ -157,9 +207,9 @@ export interface CardBatch {
 export const cardBatchApi = {
   list: (projectId: string) => apiRequest<{ batches: CardBatch[] }>(`/projects/${projectId}/card-batches`),
   get: (projectId: string, batchId: string) => apiRequest<CardBatch>(`/projects/${projectId}/card-batches/${batchId}`),
-  create: (projectId: string, input: { name: string; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state: Record<string, unknown> }) =>
+  create: (projectId: string, input: { name: string; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state: Record<string, unknown>; card_type_id?: string; card_type_version?: number }) =>
     apiRequest<CardBatch>(`/projects/${projectId}/card-batches`, { method: 'POST', body: JSON.stringify(input) }),
-  update: (projectId: string, batchId: string, input: { version: number; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state?: Record<string, unknown> }) =>
+  update: (projectId: string, batchId: string, input: { version: number; source_file?: string; sheet?: string; mapping?: Record<string, unknown>; state?: Record<string, unknown>; card_type_id?: string; card_type_version?: number }) =>
     apiRequest<CardBatch>(`/projects/${projectId}/card-batches/${batchId}`, { method: 'PATCH', body: JSON.stringify(input) }),
   remove: (projectId: string, batchId: string) => apiRequest<void>(`/projects/${projectId}/card-batches/${batchId}`, { method: 'DELETE' }),
 }
