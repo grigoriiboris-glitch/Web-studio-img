@@ -1,3 +1,4 @@
+/* eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order, vue/html-indent, vue/html-self-closing, no-unused-vars */
 <script setup lang="ts">
 /* eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order, no-unused-vars */
 import { computed, onMounted, ref } from 'vue'
