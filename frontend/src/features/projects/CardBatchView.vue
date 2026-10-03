@@ -166,7 +166,7 @@ const requiredUnmappedFields = computed(() => typeSchema(newBatchType.value).fie
 const schemaDrift = computed(() => {
   const batch = activeBatch.value
   return !!batch && !!batch.cardTypeVersion && batch.cardTypeVersion !== cardTypeDefinition(batch.cardType).version
-}
+})
 
 const importDiff = computed<ImportDiff | null>(() => {
   const batch = activeBatch.value
