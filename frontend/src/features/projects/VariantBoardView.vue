@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { REJECT_REASONS, buildRejectConstraints, canSubmitReject } from './rejectReasons'
-import { CARD_TYPES, REJECT_REASONS_BY_TYPE, cardTypeDefinition, type CardTypeKey } from './cardBatchTypes'
+import { rejectReasonsForType } from './cardBatchTypes'
 
 import {
   assetsApi,
@@ -26,7 +26,7 @@ const creating = ref(false)
 const regenerating = ref<Set<string>>(new Set())
 const setName = ref('')
 const selectedSourceIds = ref<string[]>([])
-const sourceTypeFilter = ref<CardTypeKey | 'all'>('all')
+const sourceTypeFilter = ref<string | 'all'>('all')
 const compareIds = ref<string[]>([])
 const compareVariants = ref<Variant[]>([])
 const imageUrls = ref<Record<string, string>>({})
@@ -37,7 +37,7 @@ const dragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
 const rejectReasonOptions = computed(() => {
   const type = rejectDialogItem.value ? sourceCardType(rejectDialogItem.value.source) : 'custom'
-  return type === 'unknown' ? REJECT_REASONS : REJECT_REASONS_BY_TYPE[type]
+  return type === 'unknown' ? REJECT_REASONS : rejectReasonsForType(type)
 })
 const rejectDialogItem = ref<Variant | null>(null)
 const selectedRejectReasons = ref<string[]>([])
@@ -49,10 +49,10 @@ const rejectionTimeline = ref<Awaited<ReturnType<typeof variantBoardApi.rejectio
 const carryRejectConstraints = ref(true)
 const iterationMessage = ref('')
 
-function sourceCardType(source?: VariantSource): CardTypeKey | 'unknown' {
+function sourceCardType(source?: VariantSource): string {
   if (!source) return 'unknown'
   const value = source.context?.card_type || source.context?.final_parameters?.card_type || (typeof source.context?.final_parameters?.parameters === 'object' && source.context.final_parameters.parameters ? (source.context.final_parameters.parameters as Record<string, unknown>).card_type : undefined)
-  return typeof value === 'string' && CARD_TYPES.some(type => type.key === value) ? value as CardTypeKey : 'unknown'
+  return typeof value === 'string' && value.trim() ? value : 'unknown'
 }
 
 const filteredSources = computed(() =>
