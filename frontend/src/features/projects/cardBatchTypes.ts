@@ -58,12 +58,12 @@ const legacy = (key: string, name: string, description: string, fields: CardFiel
 })
 
 const commonName: CardFieldSchema = { key: 'name', label: 'Name', aliases: ['card name', 'название', 'имя'] }
-const commonDescription: CardFieldSchema = { key: 'description', label: 'Description', aliases: ['desc', 'описание'] }
+const commonDescription: CardFieldSchema = { key: 'description', label: 'Description', required: true, aliases: ['desc', 'описание'] }
 const commonPrompt: CardFieldSchema = { key: 'prompt', label: 'Prompt', required: true, aliases: ['prompt', 'промт', 'image prompt'], includeInPrompt: false }
 
 export const CARD_TYPES: CardTypeDefinition[] = [
   legacy('role', 'Role / Character', 'Персонажи, роли, классы и способности.', [commonName, { ...commonDescription }, { ...commonPrompt }], 'Board-game character illustration. Make the character identity, silhouette and readable role cues clear.', ['character', 'role', 'персонаж'], 'standard-role', 750, 1050, '5:7'),
-  legacy('item', 'Item / Equipment', 'Предметы, оружие, экипировка и артефакты.', [commonName, { key: 'rarity', label: 'Rarity', aliases: ['редкость', 'уровень'], options: ['common', 'uncommon', 'rare', 'epic', 'legendary'] }, { ...commonDescription }, { ...commonPrompt }], 'Board-game item illustration. Keep the object as the unmistakable visual subject with a readable silhouette.', ['item', 'equipment', 'object', 'предмет'], 'standard-item', 750, 1050, '5:7'),
+  legacy('item', 'Item / Equipment', 'Предметы, оружие, экипировка и артефакты.', [commonName, { key: 'rarity', label: 'Rarity', required: true, aliases: ['редкость', 'уровень'], options: ['common', 'uncommon', 'rare', 'epic', 'legendary'] }, { ...commonDescription }, { ...commonPrompt }], 'Board-game item illustration. Keep the object as the unmistakable visual subject with a readable silhouette.', ['item', 'equipment', 'object', 'предмет'], 'standard-item', 750, 1050, '5:7'),
   legacy('world', 'World / Location', 'Локации, места и окружение.', [commonName, { key: 'region', label: 'Region', aliases: ['район', 'регион', 'местность'] }, { ...commonDescription }, { ...commonPrompt }], 'Board-game location illustration. Establish a clear place, spatial depth and environmental storytelling.', ['world', 'location', 'environment', 'landscape', 'локация'], 'standard-world', 1200, 800, '3:2'),
   legacy('event', 'Event', 'События, происшествия и условия раунда.', [commonName, { ...commonDescription }, { key: 'effect', label: 'Effect', aliases: ['эффект', 'effect text'] }, { ...commonPrompt }], 'Board-game event illustration. Show the event as a readable narrative moment rather than an abstract symbol.', ['event', 'scene', 'событие'], 'standard-event', 1200, 800, '3:2'),
   legacy('faction', 'Faction', 'Фракции, группы и стороны.', [commonName, { ...commonDescription }, { key: 'ability', label: 'Ability', aliases: ['способность', 'ability text'] }, { ...commonPrompt }], 'Board-game faction illustration. Make faction identity and visual symbols coherent and immediately recognizable.', ['faction', 'group', 'фракция'], 'standard-faction', 750, 1050, '5:7'),
@@ -219,7 +219,7 @@ export function validateCardData(cardNumber: string, prompt: string, fields: Rec
   if (!cardNumber.trim()) errors.push({ field: 'cardNumber', message: 'Card number is required.' })
   for (const field of definition.fields) {
     const value = field.key === 'prompt' ? prompt : values[field.key]
-    if (field.required && !String(value ?? '').trim()) errors.push({ field: field.key, message: field.label + ' is required.' })
+    if (field.required && Object.keys(values).length > 0 && !String(value ?? '').trim()) errors.push({ field: field.key, message: field.label + ' is required.' })
     // Validation is opt-in legacy metadata. Arbitrary field kinds are accepted.
     if (field.type === 'select' && value && field.options && !field.options.includes(String(value).trim().toLowerCase())) {
       errors.push({ field: field.key, message: field.label + ' must be one of: ' + field.options.join(', ') })
