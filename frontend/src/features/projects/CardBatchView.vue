@@ -11,6 +11,7 @@ import {
   type Recipe,
 } from '../../api/client'
 import { parseSpreadsheet, type SpreadsheetRow } from './cardBatchSpreadsheet'
+import CardTypeManager from './CardTypeManager.vue'
 
 type CardStatus = 'draft' | 'pending' | 'queued' | 'running' | 'succeeded' | 'needs_revision' | 'failed' | 'finalized'
 type RejectReason = 'wrong_composition' | 'wrong_style' | 'wrong_subject' | 'wrong_color' | 'wrong_detail' | 'technical' | 'other'
@@ -958,6 +959,7 @@ onMounted(async () => {
 
 <template>
   <main class="card-batch">
+    <CardTypeManager :project-id="routeProjectId" />
     <header class="header">
       <div>
         <h1>Card Batch</h1>
