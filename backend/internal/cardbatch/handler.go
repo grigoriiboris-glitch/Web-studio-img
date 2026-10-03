@@ -124,7 +124,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
   principal, _ := auth.PrincipalFromContext(r.Context())
   var item Batch
   var mappingBytes, stateBytes []byte
-  err := h.db.QueryRowContext(r.Context(), `INSERT INTO card_batches(project_id,user_id,name,source_file,sheet,mapping,state,card_type_id,card_type_version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11) RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at`, projectID, principal.UserID, in.Name, in.SourceFile, in.Sheet, mustJSON(in.Mapping), mustJSON(in.State), in.CardTypeID, in.CardTypeVersion, in.PrintProfileID, in.PrintProfileVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
+  err := h.db.QueryRowContext(r.Context(), `INSERT INTO card_batches(project_id,user_id,name,source_file,sheet,mapping,state,card_type_id,card_type_version,print_profile_id,print_profile_version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11) RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at`, projectID, principal.UserID, in.Name, in.SourceFile, in.Sheet, mustJSON(in.Mapping), mustJSON(in.State), in.CardTypeID, in.CardTypeVersion, in.PrintProfileID, in.PrintProfileVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
   if err == nil { _ = json.Unmarshal(mappingBytes, &item.Mapping); _ = json.Unmarshal(stateBytes, &item.State) }
   if err != nil {
     if strings.Contains(err.Error(), "card_batches_project_name_uq") { writeError(w, 409, "card_batch_name_conflict", "a card batch with this name already exists"); return }
@@ -141,12 +141,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   if in.Version < 1 { writeError(w, 400, "invalid_version", "version must be positive"); return }
   if in.State != nil && !validJSON(in.State) { writeError(w, 400, "invalid_state", "state is not valid JSON"); return }
   if in.Mapping != nil && !validJSON(in.Mapping) { writeError(w, 400, "invalid_mapping", "mapping is not valid JSON"); return }
-  if in.CardTypeID != nil || in.CardTypeVersion != nil { if err := h.validateCardTypeReference(r.Context(), projectID, in.CardTypeID, in.CardTypeVersion); err != nil { writeError(w, 400, "invalid_card_type_reference", err.Error()); return } }
+  if in.CardTypeID != nil || in.CardTypeVersion != nil { if err := h.validateCardTypeReference(r.Context(), projectID, in.CardTypeID, in.CardTypeVersion); err != nil { writeError(w, 400, "invalid_card_type_reference", err.Error()); return } }\n  if in.PrintProfileID != nil || in.PrintProfileVersion != nil { if err := h.validatePrintProfileReference(r.Context(), projectID, in.PrintProfileID, in.PrintProfileVersion); err != nil { writeError(w, 400, "invalid_print_profile_reference", err.Error()); return } }
 
   tx, err := h.db.BeginTx(r.Context(), nil); if err != nil { writeError(w, 500, "card_batch_update_failed", "could not start transaction"); return }
   defer func() { _ = tx.Rollback() }()
   var item Batch
-  query := `UPDATE card_batches SET source_file=COALESCE($4,source_file),sheet=COALESCE($5,sheet),mapping=COALESCE($6::jsonb,mapping),state=COALESCE($7::jsonb,state),card_type_id=COALESCE($8,card_type_id),card_type_version=COALESCE($9,card_type_version),print_profile_id=COALESCE($10,print_profile_id),print_profile_version=COALESCE($11,print_profile_version),version=version+1,updated_at=now() WHERE id=$1 AND project_id=$2 AND version=$3 RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,created_at,updated_at`
+  query := `UPDATE card_batches SET source_file=COALESCE($4,source_file),sheet=COALESCE($5,sheet),mapping=COALESCE($6::jsonb,mapping),state=COALESCE($7::jsonb,state),card_type_id=COALESCE($8,card_type_id),card_type_version=COALESCE($9,card_type_version),print_profile_id=COALESCE($10,print_profile_id),print_profile_version=COALESCE($11,print_profile_version),version=version+1,updated_at=now() WHERE id=$1 AND project_id=$2 AND version=$3 RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at`
   var mapping, state []byte
   if in.Mapping != nil { mapping = mustJSON(in.Mapping) }
   if in.State != nil { state = mustJSON(in.State) }
