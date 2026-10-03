@@ -106,7 +106,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
   projectID, ok := h.project(w,r); if !ok{return}
   rows, err := h.db.QueryContext(r.Context(), `SELECT id,project_id,key,name,description,current_version,archived_at,created_at,updated_at FROM card_type_definitions WHERE project_id=$1 ORDER BY archived_at NULLS FIRST,name,key`, projectID)
   if err != nil { writeError(w,500,"card_type_list_failed","could not list card types"); return }
-  defer rows.Close()
+  defer func() { _ = rows.Close() }()
   out:=[]Definition{}
   for rows.Next(){ var d Definition; if err:=rows.Scan(&d.ID,&d.ProjectID,&d.Key,&d.Name,&d.Description,&d.CurrentVersion,&d.ArchivedAt,&d.CreatedAt,&d.UpdatedAt);err!=nil{writeError(w,500,"card_type_list_failed","could not read card types");return};out=append(out,d)}
   if err:=rows.Err();err!=nil{writeError(w,500,"card_type_list_failed","could not read card types");return}
@@ -121,7 +121,7 @@ func (h *Handler) create(w http.ResponseWriter,r *http.Request){
   if !keyPattern.MatchString(in.Key){writeError(w,400,"invalid_card_type_key","key must be 2-64 chars: lowercase letters, digits, _ or -");return}
   if in.Name==""||len([]rune(in.Name))>200{writeError(w,400,"invalid_card_type_name","name is required and must be <= 200 characters");return}
   if err:=validateVersionPayload(in.Schema,in.ProductionDefaults,in.PromptRules);err!=nil{writeError(w,400,"invalid_card_type",err.Error());return}
-  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"card_type_create_failed","could not start transaction");return};defer tx.Rollback()
+  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"card_type_create_failed","could not start transaction");return};defer func() { _ = tx.Rollback() }()
   var d Definition
   err=tx.QueryRowContext(r.Context(),`INSERT INTO card_type_definitions(project_id,key,name,description) VALUES($1,$2,$3,$4) RETURNING id,project_id,key,name,description,current_version,archived_at,created_at,updated_at`,projectID,in.Key,in.Name,in.Description).Scan(&d.ID,&d.ProjectID,&d.Key,&d.Name,&d.Description,&d.CurrentVersion,&d.ArchivedAt,&d.CreatedAt,&d.UpdatedAt)
   if err!=nil{if strings.Contains(err.Error(),"card_type_definitions_project_key_uq"){writeError(w,409,"card_type_key_conflict","a card type with this key already exists");return};writeError(w,500,"card_type_create_failed","could not create card type");return}
