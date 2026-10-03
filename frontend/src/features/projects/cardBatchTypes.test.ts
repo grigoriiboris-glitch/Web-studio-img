@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   CARD_TYPES,
+  cardTypeDefinition,
+  ensureCardTypeDefinition,
   assembleCardPrompt,
   productionDefaults,
   fieldsFromRow,
@@ -55,6 +57,35 @@ describe('card batch type schemas', () => {
   it('requires only the stable prompt for backward-compatible imports', () => {
     const errors = validateCardData('001', 'prompt', {}, 'item')
     expect(errors).toHaveLength(0)
+  })
+
+
+
+  it('supports a completely custom card type without a predefined field type', () => {
+    const definition = ensureCardTypeDefinition('Spell', ['Номер', 'Название', 'Школа', 'Стоимость', 'Промт'])
+    expect(definition.key).toBe('Spell')
+    expect(definition.fields.map(field => field.key)).toEqual(['Название', 'Школа', 'Стоимость'])
+    expect(definition.fields.every(field => field.type === undefined)).toBe(true)
+
+    const fields = fieldsFromRow({
+      Номер: '001',
+      Название: 'Fireball',
+      Школа: 'Fire',
+      Стоимость: '3',
+      Промт: 'A fire spell',
+    }, 'Spell')
+    expect(fields).toEqual({
+      Название: 'Fireball',
+      Школа: 'Fire',
+      Стоимость: '3',
+    })
+  })
+
+  it('accepts arbitrary field kinds as UI metadata without blocking card validation', () => {
+    const definition = cardTypeDefinition('item')
+    definition.fields.push({ key: 'custom_data', label: 'Custom data', type: 'some_future_widget' })
+    expect(validateCardData('001', 'prompt', { custom_data: 'anything' }, 'item')).toEqual([])
+    definition.fields.pop()
   })
 
   it('resolves type production dimensions without forcing them onto custom cards', () => {
