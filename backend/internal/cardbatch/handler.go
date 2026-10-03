@@ -210,6 +210,29 @@ func scan(row scanner) (Batch, error) {
   if err := json.Unmarshal(state,&item.State); err != nil { return Batch{}, err }
   return item,nil
 }
+func (h *Handler) validatePrintProfileReference(ctx context.Context, projectID uuid.UUID, profileID *uuid.UUID, version *int) error {
+	if profileID == nil && version == nil {
+		return nil
+	}
+	if profileID == nil || version == nil || *version < 1 {
+		return errors.New("print profile id and version must be provided together")
+	}
+	var exists bool
+	err := h.db.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1
+		FROM print_profiles p
+		JOIN print_profile_versions v ON v.print_profile_id = p.id
+		WHERE p.id = $1 AND p.project_id = $2 AND v.version = $3
+	)`, *profileID, projectID, *version).Scan(&exists)
+	if err != nil {
+		return errors.New("could not validate print profile reference")
+	}
+	if !exists {
+		return errors.New("print profile reference does not belong to project or version does not exist")
+	}
+	return nil
+}
+
 func scanArgs(item *Batch, mapping, state *[]byte) []any {
   return []any{&item.ID,&item.ProjectID,&item.UserID,&item.Name,&item.SourceFile,&item.Sheet,mapping,state,&item.Version,&item.CardTypeID,&item.CardTypeVersion,&item.PrintProfileID,&item.PrintProfileVersion,&item.CreatedAt,&item.UpdatedAt}
 }
