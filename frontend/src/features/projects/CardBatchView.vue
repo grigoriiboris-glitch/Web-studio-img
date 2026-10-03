@@ -21,7 +21,6 @@ import {
   cardTypeDefinitions,
   ensureCardTypeDefinition,
   registerCardTypeDefinition,
-  rejectReasonsForType,
   assembleCardPrompt,
   cardTypeDefinition,
   cardTypeSchemaVersion,
