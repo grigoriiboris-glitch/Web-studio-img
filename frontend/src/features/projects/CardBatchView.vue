@@ -12,6 +12,7 @@ import {
 } from '../../api/client'
 import { parseSpreadsheet, type SpreadsheetRow } from './cardBatchSpreadsheet'
 import CardTypeManager from './CardTypeManager.vue'
+import CardBatchSelect, { type SelectOption } from './CardBatchSelect.vue'
 
 type CardStatus = 'draft' | 'pending' | 'queued' | 'running' | 'succeeded' | 'needs_revision' | 'failed' | 'finalized'
 type RejectReason = 'wrong_composition' | 'wrong_style' | 'wrong_subject' | 'wrong_color' | 'wrong_detail' | 'technical' | 'other'
@@ -203,6 +204,12 @@ function parsedReferenceIds(text: string) { return text.split(/[\s,]+/).map(x =>
 
 function typeSchema(type: CardTypeKey) {
   return cardTypeDefinition(type)
+}
+
+const cardTypeOptions = computed<SelectOption[]>(() => CARD_TYPES.map(item => ({ value: item.key, label: item.name })))
+const recipeOptions = computed<SelectOption[]>(() => recipes.value.map(item => ({ value: item.id, label: item.name + ' · v' + item.current_version })))
+function templateOptionsFor(type: CardTypeKey): SelectOption[] {
+  return templatesFor(type).map(item => ({ value: item.id, label: item.name }))
 }
 
 function cardFields(card: CardItem) {
@@ -1111,22 +1118,26 @@ onMounted(async () => {
 
       <div class="card-settings">
         <label>Card type
-          <input :value="card.typeOverride || activeBatch.cardType || 'custom'" list="card-type-options" @change="setCardType(card, ($event.target as HTMLInputElement).value as CardTypeKey)">
-          <datalist id="card-type-options">
-            <option v-for="cardTypeOption in CARD_TYPES" :key="cardTypeOption.key" :value="cardTypeOption.key">{{ cardTypeOption.name }}</option>
-          </datalist>
+          <CardBatchSelect
+            :model-value="card.typeOverride || activeBatch.cardType || 'custom'"
+            :options="cardTypeOptions"
+            @update:model-value="setCardType(card, $event as CardTypeKey)"
+          />
         </label>
         <label>Template
-          <input :value="card.templateOverrideId || activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" list="card-template-options" @change="setCardTemplate(card, ($event.target as HTMLInputElement).value)">
-          <datalist id="card-template-options">
-            <option v-for="templateOption in templatesFor(resolvedCardType(card))" :key="templateOption.id" :value="templateOption.id">{{ templateOption.name }}</option>
-          </datalist>
+          <CardBatchSelect
+            :model-value="card.templateOverrideId || activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id"
+            :options="templateOptionsFor(resolvedCardType(card))"
+            @update:model-value="setCardTemplate(card, $event)"
+          />
         </label>
         <label>Recipe
-          <input :value="card.recipeId || ''" list="card-recipe-options" placeholder="Batch/type default" @change="setCardRecipe(card, ($event.target as HTMLInputElement).value)">
-          <datalist id="card-recipe-options">
-            <option v-for="recipeOption in recipes" :key="recipeOption.id" :value="recipeOption.id">{{ recipeOption.name }} · v{{ recipeOption.current_version }}</option>
-          </datalist>
+          <CardBatchSelect
+            :model-value="card.recipeId || ''"
+            :options="recipeOptions"
+            placeholder="Batch/type default"
+            @update:model-value="setCardRecipe(card, $event)"
+          />
         </label>
             <label>References<input :value="(card.referenceIds || []).join(', ')" placeholder="override reference IDs" @change="setCardReferences(card, ($event.target as HTMLInputElement).value)"></label>
             <label>Width override<input :value="card.targetWidth || ''" type="number" min="1" placeholder="Batch/type default" @change="card.targetWidth = Number(($event.target as HTMLInputElement).value) || undefined; persistCard(card)"></label>
