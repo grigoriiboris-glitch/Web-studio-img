@@ -190,7 +190,6 @@ const importDiff = computed<ImportDiff | null>(() => {
       if (card.prompt !== prompt || oldFields !== nextFields) changed.push({ card, row, newPrompt: prompt, newFields })
       else unchanged.push(card)
     }
-    else unchanged.push(card)
   }
   const removed = batch.cards.filter(c => !c.archived && !incoming.has(c.cardNumber))
   return { added, changed, unchanged, removed }
