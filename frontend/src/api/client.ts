@@ -1281,6 +1281,46 @@ export const assistantApi = {
 }
 
 
+export interface CardTemplateVersion {
+  id: string
+  template_id: string
+  version: number
+  spec: Record<string, unknown>
+  created_at: string
+}
+
+export interface CardTemplate {
+  id: string
+  project_id: string
+  key: string
+  name: string
+  description: string
+  current_version: number
+  archived_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CardTemplateDetails {
+  template: CardTemplate
+  version: CardTemplateVersion
+}
+
+export const templatesApi = {
+  list: (projectId: string) =>
+    apiRequest<{ templates: CardTemplate[] }>(`/projects/${projectId}/templates`),
+  get: (projectId: string, id: string) =>
+    apiRequest<CardTemplateDetails>(`/projects/${projectId}/templates/${id}`),
+  versions: (projectId: string, id: string) =>
+    apiRequest<{ versions: CardTemplateVersion[] }>(`/projects/${projectId}/templates/${id}/versions`),
+  create: (projectId: string, input: { key: string; name: string; description?: string; spec: Record<string, unknown> }) =>
+    apiRequest<CardTemplateDetails>(`/projects/${projectId}/templates`, { method: 'POST', body: JSON.stringify(input) }),
+  update: (projectId: string, id: string, input: { name?: string; description?: string; spec: Record<string, unknown> }) =>
+    apiRequest<CardTemplateDetails>(`/projects/${projectId}/templates/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  archive: (projectId: string, id: string) =>
+    apiRequest<void>(`/projects/${projectId}/templates/${id}/archive`, { method: 'POST' }),
+}
+
 export interface PrintProfileVersion {
   id: string
   print_profile_id: string
