@@ -1111,20 +1111,22 @@ onMounted(async () => {
 
       <div class="card-settings">
         <label>Card type
-          <select :value="card.typeOverride || activeBatch.cardType || 'custom'" @change="setCardType(card, ($event.target as HTMLSelectElement).value as CardTypeKey)">
+          <input :value="card.typeOverride || activeBatch.cardType || 'custom'" list="card-type-options" @change="setCardType(card, ($event.target as HTMLInputElement).value as CardTypeKey)">
+          <datalist id="card-type-options">
             <option v-for="cardTypeOption in CARD_TYPES" :key="cardTypeOption.key" :value="cardTypeOption.key">{{ cardTypeOption.name }}</option>
-          </select>
+          </datalist>
         </label>
         <label>Template
-          <select :value="card.templateOverrideId || activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="setCardTemplate(card, ($event.target as HTMLSelectElement).value)">
+          <input :value="card.templateOverrideId || activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" list="card-template-options" @change="setCardTemplate(card, ($event.target as HTMLInputElement).value)">
+          <datalist id="card-template-options">
             <option v-for="templateOption in templatesFor(resolvedCardType(card))" :key="templateOption.id" :value="templateOption.id">{{ templateOption.name }}</option>
-          </select>
+          </datalist>
         </label>
         <label>Recipe
-          <select :value="card.recipeId || ''" @change="setCardRecipe(card, ($event.target as HTMLSelectElement).value)">
-            <option value="">Batch/type default</option>
+          <input :value="card.recipeId || ''" list="card-recipe-options" placeholder="Batch/type default" @change="setCardRecipe(card, ($event.target as HTMLInputElement).value)">
+          <datalist id="card-recipe-options">
             <option v-for="recipeOption in recipes" :key="recipeOption.id" :value="recipeOption.id">{{ recipeOption.name }} · v{{ recipeOption.current_version }}</option>
-          </select>
+          </datalist>
         </label>
             <label>References<input :value="(card.referenceIds || []).join(', ')" placeholder="override reference IDs" @change="setCardReferences(card, ($event.target as HTMLInputElement).value)"></label>
             <label>Width override<input :value="card.targetWidth || ''" type="number" min="1" placeholder="Batch/type default" @change="card.targetWidth = Number(($event.target as HTMLInputElement).value) || undefined; persistCard(card)"></label>
