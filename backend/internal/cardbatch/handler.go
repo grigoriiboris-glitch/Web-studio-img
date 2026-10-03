@@ -28,6 +28,10 @@ type Batch struct {
   Version int64 `json:"version"`
   CardTypeID *uuid.UUID `json:"card_type_id,omitempty"`
   CardTypeVersion *int `json:"card_type_version,omitempty"`
+  PrintProfileID *uuid.UUID `json:"print_profile_id,omitempty"`
+  PrintProfileVersion *int `json:"print_profile_version,omitempty"`
+  PrintProfileID *uuid.UUID `json:"print_profile_id,omitempty"`
+  PrintProfileVersion *int `json:"print_profile_version,omitempty"`
   CreatedAt time.Time `json:"created_at"`
   UpdatedAt time.Time `json:"updated_at"`
 }
@@ -40,6 +44,8 @@ type createInput struct {
   State map[string]any `json:"state"`
   CardTypeID *uuid.UUID `json:"card_type_id"`
   CardTypeVersion *int `json:"card_type_version"`
+  PrintProfileID *uuid.UUID `json:"print_profile_id"`
+  PrintProfileVersion *int `json:"print_profile_version"`
 }
 
 type updateInput struct {
@@ -81,7 +87,7 @@ func (h *Handler) authProject(w http.ResponseWriter, r *http.Request) (uuid.UUID
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
   projectID, ok := h.authProject(w, r); if !ok { return }
-  rows, err := h.db.QueryContext(r.Context(), `SELECT id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,created_at,updated_at FROM card_batches WHERE project_id=$1 ORDER BY updated_at DESC,id DESC`, projectID)
+  rows, err := h.db.QueryContext(r.Context(), `SELECT id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at FROM card_batches WHERE project_id=$1 ORDER BY updated_at DESC,id DESC`, projectID)
   if err != nil { writeError(w, 500, "card_batch_list_failed", "could not list card batches"); return }
   defer func() { _ = rows.Close() }()
   out := []Batch{}
@@ -117,7 +123,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
   principal, _ := auth.PrincipalFromContext(r.Context())
   var item Batch
   var mappingBytes, stateBytes []byte
-  err := h.db.QueryRowContext(r.Context(), `INSERT INTO card_batches(project_id,user_id,name,source_file,sheet,mapping,state,card_type_id,card_type_version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9) RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,created_at,updated_at`, projectID, principal.UserID, in.Name, in.SourceFile, in.Sheet, mustJSON(in.Mapping), mustJSON(in.State), in.CardTypeID, in.CardTypeVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
+  err := h.db.QueryRowContext(r.Context(), `INSERT INTO card_batches(project_id,user_id,name,source_file,sheet,mapping,state,card_type_id,card_type_version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9) RETURNING id,project_id,user_id,name,source_file,sheet,mapping,state,version,card_type_id,card_type_version,print_profile_id,print_profile_version,created_at,updated_at`, projectID, principal.UserID, in.Name, in.SourceFile, in.Sheet, mustJSON(in.Mapping), mustJSON(in.State), in.CardTypeID, in.CardTypeVersion).Scan(scanArgs(&item, &mappingBytes, &stateBytes)...)
   if err == nil { _ = json.Unmarshal(mappingBytes, &item.Mapping); _ = json.Unmarshal(stateBytes, &item.State) }
   if err != nil {
     if strings.Contains(err.Error(), "card_batches_project_name_uq") { writeError(w, 409, "card_batch_name_conflict", "a card batch with this name already exists"); return }
@@ -196,7 +202,7 @@ type scanner interface{ Scan(...any) error }
 func scan(row scanner) (Batch, error) {
   var item Batch
   var mapping, state []byte
-  err := row.Scan(&item.ID,&item.ProjectID,&item.UserID,&item.Name,&item.SourceFile,&item.Sheet,&mapping,&state,&item.Version,&item.CardTypeID,&item.CardTypeVersion,&item.CreatedAt,&item.UpdatedAt)
+  err := row.Scan(&item.ID,&item.ProjectID,&item.UserID,&item.Name,&item.SourceFile,&item.Sheet,&mapping,&state,&item.Version,&item.CardTypeID,&item.CardTypeVersion,&item.PrintProfileID,&item.PrintProfileVersion,&item.CreatedAt,&item.UpdatedAt)
   if err != nil { return Batch{}, err }
   if err := json.Unmarshal(mapping,&item.Mapping); err != nil { return Batch{}, err }
   if err := json.Unmarshal(state,&item.State); err != nil { return Batch{}, err }
