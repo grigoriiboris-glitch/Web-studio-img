@@ -7,6 +7,7 @@ import SketchImportZone from '../../components/SketchImportZone.vue'
 import { buildAvoidConstraints } from './rejectReasons'
 import BranchPanel from './BranchPanel.vue'
 import FlowLab from './FlowLab.vue'
+import StudioWorkflowRail from './StudioWorkflowRail.vue'
 import {
   generationsApi,
   humanActionsApi,
@@ -1278,6 +1279,14 @@ onUnmounted(() => {
           </el-space>
           <p class="privacy-copy">Local only permits generation only through the local ComfyUI provider and does not silently fall back to an external provider.</p>
         </el-card>
+
+        <StudioWorkflowRail
+          :generation-count="generations.length"
+          :selected-variant-count="selectedGenerationId ? 1 : 0"
+          :has-references="references.length > 0"
+          :has-final-candidate="Boolean(selectedGenerationId)"
+        />
+
         <BranchPanel :project-id="projectId()" @merged="loadStudio" />
         <el-card v-if="rejectionSummary?.reasons.length" class="create-card avoid-card">
           <template #header>Avoid based on previous decisions</template>
@@ -1338,7 +1347,7 @@ onUnmounted(() => {
           </template>
         </el-card>
 
-        <el-card class="create-card flow-planner-card">
+        <el-card id="brief" class="create-card flow-planner-card">
           <template #header>✨ Создать процесс иллюстрации</template>
           <el-form label-position="top" @submit.prevent="createComfyFlow">
             <el-form-item label="Что хотите получить?">
@@ -1397,7 +1406,7 @@ onUnmounted(() => {
           />
         </el-card>
 
-        <el-card class="create-card">
+        <el-card id="generate" class="create-card">
           <template #header>Generate image</template>
           <el-form label-position="top" @submit.prevent="createGeneration">
             <el-form-item label="Prompt">
@@ -1487,7 +1496,7 @@ onUnmounted(() => {
           </el-timeline>
         </el-card>
 
-        <el-card class="create-card">
+        <el-card id="references" class="create-card">
           <template #header>Sketch import</template>
           <SketchImportZone
             :project-id="projectId()"
@@ -1636,7 +1645,7 @@ onUnmounted(() => {
           </el-button>
         </el-card>
 
-        <el-card v-if="generations.length" class="timeline-card">
+        <el-card id="variants" v-if="generations.length" class="timeline-card">
           <template #header>Generation Queue</template>
           <el-timeline>
             <el-timeline-item v-for="item in generations" :key="item.id" :timestamp="new Date(item.created_at).toLocaleString()" placement="top">
@@ -1655,7 +1664,7 @@ onUnmounted(() => {
           </el-timeline>
         </el-card>
 
-        <el-card class="create-card">
+        <el-card id="select" class="create-card">
           <template #header>Human creative actions</template>
           <el-space wrap>
             <el-button type="success" @click="approveProject">Approve final result</el-button>
@@ -1663,7 +1672,7 @@ onUnmounted(() => {
           </el-space>
         </el-card>
 
-        <el-card class="create-card">
+        <el-card id="finalize" class="create-card">
           <template #header>AI Creative Assistant</template>
           <el-space wrap>
             <el-button
