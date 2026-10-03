@@ -70,6 +70,14 @@ const selectedVariantIds = computed(() =>
     .map(item => item.id),
 )
 
+const selectionStatus = computed(() => {
+  const selected = selectedVariantIds.value.length
+  if (!variants.value.length) return { kind: 'info', title: 'Добавь варианты', text: 'Создай Variant Set из завершённых генераций.' }
+  if (selected === 0) return { kind: 'warning', title: 'Выбери варианты', text: 'Используй Keep или Select. После этого можно создать следующую итерацию.' }
+  if (selected === 1) return { kind: 'success', title: 'Есть кандидат', text: 'Проверь его и создай selection iteration, если готов продолжать.' }
+  return { kind: 'success', title: selected + ' кандидата', text: 'Сравни выбранные варианты и создай selection iteration для следующего шага.' }
+})
+
 async function loadSources() {
   const response = await variantBoardApi.sources(projectId)
   sources.value = response.sources.filter(item => item.status === 'succeeded')
@@ -355,6 +363,14 @@ onMounted(async () => {
       </div>
     </header>
     <p v-if="iterationMessage" class="success">{{ iterationMessage }}</p>
+
+    <section class="selection-status" :class="`status-${selectionStatus.kind}`" aria-live="polite">
+      <div>
+        <strong>{{ selectionStatus.title }}</strong>
+        <span>{{ selectionStatus.text }}</span>
+      </div>
+      <span class="selection-count">{{ selectedVariantIds.length }}/{{ variants.length || 0 }} selected</span>
+    </section>
 
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -674,6 +690,26 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.selection-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #d9dfe8);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+}
+.selection-status > div { display: grid; gap: 3px; }
+.selection-status span { color: var(--muted, #667085); font-size: 13px; }
+.selection-count { white-space: nowrap; font-weight: 700; }
+.status-warning { border-color: #e6a23c; }
+.status-success { border-color: #67c23a; }
+.status-info { border-color: #909399; }
+@media (max-width: 600px) {
+  .selection-status { align-items: flex-start; flex-direction: column; }
+}
 .variant-board {
   min-height: 100vh;
   padding: 24px;
