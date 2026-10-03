@@ -91,7 +91,7 @@ describe('card batch type schemas', () => {
   it('accepts arbitrary field kinds as UI metadata without blocking card validation', () => {
     const definition = cardTypeDefinition('item')
     definition.fields.push({ key: 'custom_data', label: 'Custom data', type: 'some_future_widget' })
-    expect(validateCardData('001', 'prompt', { custom_data: 'anything' }, 'item')).toEqual([])
+    expect(validateCardData('001', 'prompt', { name: 'Knife', description: 'A field knife', rarity: 'rare', custom_data: 'anything' }, 'item')).toEqual([])
     definition.fields.pop()
   })
 
