@@ -27,6 +27,7 @@ import {
   cardTypeSchemaVersion,
   fieldsFromRow,
   resolveDefaultRecipeId,
+  rejectReasonsForType,
   suggestColumnMapping,
   templateForType,
   productionDefaults,
@@ -102,6 +103,7 @@ interface Batch {
   cardTypeVersion?: number
   templateId?: string
   mapping?: Record<string, string>
+  cardTypeDefinition?: CardTypeDefinition
 }
 
 interface ImportDiff {
@@ -201,6 +203,10 @@ function parsedReferenceIds(text: string) { return text.split(/[\s,]+/).map(x =>
 
 function typeSchema(type: CardTypeKey) {
   return cardTypeDefinition(type)
+}
+
+function cardFields(card: CardItem) {
+  return cardTypeDefinition(resolvedCardType(card)).fields.filter(field => field.key !== 'prompt')
 }
 
 function ensureSelectedTypeDefinition() {
@@ -501,7 +507,7 @@ function editPrompt(card: CardItem) {
 }
 
 function rejectCard(card: CardItem) {
-  const allowed = REJECT_REASONS_BY_TYPE[resolvedCardType(card)] as RejectReason[]
+  const allowed = rejectReasonsForType(resolvedCardType(card)) as RejectReason[]
   const reason = window.prompt('Reject reason for ' + cardTypeDefinition(resolvedCardType(card)).name + ': ' + allowed.join(' | '), card.rejectReason || '')
   if (!reason) return
   if (!allowed.includes(reason as RejectReason)) {
@@ -842,7 +848,6 @@ function manifest() {
       targetHeight: effectiveDimensions(c).height,
       aspectRatio: effectiveDimensions(c).aspectRatio,
       negativePrompt: effectiveDimensions(c).negativePrompt,
-      referenceIds: c.recipeVersion || batch.recipeVersion,
       referenceIds: c.referenceIds !== undefined ? c.referenceIds : batch.referenceIds || [],
       sourceRow: c.sourceRow,
       rejectReason: c.rejectReason,
@@ -912,7 +917,7 @@ onMounted(async () => {
         cardTypeVersion: state.cardTypeVersion ?? item.card_type_version ?? 1,
         templateId: state.templateId || templateForType(state.cardType || 'custom').id,
         mapping: item.mapping || {},
-        cardTypeDefinition: state.cardTypeDefinition,
+      cardTypeDefinition: state.cardTypeDefinition,
       }
     })
     if (!batches.value.length) {
@@ -1089,7 +1094,7 @@ onMounted(async () => {
             <span v-for="item in cardValidation(card)" :key="item.field">{{ item.message }}</span>
           </div>
           <div class="card-data">
-        <label v-for="field in cardTypeDefinition(resolvedCardType(card)).fields.filter(field => field.key !== 'prompt')" :key="field.key">
+        <label v-for="field in cardFields(card)" :key="field.key">
           {{ field.label }} <small>{{ field.required ? 'required' : 'optional' }}</small>
           <select v-if="field.type === 'select'" :value="card.fields?.[field.key] || field.defaultValue || ''" @change="card.fields = { ...(card.fields || {}), [field.key]: ($event.target as HTMLSelectElement).value }; persistCard(card)">
             <option value="">Not set</option><option v-for="option in field.options || []" :key="option" :value="option">{{ option }}</option>
