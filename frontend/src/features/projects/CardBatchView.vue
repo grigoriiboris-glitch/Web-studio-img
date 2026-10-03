@@ -141,7 +141,12 @@ const rejectedOpen = ref(true)
 const batchTypeFilter = ref<CardTypeKey | 'all'>('all')
 const newBatchType = ref<CardTypeKey>('custom')
 const newCardTypeName = ref('')
-const availableCardTypes = computed(() => cardTypeDefinitions())
+const availableCardTypes = computed(() => {
+  // Depend on reactive selection/batch so newly registered custom types appear immediately.
+  void newBatchType.value
+  void activeBatch.value?.id
+  return cardTypeDefinitions()
+})
 const columnMapping = ref<Record<string, string>>({})
 let saveQueue: Promise<void> = Promise.resolve()
 
