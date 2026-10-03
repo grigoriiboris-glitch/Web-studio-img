@@ -15,6 +15,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/brief"
 	"github.com/oleg3190/Web-studio-img/backend/internal/cardbatch"
+	"github.com/oleg3190/Web-studio-img/backend/internal/cardtypes"
 	"github.com/oleg3190/Web-studio-img/backend/internal/branches"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assistant"
 	"github.com/oleg3190/Web-studio-img/backend/internal/composition"
@@ -185,13 +186,13 @@ func main() {
 			os.Exit(1)
 		}
 		cardBatchHandler, err = cardbatch.NewHandler(projectDB)
+		if err != nil {
+			logger.Error("card batch handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 		cardTypesHandler, err = cardtypes.NewHandler(projectDB)
 		if err != nil {
 			logger.Error("card type handler initialization failed", "error", err)
-			os.Exit(1)
-		}
-		if err != nil {
-			logger.Error("card batch handler initialization failed", "error", err)
 			os.Exit(1)
 		}
 

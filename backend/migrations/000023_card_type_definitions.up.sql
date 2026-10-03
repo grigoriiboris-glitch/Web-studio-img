@@ -36,9 +36,3 @@ CREATE TABLE IF NOT EXISTS card_type_versions (
 CREATE INDEX IF NOT EXISTS card_type_versions_type_idx
   ON card_type_versions(card_type_id, version DESC);
 
-ALTER TABLE card_batches
-  ADD COLUMN IF NOT EXISTS card_type_id UUID REFERENCES card_type_definitions(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS card_type_version INTEGER;
-
-CREATE INDEX IF NOT EXISTS card_batches_card_type_idx
-  ON card_batches(card_type_id, card_type_version);

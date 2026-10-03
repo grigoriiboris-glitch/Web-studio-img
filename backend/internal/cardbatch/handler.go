@@ -181,11 +181,11 @@ func (h *Handler) validateCardTypeReference(ctx context.Context, projectID uuid.
   if typeID == nil && version == nil { return nil }
   if typeID == nil || version == nil || *version < 1 { return errors.New("card type id and version must be provided together") }
   var exists bool
-  err := h.db.QueryRowContext(ctx, \`SELECT EXISTS(
+  err := h.db.QueryRowContext(ctx, `SELECT EXISTS(
     SELECT 1 FROM card_type_versions v
     JOIN card_type_definitions d ON d.id = v.card_type_id
     WHERE d.id=$1 AND d.project_id=$2 AND v.version=$3
-  )\`, *typeID, projectID, *version).Scan(&exists)
+  )`, *typeID, projectID, *version).Scan(&exists)
   if err != nil { return errors.New("could not validate card type version") }
   if !exists { return errors.New("card type version does not exist in this project") }
   return nil

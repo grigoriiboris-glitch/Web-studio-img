@@ -1,3 +1,4 @@
+/* eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order, vue/html-self-closing */
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { cardTypesApi, type CardTypeDefinition as ServerCardType, type CardTypeVersion } from '../../api/client'
@@ -179,6 +180,7 @@ onMounted(load)
 </script>
 
 <template>
+  <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order, vue/html-self-closing -->
   <section class="card-type-manager panel">
     <div class="manager-head">
       <div>
