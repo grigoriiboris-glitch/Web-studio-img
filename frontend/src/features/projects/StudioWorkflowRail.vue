@@ -28,7 +28,10 @@ function scrollTo(id: string) {
 </script>
 
 <template>
-  <nav class="workflow-rail" aria-label="Creative workflow">
+  <nav
+    class="workflow-rail"
+    aria-label="Creative workflow"
+  >
     <div class="workflow-heading">
       <div>
         <span class="eyebrow">Creative workflow</span>
