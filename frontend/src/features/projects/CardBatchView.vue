@@ -142,6 +142,7 @@ const error = ref('')
 const info = ref('')
 const recipes = ref<Recipe[]>([])
 const printProfiles = ref<PrintProfile[]>([])
+const printProfileSpecs = ref<Record<string, Record<string, unknown>>>({})
 const printProfileId = ref('')
 const recipeId = ref('')
 const referenceIdsText = ref('')
@@ -282,7 +283,6 @@ function typeRecipe(type: CardTypeKey) {
 
 function effectiveDimensions(card: CardItem) {
   const defaults = productionDefaults(resolvedCardType(card))
-  const profile = printProfiles.value.find(item => item.id === activeBatch.value?.printProfileId)
   const profileSpec = selectedPrintProfileSpec()
   const profileDpi = Number(profileSpec?.dpi || 0)
   const profileBleed = Number(profileSpec?.bleed_mm || 0)
@@ -301,8 +301,7 @@ function effectiveDimensions(card: CardItem) {
 }
 
 function selectedPrintProfileSpec(): Record<string, unknown> | undefined {
-  const profile = printProfiles.value.find(item => item.id === activeBatch.value?.printProfileId) as (PrintProfile & { spec?: Record<string, unknown> }) | undefined
-  return profile?.spec
+  return activeBatch.value?.printProfileId ? printProfileSpecs.value[activeBatch.value.printProfileId] : undefined
 }
 
 function effectiveRecipeSelection(card: CardItem): { id?: string; version?: number } | undefined {
@@ -444,6 +443,7 @@ async function generateCard(card: CardItem, prompt = card.prompt) {
   const refs = effective.referenceIds
   const resolvedType = resolvedCardType(card)
   const assembledPrompt = assembleCardPrompt(prompt, resolvedType, card.fields)
+  const profileSpec = selectedPrintProfileSpec()
   const generation = await generationsApi.create(routeProjectId.value, {
     prompt: assembledPrompt,
     recipe_id: selectedRecipe,
@@ -703,6 +703,8 @@ async function createBatch() {
     negativePrompt: negativePrompt.value || undefined,
     cardType: newBatchType.value,
     cardTypeVersion: cardTypeDefinition(newBatchType.value).version,
+    printProfileId: printProfileId.value || undefined,
+    printProfileVersion: printProfiles.value.find(profile => profile.id === printProfileId.value)?.current_version,
     templateId: templateForType(newBatchType.value).id,
     mapping: { ...columnMapping.value, card_number: cardColumn.value, prompt: promptColumn.value },
     cardTypeDefinition: selectedDefinition,
@@ -716,6 +718,8 @@ async function createBatch() {
       state: batchState(batch),
       card_type_id: batch.cardTypeId || cardTypeDefinition(batch.cardType).id,
       card_type_version: batch.cardTypeVersion || cardTypeDefinition(batch.cardType).version,
+      print_profile_id: batch.printProfileId,
+      print_profile_version: batch.printProfileVersion,
     })
     batch.id = remote.id
     batch.version = remote.version
@@ -769,6 +773,7 @@ function selectBatch(id: string) {
   targetHeight.value = batch.targetHeight
   aspectRatio.value = batch.aspectRatio || ''
   negativePrompt.value = batch.negativePrompt || ''
+  printProfileId.value = batch.printProfileId || ''
   columnMapping.value = batch ? { ...columnMapping.value } : {}
   newBatchType.value = batch.cardType || 'custom'
   if (batch.cardTypeDefinition) registerCardTypeDefinition(batch.cardTypeDefinition)
@@ -793,6 +798,8 @@ function updateBatchSettings() {
   activeBatch.value.mapping = { ...columnMapping.value, card_number: cardColumn.value, prompt: promptColumn.value }
   activeBatch.value.cardTypeVersion = cardTypeDefinition(activeBatch.value.cardType || 'custom').version
   activeBatch.value.cardTypeDefinition = cardTypeDefinition(activeBatch.value.cardType || 'custom')
+  activeBatch.value.printProfileId = printProfileId.value || undefined
+  activeBatch.value.printProfileVersion = printProfiles.value.find(profile => profile.id === printProfileId.value)?.current_version
   activeBatch.value.templateId = activeBatch.value.templateId || templateForType(activeBatch.value.cardType || 'custom').id
   save()
 }
@@ -1006,12 +1013,13 @@ onMounted(async () => {
     localStorage.setItem(storageKey.value, JSON.stringify(batches.value))
     recipes.value = (await recipesApi.list(routeProjectId.value)).recipes
     printProfiles.value = (await printProfilesApi.list(routeProjectId.value)).print_profiles
+    for (const profile of printProfiles.value) { try { printProfileSpecs.value[profile.id] = (await printProfilesApi.get(routeProjectId.value, profile.id)).version.spec } catch { /* ignore unavailable profile */ } }
     await refreshBatch()
   } catch (e) {
     batches.value = JSON.parse(localStorage.getItem(storageKey.value) || '[]') as Batch[]
     activeBatchId.value = batches.value[0]?.id || ''
     try { recipes.value = (await recipesApi.list(routeProjectId.value)).recipes } catch { /* keep empty */ }
-    try { printProfiles.value = (await printProfilesApi.list(routeProjectId.value)).print_profiles } catch { /* keep empty */ }
+    try { printProfiles.value = (await printProfilesApi.list(routeProjectId.value)).print_profiles; for (const profile of printProfiles.value) { try { printProfileSpecs.value[profile.id] = (await printProfilesApi.get(routeProjectId.value, profile.id)).version.spec } catch { /* ignore unavailable profile */ } } } catch { /* keep empty */ }
     await refreshBatch()
     error.value = e instanceof Error ? e.message : String(e)
   }
@@ -1022,6 +1030,7 @@ onMounted(async () => {
   <!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline, vue/attributes-order, vue/html-indent, vue/html-self-closing -->
   <main class="card-batch">
     <CardTypeManager :project-id="routeProjectId" />
+    <PrintProfileManager :project-id="routeProjectId" />
     <header class="header">
       <div>
         <h1>Card Batch</h1>
@@ -1102,6 +1111,9 @@ onMounted(async () => {
       <div class="settings">
         <label>Card type<select :value="activeBatch.cardType || 'custom'" @change="setBatchType(($event.target as HTMLSelectElement).value as CardTypeKey)"><option v-for="type in availableCardTypes" :key="type.key" :value="type.key">{{ type.name }}</option></select></label>
         <label>Batch Template<select :value="activeBatch.templateId || templateForType(activeBatch.cardType || 'custom').id" @change="activeBatch.templateId = ($event.target as HTMLSelectElement).value; save()"><option v-for="template in templatesFor(activeBatch.cardType || 'custom')" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+        <label>Print Profile
+          <CardBatchSelect :model-value="printProfileId" :options="printProfileOptions" placeholder="No print profile" @update:model-value="printProfileId = $event; updateBatchSettings" />
+        </label>
         <label>Batch Recipe<select v-model="recipeId" @change="updateBatchSettings"><option value="">Type default (auto)</option><option v-for="index in recipes.length" :key="recipes[index - 1].id" :value="recipes[index - 1].id">{{ recipes[index - 1].name }} · v{{ recipes[index - 1].current_version }}</option></select></label>
         <label>Reference asset IDs<input :value="referenceIdsText" placeholder="asset/reference IDs, comma separated" @change="referenceIdsText = ($event.target as HTMLInputElement).value; updateBatchSettings"></label>
         <label>Target width<input v-model.number="targetWidth" type="number" min="1" @change="updateBatchSettings"></label>
