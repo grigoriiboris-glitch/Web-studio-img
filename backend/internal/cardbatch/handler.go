@@ -112,6 +112,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
   if in.Mapping == nil { in.Mapping = map[string]any{} }
   if in.State == nil { in.State = map[string]any{} }
   if !validJSON(in.Mapping) || !validJSON(in.State) { writeError(w, 400, "invalid_card_batch", "mapping or state is not valid JSON"); return }
+  if err := h.validateCardTypeReference(r.Context(), projectID, in.CardTypeID, in.CardTypeVersion); err != nil { writeError(w, 400, "invalid_card_type_reference", err.Error()); return }
 
   principal, _ := auth.PrincipalFromContext(r.Context())
   var item Batch
@@ -133,6 +134,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
   if in.Version < 1 { writeError(w, 400, "invalid_version", "version must be positive"); return }
   if in.State != nil && !validJSON(in.State) { writeError(w, 400, "invalid_state", "state is not valid JSON"); return }
   if in.Mapping != nil && !validJSON(in.Mapping) { writeError(w, 400, "invalid_mapping", "mapping is not valid JSON"); return }
+  if in.CardTypeID != nil || in.CardTypeVersion != nil { if err := h.validateCardTypeReference(r.Context(), projectID, in.CardTypeID, in.CardTypeVersion); err != nil { writeError(w, 400, "invalid_card_type_reference", err.Error()); return } }
 
   tx, err := h.db.BeginTx(r.Context(), nil); if err != nil { writeError(w, 500, "card_batch_update_failed", "could not start transaction"); return }
   defer func() { _ = tx.Rollback() }()
@@ -172,6 +174,21 @@ func (h *Handler) load(ctx context.Context, projectID, id uuid.UUID) (Batch, err
   if err := json.Unmarshal(mapping, &item.Mapping); err != nil { return Batch{}, err }
   if err := json.Unmarshal(state, &item.State); err != nil { return Batch{}, err }
   return item, nil
+}
+
+
+func (h *Handler) validateCardTypeReference(ctx context.Context, projectID uuid.UUID, typeID *uuid.UUID, version *int) error {
+  if typeID == nil && version == nil { return nil }
+  if typeID == nil || version == nil || *version < 1 { return errors.New("card type id and version must be provided together") }
+  var exists bool
+  err := h.db.QueryRowContext(ctx, \`SELECT EXISTS(
+    SELECT 1 FROM card_type_versions v
+    JOIN card_type_definitions d ON d.id = v.card_type_id
+    WHERE d.id=$1 AND d.project_id=$2 AND v.version=$3
+  )\`, *typeID, projectID, *version).Scan(&exists)
+  if err != nil { return errors.New("could not validate card type version") }
+  if !exists { return errors.New("card type version does not exist in this project") }
+  return nil
 }
 
 type scanner interface{ Scan(...any) error }
