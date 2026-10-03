@@ -141,7 +141,7 @@ func (h *Handler) versions(w http.ResponseWriter,r *http.Request){
   projectID,id,ok:=h.ids(w,r);if !ok{return}
   if _,err:=h.loadDefinition(r.Context(),projectID,id);errors.Is(err,sql.ErrNoRows){writeError(w,404,"card_type_not_found","card type not found");return}else if err!=nil{writeError(w,500,"card_type_versions_failed","could not load card type");return}
   rows,err:=h.db.QueryContext(r.Context(),`SELECT id,card_type_id,version,schema,production_defaults,default_recipe_id,default_recipe_version,default_template_id,default_template_version,prompt_rules,reject_reason_profile_id,created_at FROM card_type_versions WHERE card_type_id=$1 ORDER BY version DESC`,id)
-  if err!=nil{writeError(w,500,"card_type_versions_failed","could not list versions");return};defer rows.Close()
+  if err!=nil{writeError(w,500,"card_type_versions_failed","could not list versions");return};defer func() { _ = rows.Close() }()
   out:=[]Version{}
   for rows.Next(){v,err:=scanVersion(rows);if err!=nil{writeError(w,500,"card_type_versions_failed","could not read versions");return};out=append(out,v)}
   writeJSON(w,200,map[string]any{"versions":out})
@@ -151,7 +151,7 @@ func (h *Handler) update(w http.ResponseWriter,r *http.Request){
   projectID,id,ok:=h.ids(w,r);if !ok{return}
   var in updateInput;if err:=decode(r,&in);err!=nil{writeError(w,400,"invalid_request","invalid card type update");return}
   if err:=validateVersionPayload(in.Schema,in.ProductionDefaults,in.PromptRules);err!=nil{writeError(w,400,"invalid_card_type",err.Error());return}
-  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"card_type_update_failed","could not start transaction");return};defer tx.Rollback()
+  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"card_type_update_failed","could not start transaction");return};defer func() { _ = tx.Rollback() }()
   var d Definition
   var current int
   err=tx.QueryRowContext(r.Context(),`SELECT id,project_id,key,name,description,current_version FROM card_type_definitions WHERE id=$1 AND project_id=$2 FOR UPDATE`,id,projectID).Scan(&d.ID,&d.ProjectID,&d.Key,&d.Name,&d.Description,&current)
@@ -180,7 +180,7 @@ func (h *Handler) clone(w http.ResponseWriter,r *http.Request){
   body,_:=json.Marshal(input)
   req:=r.Clone(context.WithValue(r.Context(), clonePayloadKey{}, body))
   _=req
-  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"card_type_clone_failed","could not start transaction");return};defer tx.Rollback()
+  tx,err:=h.db.BeginTx(r.Context(),nil);if err!=nil{writeError(w,500,"card_type_clone_failed","could not start transaction");return};defer func() { _ = tx.Rollback() }()
   var d Definition
   err=tx.QueryRowContext(r.Context(),`INSERT INTO card_type_definitions(project_id,key,name,description) VALUES($1,$2,$3,$4) RETURNING id,project_id,key,name,description,current_version,archived_at,created_at,updated_at`,projectID,key,name,input.Description).Scan(&d.ID,&d.ProjectID,&d.Key,&d.Name,&d.Description,&d.CurrentVersion,&d.ArchivedAt,&d.CreatedAt,&d.UpdatedAt)
   if err!=nil{if strings.Contains(err.Error(),"card_type_definitions_project_key_uq"){writeError(w,409,"card_type_key_conflict","a card type with this key already exists");return};writeError(w,500,"card_type_clone_failed","could not create clone");return}
