@@ -60,6 +60,8 @@ type updateInput struct {
   CardTypeVersion *int `json:"card_type_version,omitempty"`
   PrintProfileID *uuid.UUID `json:"print_profile_id,omitempty"`
   PrintProfileVersion *int `json:"print_profile_version,omitempty"`
+  TemplateID *uuid.UUID `json:"template_id,omitempty"`
+  TemplateVersion *int `json:"template_version,omitempty"`
 }
 
 type Handler struct{ db *sql.DB }
