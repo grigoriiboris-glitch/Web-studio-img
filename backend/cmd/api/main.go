@@ -186,13 +186,13 @@ func main() {
 			os.Exit(1)
 		}
 		cardBatchHandler, err = cardbatch.NewHandler(projectDB)
+		if err != nil {
+			logger.Error("card batch handler initialization failed", "error", err)
+			os.Exit(1)
+		}
 		cardTypesHandler, err = cardtypes.NewHandler(projectDB)
 		if err != nil {
 			logger.Error("card type handler initialization failed", "error", err)
-			os.Exit(1)
-		}
-		if err != nil {
-			logger.Error("card batch handler initialization failed", "error", err)
 			os.Exit(1)
 		}
 
