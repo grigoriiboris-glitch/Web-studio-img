@@ -1,5 +1,6 @@
 name: Production binary
 # Production release is triggered by pushes to prod.
+# Go module sums are prepared in CI before the standalone build.
 
 on:
   push:
