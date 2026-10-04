@@ -1,4 +1,5 @@
 name: Production binary
+# Production release is triggered by pushes to prod.
 
 on:
   push:
