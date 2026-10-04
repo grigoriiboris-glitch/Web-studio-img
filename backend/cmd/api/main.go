@@ -1,6 +1,8 @@
 package main
 
 import (
+	"embed"
+	"io/fs"
 	"context"
 	"database/sql"
 	"errors"
@@ -51,6 +53,9 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/similarity"
 	"github.com/oleg3190/Web-studio-img/backend/internal/storage"
 )
+
+//go:embed web/*
+var embeddedWeb embed.FS
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -382,8 +387,13 @@ func main() {
 		}
 	}
 
-	api := httpapi.NewServerWithStudioAndObservabilityAndStatic(
-		logger, cfg.CORSOrigins, limiter, metrics, cfg.WebStaticDir,
+	webFS, err := fs.Sub(embeddedWeb, "web")
+	if err != nil {
+		logger.Error("embedded frontend initialization failed", "error", err)
+		os.Exit(1)
+	}
+	api := httpapi.NewServerWithStudioAndObservabilityAndEmbeddedStatic(
+		logger, cfg.CORSOrigins, limiter, metrics, webFS,
 		projectHandler, iterationHandler, generationHandler, branchHandler,
 		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, cardBatchHandler, cardTypesHandler, printProfilesHandler, templatesHandler, variantHandler, recipeHandler, assetLibraryHandler,
 	)

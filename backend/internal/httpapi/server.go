@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"io/fs"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -82,6 +83,30 @@ func newServer(
 		handler = withObservability(*metrics, handler)
 	}
 
+	return &Server{handler: handler}
+}
+
+func NewServerWithStudioAndObservabilityAndEmbeddedStatic(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics observability.APIMetrics, staticFS fs.FS, registrars ...Registrar) *Server {
+	return newServerWithEmbeddedStatic(logger, origins, limiter, &metrics, staticFS, registrars...)
+}
+
+func newServerWithEmbeddedStatic(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics *observability.APIMetrics, staticFS fs.FS, registrars ...Registrar) *Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", healthHandler)
+	mux.HandleFunc("GET /readyz", readyHandler)
+	mux.HandleFunc("GET /api/v1/health", apiHealthHandler)
+	for _, registrar := range registrars {
+		if registrar != nil { registrar.Register(mux) }
+	}
+	mux.Handle("/", newEmbeddedStaticHandler(staticFS))
+	var handler http.Handler = mux
+	handler = withCORS(origins, handler)
+	handler = withSecurityHeaders(handler)
+	handler = withRequestID(handler)
+	handler = withRateLimit(limiter, handler)
+	handler = withLogging(logger, handler)
+	handler = http.MaxBytesHandler(handler, security.DefaultMaxUploadSize)
+	if metrics != nil { handler = withObservability(*metrics, handler) }
 	return &Server{handler: handler}
 }
 
