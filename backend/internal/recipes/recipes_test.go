@@ -3,6 +3,8 @@ package recipes
 import (
   "net/http"
   "testing"
+
+  "github.com/google/uuid"
 )
 
 func sampleWorkflow() map[string]any {
