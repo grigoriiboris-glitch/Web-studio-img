@@ -78,3 +78,11 @@ func TestRegisterRoutesHaveNoConflicts(t *testing.T) {
 	mux := http.NewServeMux()
 	NewHandler(nil).Register(mux)
 }
+
+func TestResolveRequiresExplicitVersion(t *testing.T) {
+	resolver := NewHandler(nil)
+	_, err := resolver.Resolve(nil, uuid.Nil, uuid.Nil, uuid.New(), 0, nil)
+	if err == nil || err.Error() != "recipe version is required" {
+		t.Fatalf("expected explicit recipe version error, got %v", err)
+	}
+}
