@@ -1,6 +1,7 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { readdir, readFile, writeFile, unlink } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const HOST = "127.0.0.1";
@@ -10,6 +11,9 @@ const PI_BIN = process.env.PI_BIN || "pi";
 const EXTENSION = fileURLToPath(new URL("./policy-extension.mjs", import.meta.url));
 const MAX_BODY = 128 * 1024;
 const TIMEOUT_MS = Number(process.env.PI_AGENT_TIMEOUT_MS || 180000);
+const MAX_REPAIR_FILES = 100;
+const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
+let repairInProgress = false;
 
 const json = (res, status, body) => {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -37,6 +41,40 @@ function validateIncident(incident) {
   if (typeof incident.workflowFingerprint !== "string" || incident.workflowFingerprint.length > 256) throw new Error("invalid workflowFingerprint");
 }
 
+const REPAIRABLE_NAME = /(docker|compose|comfy|config|workflow)/i;
+const REPAIRABLE_EXT = new Set([".yml", ".yaml", ".json", ".toml"]);
+function isRepairablePath(filePath) {
+  const name = filePath.split(/[\\/]/).pop() || "";
+  const dot = name.lastIndexOf(".");
+  const ext = dot >= 0 ? name.slice(dot).toLowerCase() : "";
+  return REPAIRABLE_NAME.test(name) && REPAIRABLE_EXT.has(ext);
+}
+async function collectRepairableFiles(dir, out = []) {
+  if (out.length >= MAX_REPAIR_FILES) return out;
+  let entries = [];
+  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return out; }
+  for (const entry of entries) {
+    if (out.length >= MAX_REPAIR_FILES) break;
+    if (entry.name === ".git" || entry.name === "node_modules" || entry.name === ".env") continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) await collectRepairableFiles(full, out);
+    else if (entry.isFile() && isRepairablePath(full)) out.push(full);
+  }
+  return out;
+}
+async function createRepairSnapshot() {
+  const files = await collectRepairableFiles(PROJECT_ROOT);
+  const snapshot = new Map(); let total = 0;
+  for (const file of files) {
+    try { const data = await readFile(file); if (data.byteLength > MAX_SNAPSHOT_BYTES || total + data.byteLength > MAX_SNAPSHOT_BYTES * MAX_REPAIR_FILES) continue; snapshot.set(file, data); total += data.byteLength; } catch {}
+  }
+  return snapshot;
+}
+async function rollbackRepair(snapshot) {
+  const current = await collectRepairableFiles(PROJECT_ROOT);
+  for (const file of current) if (!snapshot.has(file)) { try { await unlink(file); } catch {} }
+  for (const [file, data] of snapshot) await writeFile(file, data);
+}
 function promptFor(incident) {
   return [
     "You are the local repair agent for Web Studio Img.",
@@ -128,12 +166,17 @@ const server = http.createServer(async (req, res) => {
     const incident = await readBody(req);
     validateIncident(incident);
     if (incident.confirmed !== true) return json(res, 400, { error: "explicit repair confirmation is required" });
-    const result = await runPi(incident);
-    const health = await healthCheck();
-    return json(res, result.ok && health.ok ? 200 : 502, {
-      ok: result.ok && health.ok, agent: result, health,
-      retest: { required: true, reason: "Web Studio must run the same test_comfy_flow after bridge repair" },
-    });
+    if (repairInProgress) return json(res, 409, { error: "another pi.dev repair is already in progress" });
+    repairInProgress = true;
+    const snapshot = await createRepairSnapshot();
+    try {
+      const result = await runPi(incident);
+      const health = await healthCheck();
+      if (result.ok && health.ok) return json(res, 200, { ok: true, agent: result, health, rolled_back: false, retest: { required: true, reason: "Web Studio must run the same test_comfy_flow after bridge repair" } });
+      await rollbackRepair(snapshot);
+      const rollbackHealth = await healthCheck();
+      return json(res, 502, { ok: false, agent: result, health, rolled_back: true, rollback_health: rollbackHealth, retest: { required: true, reason: "Repair failed; project was restored to the pre-attempt snapshot" } });
+    } finally { repairInProgress = false; }
   } catch (error) {
     return json(res, 400, { error: error instanceof Error ? error.message : String(error) });
   }

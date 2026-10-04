@@ -6,6 +6,10 @@ test("bridge is localhost-only and requires confirmation", async () => {
   const source = await readFile(new URL("./server.mjs", import.meta.url), "utf8");
   assert.match(source, /127\.0\.0\.1/);
   assert.match(source, /incident\.confirmed !== true/);
+  assert.match(source, /another pi\.dev repair is already in progress/);
+  assert.match(source, /rolled_back: true/);
+  assert.match(source, /createRepairSnapshot/);
+  assert.match(source, /rollbackRepair/);
 });
 
 test("policy blocks dangerous and secret access", async () => {
