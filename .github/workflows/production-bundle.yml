@@ -1,0 +1,54 @@
+name: Production binary
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Embed frontend and build API
+        run: |
+          set -euo pipefail
+          rm -rf backend/cmd/api/web
+          mkdir -p backend/cmd/api/web
+          cp -R frontend/dist/. backend/cmd/api/web/
+          cd backend
+          go mod download
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../web-studio-img ./cmd/api
+      - name: Build worker
+        working-directory: backend
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../web-studio-img-worker ./cmd/worker
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          mv web-studio-img web-studio-img-worker release/
+          cp .env.example release/.env.example
+          printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'cd "$(dirname "$0")"' 'exec "$PWD/web-studio-img"' > release/run.sh
+          chmod +x release/*
+          printf '%s\n' "$GITHUB_SHA" > release/BUILD
+          tar -C release -czf "web-studio-img-linux-amd64-$GITHUB_SHA.tar.gz" .
+          sha256sum "web-studio-img-linux-amd64-$GITHUB_SHA.tar.gz" > "web-studio-img-linux-amd64-$GITHUB_SHA.sha256"
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "prod-${{ github.run_number }}"
+          name: "Production build ${{ github.run_number }}"
+          generate_release_notes: true
+          files: |
+            web-studio-img-linux-amd64-${{ github.sha }}.tar.gz
+            web-studio-img-linux-amd64-${{ github.sha }}.sha256
