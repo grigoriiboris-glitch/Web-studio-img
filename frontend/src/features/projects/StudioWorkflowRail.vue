@@ -6,6 +6,7 @@ const props = defineProps<{
   selectedVariantCount: number
   hasReferences: boolean
   hasFinalCandidate: boolean
+  finalApproved: boolean
 }>()
 
 const steps = computed(() => [
@@ -14,7 +15,7 @@ const steps = computed(() => [
   { id: 'generate', label: 'Generate', done: props.generationCount > 0, hint: props.generationCount ? `${props.generationCount} results` : 'Создай варианты' },
   { id: 'variants', label: 'Variants', done: props.generationCount > 0, hint: 'Сравнение результатов' },
   { id: 'select', label: 'Select', done: props.selectedVariantCount > 0, hint: props.selectedVariantCount ? `${props.selectedVariantCount} selected` : 'Выбери результат' },
-  { id: 'finalize', label: 'Finalize', done: props.hasFinalCandidate, hint: props.hasFinalCandidate ? 'Готово к финалу' : 'Финальная проверка' },
+  { id: 'finalize', label: 'Finalize', done: props.finalApproved, hint: props.finalApproved ? 'Финал утверждён' : props.hasFinalCandidate ? 'Кандидат готов к утверждению' : 'Нужен выбранный кандидат' },
 ])
 
 const currentIndex = computed(() => {
