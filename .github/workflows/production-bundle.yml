@@ -1,6 +1,9 @@
 name: Production binary
 
 on:
+  push:
+    branches:
+      - prod
   workflow_dispatch:
 
 permissions:
