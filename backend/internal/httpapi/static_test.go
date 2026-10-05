@@ -39,12 +39,17 @@ func TestEmbeddedStaticHandlerDoesNotRedirectIndex(t *testing.T) {
 	}
 	handler := newEmbeddedStaticHandler(root)
 
+	const expectedCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
 	for _, path := range []string{"/", "/index.html", "/projects/demo/studio"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
+
 			t.Fatalf("%s: status=%d location=%q", path, rec.Code, rec.Header().Get("Location"))
+		}
+		if got := rec.Header().Get("Content-Security-Policy"); got != expectedCSP {
+			t.Fatalf("%s: CSP=%q", path, got)
 		}
 		if got := rec.Header().Get("Location"); got != "" {
 			t.Fatalf("%s: unexpected redirect to %q", path, got)
