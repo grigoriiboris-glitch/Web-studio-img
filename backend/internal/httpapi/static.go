@@ -23,7 +23,13 @@ func newEmbeddedStaticHandler(root fs.FS) http.Handler {
 			name = "index.html"
 		}
 		r2 := r.Clone(r.Context())
-		r2.URL.Path = "/" + name
+		// net/http's FileServer redirects /index.html to /. Serve the embedded
+		// index through the directory path instead so SPA fallback cannot loop.
+		if name == "index.html" {
+			r2.URL.Path = "/"
+		} else {
+			r2.URL.Path = "/" + name
+		}
 		fileServer.ServeHTTP(w, r2)
 	})
 }
