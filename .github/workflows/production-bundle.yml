@@ -1,6 +1,4 @@
 name: Production binary
-# Production release is triggered by pushes to prod.
-# Go module sums are prepared in CI before the standalone build.
 
 on:
   push:
@@ -22,11 +20,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package.json
       - name: Build frontend
         working-directory: frontend
-        run: npm install && npm run build
+        run: npm ci && npm run build
       - name: Embed frontend and build API
         run: |
           set -euo pipefail
@@ -34,7 +30,7 @@ jobs:
           mkdir -p backend/cmd/api/web
           cp -R frontend/dist/. backend/cmd/api/web/
           cd backend
-          go mod tidy
+          go mod download
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../web-studio-img ./cmd/api
       - name: Build worker
         working-directory: backend
