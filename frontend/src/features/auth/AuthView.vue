@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/max-attributes-per-line, vue/singleline-html-element-content-newline -->
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
