@@ -14,6 +14,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 	"github.com/oleg3190/Web-studio-img/backend/internal/assets"
 	"github.com/oleg3190/Web-studio-img/backend/internal/brief"
 	"github.com/oleg3190/Web-studio-img/backend/internal/cardbatch"
@@ -122,8 +123,14 @@ func main() {
 	var generationQueue generation.Enqueuer
 	var generationProvider generation.Provider
 	var projectDB *sql.DB
+	var authTokenManager *auth.TokenManager
+	var authStore auth.Store
 
 	if cfg.DatabaseURL != "" {
+		if len(cfg.JWTSecret) < 32 { logger.Error("JWT_SECRET must be at least 32 bytes when database authentication is enabled"); os.Exit(1) }
+		authTokenManager, err = auth.NewTokenManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTTTL)
+		if err != nil { logger.Error("auth token manager initialization failed", "error", err); os.Exit(1) }
+
 		projectDB, err = sql.Open("pgx", cfg.DatabaseURL)
 		if err != nil {
 			logger.Error("database open failed", "error", err)
@@ -138,6 +145,14 @@ func main() {
 			logger.Error("database ping failed", "error", err)
 			os.Exit(1)
 		}
+
+		sqlAuthStore, authErr := auth.NewSQLStore(projectDB)
+		if authErr != nil { logger.Error("auth store initialization failed", "error", authErr); os.Exit(1) }
+		authStore = sqlAuthStore
+		authService, authErr := auth.NewService(sqlAuthStore, authTokenManager)
+		if authErr != nil { logger.Error("auth service initialization failed", "error", authErr); os.Exit(1) }
+		authHandler, authErr := auth.NewHTTPHandler(authService, authTokenManager, sqlAuthStore)
+		if authErr != nil { logger.Error("auth handler initialization failed", "error", authErr); os.Exit(1) }
 
 		projectStore, err := projects.NewSQLStore(projectDB)
 		if err != nil {
@@ -392,8 +407,8 @@ func main() {
 		logger.Error("embedded frontend initialization failed", "error", err)
 		os.Exit(1)
 	}
-	api := httpapi.NewServerWithStudioAndObservabilityAndEmbeddedStatic(
-		logger, cfg.CORSOrigins, limiter, metrics, webFS,
+	api := httpapi.NewServerWithStudioAndObservabilityAndEmbeddedStaticAndAuth(
+		logger, cfg.CORSOrigins, limiter, metrics, webFS, authTokenManager, authStore, authHandler,
 		projectHandler, iterationHandler, generationHandler, branchHandler,
 		eventHandler, promptHandler, referenceHandler, actionHandler, provenanceHandler, assetHandler, similarityHandler, exportHandler, compositionHandler, libraryHandler, compositionAnalyzer, assistantHandler, styleHandler, dnaHandler, rightsHandler, layersHandler, visualDNAHandler, manualEditHandler, workflowHandler, briefHandler, cardBatchHandler, cardTypesHandler, printProfilesHandler, templatesHandler, variantHandler, recipeHandler, assetLibraryHandler,
 	)
