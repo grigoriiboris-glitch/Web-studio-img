@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
 
@@ -79,4 +80,22 @@ func withRateLimit(limiter *security.RateLimiter, next http.Handler) http.Handle
 		return next
 	}
 	return limiter.Middleware(next)
+}
+
+
+func withAPIAuth(manager *auth.TokenManager, store auth.Store, next http.Handler) http.Handler {
+    protected := auth.WithAuth(manager, store, next)
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.Method == http.MethodOptions || !strings.HasPrefix(r.URL.Path, "/api/v1/") {
+            next.ServeHTTP(w, r)
+            return
+        }
+        switch r.URL.Path {
+        case "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/register":
+            next.ServeHTTP(w, r)
+            return
+        default:
+            protected.ServeHTTP(w, r)
+        }
+    })
 }

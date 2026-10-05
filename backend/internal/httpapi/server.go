@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
 	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
@@ -87,10 +88,14 @@ func newServer(
 }
 
 func NewServerWithStudioAndObservabilityAndEmbeddedStatic(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics observability.APIMetrics, staticFS fs.FS, registrars ...Registrar) *Server {
-	return newServerWithEmbeddedStatic(logger, origins, limiter, &metrics, staticFS, registrars...)
+	return newServerWithEmbeddedStatic(logger, origins, limiter, &metrics, staticFS, nil, nil, registrars...)
 }
 
-func newServerWithEmbeddedStatic(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics *observability.APIMetrics, staticFS fs.FS, registrars ...Registrar) *Server {
+func NewServerWithStudioAndObservabilityAndEmbeddedStaticAndAuth(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics observability.APIMetrics, staticFS fs.FS, tokenManager *auth.TokenManager, authStore auth.Store, registrars ...Registrar) *Server {
+	return newServerWithEmbeddedStatic(logger, origins, limiter, &metrics, staticFS, tokenManager, authStore, registrars...)
+}
+
+func newServerWithEmbeddedStatic(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics *observability.APIMetrics, staticFS fs.FS, tokenManager *auth.TokenManager, authStore auth.Store, registrars ...Registrar) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler)
@@ -106,6 +111,9 @@ func newServerWithEmbeddedStatic(logger *slog.Logger, origins []string, limiter 
 	handler = withRateLimit(limiter, handler)
 	handler = withLogging(logger, handler)
 	handler = http.MaxBytesHandler(handler, security.DefaultMaxUploadSize)
+	if tokenManager != nil && authStore != nil {
+		handler = withAPIAuth(tokenManager, authStore, handler)
+	}
 	if metrics != nil { handler = withObservability(*metrics, handler) }
 	return &Server{handler: handler}
 }

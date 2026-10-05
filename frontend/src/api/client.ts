@@ -2,6 +2,27 @@ export interface ApiError {
   error: { code: string; message: string; request_id?: string }
 }
 
+export interface AuthUser {
+  id: string
+  email: string
+  name: string
+}
+
+export interface AuthSession {
+  user: AuthUser
+  token: string
+  expires_at: string
+}
+
+export const authApi = {
+  login: (email: string, password: string) =>
+    apiRequest<AuthSession>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  register: (email: string, name: string, password: string) =>
+    apiRequest<AuthSession>('/auth/register', { method: 'POST', body: JSON.stringify({ email, name, password }) }),
+  me: () => apiRequest<AuthUser>('/auth/me'),
+  logout: () => apiRequest<void>('/auth/logout', { method: 'POST' }),
+}
+
 export type PrivacyMode = 'local_only' | 'provider_allowed' | 'project_default'
 
 export interface Project {
@@ -35,6 +56,7 @@ export async function apiRequest<T>(
   })
 
   if (!response.ok) {
+    if (response.status === 401) localStorage.removeItem('web-studio-access-token')
     let payload: ApiError | undefined
     try {
       payload = await response.json() as ApiError

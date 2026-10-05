@@ -26,6 +26,8 @@ type Config struct {
 	S3UsePathStyle  bool
 	ClamAVAddress   string
 	JWTSecret       string
+	JWTIssuer       string
+	JWTTTL          time.Duration
 	CORSOrigins     []string
 	RateLimit       int
 	RateWindow      time.Duration
@@ -66,6 +68,8 @@ func Load() (Config, error) {
 		S3UsePathStyle:  boolEnv("S3_PATH_STYLE", false),
 		ClamAVAddress:   strings.TrimSpace(os.Getenv("CLAMAV_ADDR")),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
+		JWTIssuer:       getenv("JWT_ISSUER", "web-studio-img"),
+		JWTTTL:          durationEnv("JWT_TTL", 24*time.Hour),
 		CORSOrigins:     splitCSV(getenv("CORS_ORIGINS", "http://localhost:5173")),
 		RateLimit:       intEnv("RATE_LIMIT_REQUESTS", 120),
 		RateWindow:      durationEnv("RATE_LIMIT_WINDOW", time.Minute),
@@ -101,6 +105,9 @@ func Load() (Config, error) {
 	}
 	if _, err := strconv.Atoi(cfg.Port); err != nil {
 		return Config{}, fmt.Errorf("APP_PORT must be numeric: %w", err)
+	}
+	if cfg.JWTTTL <= 0 {
+		return Config{}, errors.New("JWT_TTL must be positive")
 	}
 	if cfg.RateLimit <= 0 {
 		return Config{}, errors.New("RATE_LIMIT_REQUESTS must be positive")
