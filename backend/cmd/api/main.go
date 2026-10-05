@@ -125,6 +125,7 @@ func main() {
 	var projectDB *sql.DB
 	var authTokenManager *auth.TokenManager
 	var authStore auth.Store
+	var authHandler *auth.HTTPHandler
 
 	if cfg.DatabaseURL != "" {
 		if len(cfg.JWTSecret) < 32 { logger.Error("JWT_SECRET must be at least 32 bytes when database authentication is enabled"); os.Exit(1) }
@@ -151,7 +152,7 @@ func main() {
 		authStore = sqlAuthStore
 		authService, authErr := auth.NewService(sqlAuthStore, authTokenManager)
 		if authErr != nil { logger.Error("auth service initialization failed", "error", authErr); os.Exit(1) }
-		authHandler, authErr := auth.NewHTTPHandler(authService, authTokenManager, sqlAuthStore)
+		authHandler, authErr = auth.NewHTTPHandler(authService, authTokenManager, sqlAuthStore)
 		if authErr != nil { logger.Error("auth handler initialization failed", "error", authErr); os.Exit(1) }
 
 		projectStore, err := projects.NewSQLStore(projectDB)
