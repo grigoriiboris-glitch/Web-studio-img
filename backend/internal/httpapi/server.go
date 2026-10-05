@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/oleg3190/Web-studio-img/backend/internal/auth"\n\t"github.com/oleg3190/Web-studio-img/backend/internal/generation"
+	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
+	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
 	"github.com/oleg3190/Web-studio-img/backend/internal/iterations"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/projects"
