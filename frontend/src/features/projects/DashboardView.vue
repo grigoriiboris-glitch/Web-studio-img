@@ -2,16 +2,21 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
+import { useAuthStore } from '../../stores/auth'
 
 import { projectsApi, type Project } from '../../api/client'
 
 const projects = ref<Project[]>([])
+const auth = useAuthStore()
+const router = useRouter()
 const loading = ref(false)
 const error = ref<string | null>(null)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const form = reactive({ name: '', description: '' })
+
+async function logout() { await auth.logout(); await router.replace('/login') }
 
 async function loadProjects() {
   loading.value = true
@@ -91,6 +96,10 @@ onMounted(loadProjects)
         <div>
           <strong>Web Studio</strong>
           <span>Projects</span>
+        </div>
+        <div class="account">
+          <span>{{ auth.user?.name }}</span>
+          <el-button link @click="logout">Log out</el-button>
         </div>
         <div class="header-actions"><RouterLink to="/library"><el-button>Asset Library</el-button></RouterLink><el-button type="primary" @click="openCreate">New project</el-button></div>
       </div>
@@ -180,6 +189,7 @@ onMounted(loadProjects)
 }
 
 .header-actions { gap: 8px; }
+.account { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
 
 .actions {
   gap: 8px;
