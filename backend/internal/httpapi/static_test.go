@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 func TestStaticHandlerServesFilesAndSPA(t *testing.T) {
@@ -29,4 +30,34 @@ func TestStaticHandlerServesFilesAndSPA(t *testing.T) {
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound { t.Fatalf("API fallback status=%d", rec.Code) }
+}
+
+func TestEmbeddedStaticHandlerDoesNotRedirectIndex(t *testing.T) {
+	root := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte("<html>embedded</html>")},
+		"assets/app.js": &fstest.MapFile{Data: []byte("console.log('embedded')")},
+	}
+	handler := newEmbeddedStaticHandler(root)
+
+	for _, path := range []string{"/", "/index.html", "/projects/demo/studio"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status=%d location=%q", path, rec.Code, rec.Header().Get("Location"))
+		}
+		if got := rec.Header().Get("Location"); got != "" {
+			t.Fatalf("%s: unexpected redirect to %q", path, got)
+		}
+		if rec.Body.String() != "<html>embedded</html>" {
+			t.Fatalf("%s: body=%q", path, rec.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "console.log('embedded')" {
+		t.Fatalf("asset response: status=%d body=%q", rec.Code, rec.Body.String())
+	}
 }
