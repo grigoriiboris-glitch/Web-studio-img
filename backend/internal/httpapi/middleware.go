@@ -86,7 +86,7 @@ func withRateLimit(limiter *security.RateLimiter, next http.Handler) http.Handle
 func withAPIAuth(manager *auth.TokenManager, store auth.Store, next http.Handler) http.Handler {
     protected := auth.WithAuth(manager, store, next)
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        if !strings.HasPrefix(r.URL.Path, "/api/v1/") {
+        if r.Method == http.MethodOptions || !strings.HasPrefix(r.URL.Path, "/api/v1/") {
             next.ServeHTTP(w, r)
             return
         }
