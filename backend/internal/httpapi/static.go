@@ -11,6 +11,9 @@ import (
 func newEmbeddedStaticHandler(root fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(root))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The API keeps the strict default CSP, but the embedded SPA needs to
+		// load its same-origin JS/CSS assets and call the same-origin API.
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
 			return
