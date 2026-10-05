@@ -2,6 +2,7 @@ package auth
 
 import (
     "encoding/json"
+    "database/sql"
     "errors"
     "io"
     "net/http"
@@ -21,8 +22,8 @@ func NewHTTPHandler(service *Service, tokens *TokenManager, store Store) (*HTTPH
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
     mux.HandleFunc("POST /api/v1/auth/register", h.register)
     mux.HandleFunc("POST /api/v1/auth/login", h.login)
-    mux.HandleFunc("GET /api/v1/auth/me", WithAuth(h.tokens, h.store, http.HandlerFunc(h.me)).ServeHTTP)
-    mux.HandleFunc("POST /api/v1/auth/logout", WithAuth(h.tokens, h.store, http.HandlerFunc(h.logout)).ServeHTTP)
+    mux.HandleFunc("GET /api/v1/auth/me", h.me)
+    mux.HandleFunc("POST /api/v1/auth/logout", h.logout)
 }
 
 type credentialsInput struct { Email string; Password string; Name string }
