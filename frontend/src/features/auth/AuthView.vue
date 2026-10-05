@@ -38,20 +38,89 @@ async function submit() {
 <template>
   <main class="auth-page">
     <el-card class="auth-card">
-      <div class="brand">Web Studio</div>
+      <div class="brand">
+        Web Studio
+      </div>
       <h1>{{ title }}</h1>
-      <p class="muted">Your projects and creative assets are private to your account.</p>
-      <el-alert v-if="error" :title="error" type="error" show-icon class="error" />
-      <el-form label-position="top" @submit.prevent="submit">
-        <el-form-item label="Email"><el-input v-model="email" type="email" autocomplete="email" /></el-form-item>
-        <el-form-item v-if="mode === 'register'" label="Name"><el-input v-model="name" autocomplete="name" /></el-form-item>
-        <el-form-item label="Password"><el-input v-model="password" type="password" show-password autocomplete="current-password" /></el-form-item>
-        <el-form-item v-if="mode === 'register'" label="Confirm password"><el-input v-model="confirmPassword" type="password" show-password autocomplete="new-password" /></el-form-item>
-        <el-button type="primary" native-type="submit" :loading="auth.loading" class="submit">{{ mode === 'login' ? 'Sign in' : 'Create account' }}</el-button>
+      <p class="muted">
+        Your projects and creative assets are private to your account.
+      </p>
+      <el-alert
+        v-if="error"
+        :title="error"
+        type="error"
+        show-icon
+        class="error"
+      />
+      <el-form
+        label-position="top"
+        @submit.prevent="submit"
+      >
+        <el-form-item label="Email">
+          <el-input
+            v-model="email"
+            type="email"
+            autocomplete="email"
+          />
+        </el-form-item>
+        <el-form-item
+          v-if="mode === 'register'"
+          label="Name"
+        >
+          <el-input
+            v-model="name"
+            autocomplete="name"
+          />
+        </el-form-item>
+        <el-form-item label="Password">
+          <el-input
+            v-model="password"
+            type="password"
+            show-password
+            :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
+          />
+        </el-form-item>
+        <el-form-item
+          v-if="mode === 'register'"
+          label="Confirm password"
+        >
+          <el-input
+            v-model="confirmPassword"
+            type="password"
+            show-password
+            autocomplete="new-password"
+          />
+        </el-form-item>
+        <el-button
+          type="primary"
+          native-type="submit"
+          :loading="auth.loading"
+          class="submit"
+        >
+          {{ mode === 'login' ? 'Sign in' : 'Create account' }}
+        </el-button>
       </el-form>
       <div class="switch">
-        <span v-if="mode === 'login'">No account?</span><el-button v-if="mode === 'login'" link type="primary" @click="switchMode('register')">Create one</el-button>
-        <span v-else>Already have an account?</span><el-button v-if="mode === 'register'" link type="primary" @click="switchMode('login')">Sign in</el-button>
+        <template v-if="mode === 'login'">
+          <span>No account?</span>
+          <el-button
+            link
+            type="primary"
+            @click="switchMode('register')"
+          >
+            Create one
+          </el-button>
+        </template>
+        <template v-else>
+          <span>Already have an account?</span>
+          <el-button
+            link
+            type="primary"
+            @click="switchMode('login')"
+          >
+            Sign in
+          </el-button>
+        </template>
       </div>
     </el-card>
   </main>
