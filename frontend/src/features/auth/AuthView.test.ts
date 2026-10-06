@@ -14,8 +14,11 @@ vi.mock('vue-router', () => ({
 }))
 
 describe('registration form feature', () => {
+  let pinia: ReturnType<typeof createPinia>
+
   beforeEach(() => {
-    setActivePinia(createPinia())
+    pinia = createPinia()
+    setActivePinia(pinia)
     replace.mockReset()
     localStorage.clear()
     vi.stubGlobal('fetch', vi.fn())
@@ -42,7 +45,7 @@ describe('registration form feature', () => {
 
     const wrapper = mount(AuthView, {
       global: {
-        plugins: [ElementPlus],
+        plugins: [ElementPlus, pinia],
       },
     })
 
@@ -73,7 +76,7 @@ describe('registration form feature', () => {
       password: 'StrongPassword123!',
     })
 
-    const auth = useAuthStore()
+    const auth = useAuthStore(pinia)
     expect(auth.user).toEqual({
       id: '11111111-1111-1111-1111-111111111111',
       email: 'artist@example.com',
