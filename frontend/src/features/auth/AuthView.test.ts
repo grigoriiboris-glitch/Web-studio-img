@@ -26,6 +26,7 @@ describe('registration form feature', () => {
 
   it('fills the real registration form, submits it, stores the session and redirects to projects', async () => {
     const fetchMock = vi.mocked(fetch)
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
       user: {
         id: '11111111-1111-1111-1111-111111111111',
@@ -72,7 +73,7 @@ describe('registration form feature', () => {
       password: 'StrongPassword123!',
     })
 
-    expect(localStorage.getItem('web-studio-access-token')).toBe('test-session-token')
+    expect(setItem).toHaveBeenCalledWith('web-studio-access-token', 'test-session-token')
     expect(wrapper.text()).not.toContain('Authentication failed')
     expect(replace).toHaveBeenCalledWith('/projects')
   })
