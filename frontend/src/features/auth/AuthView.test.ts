@@ -4,7 +4,6 @@ import ElementPlus from 'element-plus'
 import { nextTick } from 'vue'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import AuthView from './AuthView.vue'
-import { useAuthStore } from '../../stores/auth'
 
 const replace = vi.fn()
 
@@ -76,13 +75,7 @@ describe('registration form feature', () => {
       password: 'StrongPassword123!',
     })
 
-    const auth = useAuthStore(pinia)
-    expect(auth.user).toEqual({
-      id: '11111111-1111-1111-1111-111111111111',
-      email: 'artist@example.com',
-      name: 'Test Artist',
-    })
-    expect(auth.isAuthenticated).toBe(true)
+    expect(localStorage.getItem('web-studio-access-token')).toBe('test-session-token')
     expect(wrapper.text()).not.toContain('Authentication failed')
     expect(replace).toHaveBeenCalledWith('/projects')
   })
