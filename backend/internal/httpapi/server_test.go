@@ -57,3 +57,41 @@ func TestRateLimit(t *testing.T) {
 		t.Fatalf("second status=%d", rec.Code)
 	}
 }
+
+func TestAuthPreflightAllowsConfiguredFrontendOrigin(t *testing.T) {
+	server := NewServer(slog.Default(), []string{"http://localhost:5173"}, nil)
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/auth/register", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "content-type")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("preflight status=%d", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Fatalf("allow-origin=%q", got)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Methods"); got == "" {
+		t.Fatal("allow-methods missing")
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); got == "" {
+		t.Fatal("allow-headers missing")
+	}
+}
+
+func TestAuthPreflightRejectsUnknownOrigin(t *testing.T) {
+	server := NewServer(slog.Default(), []string{"http://localhost:5173"}, nil)
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/auth/register", nil)
+	req.Header.Set("Origin", "http://evil.example")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("preflight status=%d", rec.Code)
+	}
+}
