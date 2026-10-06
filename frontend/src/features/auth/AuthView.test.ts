@@ -4,6 +4,7 @@ import ElementPlus from 'element-plus'
 import { nextTick } from 'vue'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import AuthView from './AuthView.vue'
+import { useAuthStore } from '../../stores/auth'
 
 const replace = vi.fn()
 
@@ -26,7 +27,6 @@ describe('registration form feature', () => {
 
   it('fills the real registration form, submits it, stores the session and redirects to projects', async () => {
     const fetchMock = vi.mocked(fetch)
-    const setItem = vi.spyOn(Storage.prototype, 'setItem')
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
       user: {
         id: '11111111-1111-1111-1111-111111111111',
@@ -73,7 +73,13 @@ describe('registration form feature', () => {
       password: 'StrongPassword123!',
     })
 
-    expect(setItem).toHaveBeenCalledWith('web-studio-access-token', 'test-session-token')
+    const auth = useAuthStore()
+    expect(auth.user).toEqual({
+      id: '11111111-1111-1111-1111-111111111111',
+      email: 'artist@example.com',
+      name: 'Test Artist',
+    })
+    expect(auth.isAuthenticated).toBe(true)
     expect(wrapper.text()).not.toContain('Authentication failed')
     expect(replace).toHaveBeenCalledWith('/projects')
   })
