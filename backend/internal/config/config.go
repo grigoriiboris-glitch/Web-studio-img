@@ -113,9 +113,6 @@ func Load() (Config, error) {
 		return Config{}, errors.New("RATE_LIMIT_REQUESTS must be positive")
 	}
 	if cfg.Env == "production" {
-		if strings.TrimSpace(cfg.DatabaseURL) == "" {
-			return Config{}, errors.New("DATABASE_URL must be set in production")
-		}
 		if len(cfg.JWTSecret) < 32 {
 			return Config{}, errors.New("JWT_SECRET must be at least 32 characters in production")
 		}
