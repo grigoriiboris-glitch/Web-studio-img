@@ -1,11 +1,11 @@
 package httpapi
 
 import (
-	"reflect"
-	"io/fs"
 	"encoding/json"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
@@ -84,6 +84,7 @@ func newServer(
 	if metrics != nil {
 		handler = withObservability(*metrics, handler)
 	}
+	handler = withRecovery(logger, handler)
 
 	return &Server{handler: handler}
 }
@@ -116,6 +117,7 @@ func newServerWithEmbeddedStatic(logger *slog.Logger, origins []string, limiter 
 		handler = withAPIAuth(tokenManager, authStore, handler)
 	}
 	if metrics != nil { handler = withObservability(*metrics, handler) }
+	handler = withRecovery(logger, handler)
 	return &Server{handler: handler}
 }
 
