@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import { nextTick } from 'vue'
@@ -60,6 +60,7 @@ describe('registration form feature', () => {
     expect(form.exists()).toBe(true)
     await form.trigger('submit')
     await nextTick()
+    await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0]
@@ -95,6 +96,7 @@ describe('registration form feature', () => {
 
     await wrapper.find('form').trigger('submit')
     await nextTick()
+    await flushPromises()
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Passwords do not match')
