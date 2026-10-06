@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import ElementPlus from 'element-plus'
 import { nextTick } from 'vue'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import AuthView from './AuthView.vue'
@@ -38,7 +39,11 @@ describe('registration form feature', () => {
       headers: { 'Content-Type': 'application/json' },
     }))
 
-    const wrapper = mount(AuthView)
+    const wrapper = mount(AuthView, {
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
 
     const inputs = wrapper.findAll('input')
     expect(inputs).toHaveLength(4)
@@ -74,7 +79,11 @@ describe('registration form feature', () => {
 
   it('does not send the form when passwords differ', async () => {
     const fetchMock = vi.mocked(fetch)
-    const wrapper = mount(AuthView)
+    const wrapper = mount(AuthView, {
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
 
     const inputs = wrapper.findAll('input')
     await inputs[0].setValue('artist@example.com')
