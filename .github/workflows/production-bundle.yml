@@ -22,7 +22,7 @@ jobs:
           node-version: '24'
       - name: Build frontend
         working-directory: frontend
-        run: npm ci && npm run build
+        run: npm install --no-audit --no-fund && npm run build
       - name: Embed frontend and build API
         run: |
           set -euo pipefail
