@@ -105,3 +105,4 @@ func TestProductionLocalStorageCanUseJWTSecret(t *testing.T) {
 		t.Fatal("local storage should fall back to JWT secret when explicit signing secret is absent")
 	}
 }
+

@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
+	"github.com/oleg3190/Web-studio-img/backend/internal/auth"
 	"github.com/oleg3190/Web-studio-img/backend/internal/observability"
 	"github.com/oleg3190/Web-studio-img/backend/internal/security"
 )
@@ -93,5 +96,39 @@ func TestAuthPreflightRejectsUnknownOrigin(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("preflight status=%d", rec.Code)
+	}
+}
+
+
+func TestTypedNilRegistrarIsIgnored(t *testing.T) {
+	var authHandler *auth.HTTPHandler
+	server := NewServerWithStudio(slog.Default(), nil, nil, authHandler)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(`{"email":"a@example.com","name":"A","password":"StrongPassword123!"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRecoveryTurnsHandlerPanicIntoInternalServerError(t *testing.T) {
+	panicHandler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })
+	server := &Server{handler: withRecovery(slog.Default(), withRequestID(panicHandler))}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", nil)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := body["error"]; !ok {
+		t.Fatalf("missing error body: %v", body)
+	}
+	if got := rec.Header().Get("X-Request-ID"); got == "" {
+		t.Fatal("missing request id")
 	}
 }

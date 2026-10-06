@@ -14,6 +14,19 @@ import (
 
 type requestIDKey struct{}
 
+func withRecovery(logger *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				requestID := requestIDFromContext(r.Context())
+				logger.Error("http panic recovered", "panic", recovered, "request_id", requestID, "method", r.Method, "path", r.URL.Path)
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": map[string]string{"code": "internal_error", "message": "internal server error", "request_id": requestID}})
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
 func withRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimSpace(r.Header.Get("X-Request-ID"))
