@@ -128,4 +128,7 @@ func TestRecoveryTurnsHandlerPanicIntoInternalServerError(t *testing.T) {
 	if _, ok := body["error"]; !ok {
 		t.Fatalf("missing error body: %v", body)
 	}
+	if got := rec.Header().Get("X-Request-ID"); got == "" {
+		t.Fatal("missing request id")
+	}
 }
