@@ -114,7 +114,7 @@ func TestTypedNilRegistrarIsIgnored(t *testing.T) {
 
 func TestRecoveryTurnsHandlerPanicIntoInternalServerError(t *testing.T) {
 	panicHandler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })
-	server := &Server{handler: withRecovery(slog.Default(), panicHandler)}
+	server := &Server{handler: withRecovery(slog.Default(), withRequestID(panicHandler))}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", nil)
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
