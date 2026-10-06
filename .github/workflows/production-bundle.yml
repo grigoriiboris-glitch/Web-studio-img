@@ -30,7 +30,7 @@ jobs:
           mkdir -p backend/cmd/api/web
           cp -R frontend/dist/. backend/cmd/api/web/
           cd backend
-          go mod download
+          go mod tidy
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../web-studio-img ./cmd/api
       - name: Build worker
         working-directory: backend
