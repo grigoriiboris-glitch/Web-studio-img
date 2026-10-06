@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"reflect"
 	"io/fs"
 	"encoding/json"
 	"log/slog"
@@ -65,7 +66,7 @@ func newServer(
 		generationHandler.Register(mux)
 	}
 	for _, registrar := range registrars {
-		if registrar != nil {
+		if !isNilRegistrar(registrar) {
 			registrar.Register(mux)
 		}
 	}
@@ -101,7 +102,7 @@ func newServerWithEmbeddedStatic(logger *slog.Logger, origins []string, limiter 
 	mux.HandleFunc("GET /readyz", readyHandler)
 	mux.HandleFunc("GET /api/v1/health", apiHealthHandler)
 	for _, registrar := range registrars {
-		if registrar != nil { registrar.Register(mux) }
+		if !isNilRegistrar(registrar) { registrar.Register(mux) }
 	}
 	mux.Handle("/", newEmbeddedStaticHandler(staticFS))
 	var handler http.Handler = mux
@@ -116,6 +117,17 @@ func newServerWithEmbeddedStatic(logger *slog.Logger, origins []string, limiter 
 	}
 	if metrics != nil { handler = withObservability(*metrics, handler) }
 	return &Server{handler: handler}
+}
+
+func isNilRegistrar(registrar Registrar) bool {
+	if registrar == nil { return true }
+	value := reflect.ValueOf(registrar)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 func (s *Server) Handler() http.Handler {
