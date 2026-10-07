@@ -162,9 +162,13 @@ func TestAuthRegisterRealServerRoute(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	handler, err := auth.NewHTTPHandler(service, tokens, store)
 	if err != nil { t.Fatal(err) }
+	mp := sdkmetric.NewMeterProvider()
+	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })
+	metrics, err := observability.NewAPIMetrics(mp)
+	if err != nil { t.Fatal(err) }
 	server := NewServerWithStudioAndObservabilityAndEmbeddedStaticAndAuth(
 		slog.Default(), []string{"http://localhost:5173"}, nil,
-		sdkmetric.NewMeterProvider(), fstest.MapFS{}, tokens, store, handler,
+		metrics, fstest.MapFS{}, tokens, store, handler,
 	)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(`{"email":"artist@example.com","name":"Test Artist","password":"StrongPassword123!"}`))
 	req.Header.Set("Content-Type", "application/json")
