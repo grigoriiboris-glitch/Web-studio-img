@@ -106,7 +106,15 @@ func TestAuthPreflightRejectsUnknownOrigin(t *testing.T) {
 
 func TestTypedNilRegistrarIsIgnored(t *testing.T) {
 	var authHandler *auth.HTTPHandler
-	server := NewServerWithStudio(slog.Default(), nil, nil, authHandler)
+	mp := sdkmetric.NewMeterProvider()
+	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })
+	metrics, err := observability.NewAPIMetrics(mp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewServerWithStudioAndObservabilityAndEmbeddedStaticAndAuth(
+		slog.Default(), nil, nil, metrics, fstest.MapFS{}, nil, nil, authHandler,
+	)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(`{"email":"a@example.com","name":"A","password":"StrongPassword123!"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
