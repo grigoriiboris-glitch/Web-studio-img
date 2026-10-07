@@ -124,9 +124,9 @@ func TestLoadDotEnvFile(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	t.Setenv("JWT_SECRET", "")
 	t.Setenv("DOTENV_TEST", "")
-	os.Unsetenv("DATABASE_URL")
-	os.Unsetenv("JWT_SECRET")
-	os.Unsetenv("DOTENV_TEST")
+	if err := os.Unsetenv("DATABASE_URL"); err != nil { t.Fatal(err) }
+	if err := os.Unsetenv("JWT_SECRET"); err != nil { t.Fatal(err) }
+	if err := os.Unsetenv("DOTENV_TEST"); err != nil { t.Fatal(err) }
 
 	cfg, err := Load()
 	if err != nil {
