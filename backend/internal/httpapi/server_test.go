@@ -2,12 +2,16 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"testing/fstest"
 
 	"go.opentelemetry.io/otel"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -131,4 +135,46 @@ func TestRecoveryTurnsHandlerPanicIntoInternalServerError(t *testing.T) {
 	if got := rec.Header().Get("X-Request-ID"); got == "" {
 		t.Fatal("missing request id")
 	}
+}
+
+type routeAuthStore struct {
+	user auth.User
+	session uuid.UUID
+}
+
+func (s *routeAuthStore) FindUserByEmail(context.Context, string) (auth.User, error) { return s.user, nil }
+func (s *routeAuthStore) CreateUser(_ context.Context, email, name, passwordHash string) (auth.User, error) {
+	s.user = auth.User{ID: uuid.New(), Email: email, Name: name, PasswordHash: passwordHash}
+	return s.user, nil
+}
+func (s *routeAuthStore) CreateSession(_ context.Context, _ uuid.UUID, _ string, _ time.Time) (uuid.UUID, error) {
+	s.session = uuid.New()
+	return s.session, nil
+}
+func (s *routeAuthStore) IsSessionActive(context.Context, uuid.UUID, time.Time) (bool, error) { return true, nil }
+func (s *routeAuthStore) RevokeSession(context.Context, uuid.UUID, time.Time) error { return nil }
+
+func TestAuthRegisterRealServerRoute(t *testing.T) {
+	store := &routeAuthStore{}
+	tokens, err := auth.NewTokenManager("12345678901234567890123456789012", "web-studio-img", time.Hour)
+	if err != nil { t.Fatal(err) }
+	service, err := auth.NewService(store, tokens)
+	if err != nil { t.Fatal(err) }
+	handler, err := auth.NewHTTPHandler(service, tokens, store)
+	if err != nil { t.Fatal(err) }
+	server := NewServerWithStudioAndObservabilityAndEmbeddedStaticAndAuth(
+		slog.Default(), []string{"http://localhost:5173"}, nil,
+		sdkmetric.NewMeterProvider(), fstest.MapFS{}, tokens, store, handler,
+	)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(`{"email":"artist@example.com","name":"Test Artist","password":"StrongPassword123!"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated { t.Fatalf("registration route status=%d body=%s", rec.Code, rec.Body.String()) }
+	var body struct {
+		User struct { Email string `json:"email"`; Name string `json:"name"` } `json:"user"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil { t.Fatalf("decode response: %v", err) }
+	if body.User.Email != "artist@example.com" || body.User.Name != "Test Artist" || body.Token == "" { t.Fatalf("unexpected registration response: %+v", body) }
 }
