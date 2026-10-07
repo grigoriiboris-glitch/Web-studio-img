@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
@@ -106,3 +109,51 @@ func TestProductionLocalStorageCanUseJWTSecret(t *testing.T) {
 	}
 }
 
+
+
+func TestLoadDotEnvFile(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("DOTENV_TEST", "")
+	t.Setenv("WEB_STATIC_DIR", "")
+	if err := os.WriteFile(".env", []byte("DATABASE_URL=postgres://dotenv/test\nJWT_SECRET=\"dotenv-secret\"\nDOTENV_TEST=loaded\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("DOTENV_TEST", "")
+	os.Unsetenv("DATABASE_URL")
+	os.Unsetenv("JWT_SECRET")
+	os.Unsetenv("DOTENV_TEST")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if cfg.DatabaseURL != "postgres://dotenv/test" {
+		t.Fatalf("DatabaseURL=%q", cfg.DatabaseURL)
+	}
+	if cfg.JWTSecret != "dotenv-secret" {
+		t.Fatalf("JWTSecret=%q", cfg.JWTSecret)
+	}
+	if got := os.Getenv("DOTENV_TEST"); got != "loaded" {
+		t.Fatalf("DOTENV_TEST=%q", got)
+	}
+}
+
+func TestLoadDotEnvDoesNotOverrideEnvironment(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("DATABASE_URL", "postgres://environment/wins")
+	if err := os.WriteFile(".env", []byte("DATABASE_URL=postgres://dotenv/loses\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if cfg.DatabaseURL != "postgres://environment/wins" {
+		t.Fatalf("DatabaseURL=%q", cfg.DatabaseURL)
+	}
+}
