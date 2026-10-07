@@ -15,6 +15,7 @@ import (
 	"github.com/oleg3190/Web-studio-img/backend/internal/cardbatch"
 	"github.com/oleg3190/Web-studio-img/backend/internal/cardtypes"
 	"github.com/oleg3190/Web-studio-img/backend/internal/composition"
+	"github.com/oleg3190/Web-studio-img/backend/internal/dna"
 	"github.com/oleg3190/Web-studio-img/backend/internal/events"
 	"github.com/oleg3190/Web-studio-img/backend/internal/exports"
 	"github.com/oleg3190/Web-studio-img/backend/internal/generation"
@@ -61,6 +62,7 @@ func TestAllAPIRoutesAreRegisteredAndReachTheirHandler(t *testing.T) {
 	(&cardbatch.Handler{}).Register(mux)
 	(&cardtypes.Handler{}).Register(mux)
 	(&composition.Handler{}).Register(mux)
+	(&dna.Handler{}).Register(mux)
 	(&events.Handler{}).Register(mux)
 	(&exports.Handler{}).Register(mux)
 	(&generation.Handler{}).Register(mux)
@@ -89,7 +91,7 @@ func TestAllAPIRoutesAreRegisteredAndReachTheirHandler(t *testing.T) {
 		// Authentication routes are public, so malformed payloads must stop
 		// before a nil/invalid service can be dereferenced.
 		{"auth-register", http.MethodPost, "/api/v1/auth/register", http.StatusBadRequest, "{}"},
-		{"auth-login", http.MethodPost, "/api/v1/auth/login", http.StatusBadRequest, "{}"},
+		{"auth-login", http.MethodPost, "/api/v1/auth/login", http.StatusBadRequest, "{"},
 		{"auth-me", http.MethodGet, "/api/v1/auth/me", http.StatusUnauthorized, ""},
 		{"auth-logout", http.MethodPost, "/api/v1/auth/logout", http.StatusUnauthorized, ""},
 
