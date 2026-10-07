@@ -105,6 +105,9 @@ func newServerWithEmbeddedStatic(logger *slog.Logger, origins []string, limiter 
 	for _, registrar := range registrars {
 		if !isNilRegistrar(registrar) { registrar.Register(mux) }
 	}
+	if tokenManager == nil || authStore == nil {
+		registerAuthUnavailableRoutes(mux)
+	}
 	mux.Handle("/", newEmbeddedStaticHandler(staticFS))
 	var handler http.Handler = mux
 	handler = withCORS(origins, handler)
@@ -174,4 +177,21 @@ func NewServerWithStudioAndObservability(logger *slog.Logger, origins []string, 
 
 func NewServerWithStudioAndObservabilityAndStatic(logger *slog.Logger, origins []string, limiter *security.RateLimiter, metrics observability.APIMetrics, staticDir string, registrars ...Registrar) *Server {
 	return newServer(logger, origins, limiter, nil, nil, nil, &metrics, staticDir, registrars...)
+}
+
+
+func registerAuthUnavailableRoutes(mux *http.ServeMux) {
+	const message = "authentication service is unavailable; configure DATABASE_URL and restart the API"
+	handler := func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": map[string]string{
+				"code":    "auth_unavailable",
+				"message": message,
+			},
+		})
+	}
+	mux.HandleFunc("POST /api/v1/auth/register", handler)
+	mux.HandleFunc("POST /api/v1/auth/login", handler)
+	mux.HandleFunc("GET /api/v1/auth/me", handler)
+	mux.HandleFunc("POST /api/v1/auth/logout", handler)
 }
