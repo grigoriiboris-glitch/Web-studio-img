@@ -122,9 +122,6 @@ func Load() (Config, error) {
 		if cfg.WebStaticDir == "" {
 			return Config{}, errors.New("WEB_STATIC_DIR must not be empty in production")
 		}
-		if strings.TrimSpace(cfg.DatabaseURL) == "" {
-			return Config{}, errors.New("DATABASE_URL must not be empty in production")
-		}
 		if cfg.StorageProvider == "s3" {
 			if cfg.S3Bucket == "" || cfg.S3AccessKey == "" || cfg.S3SecretKey == "" {
 				return Config{}, errors.New("production S3 storage requires S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
