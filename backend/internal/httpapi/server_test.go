@@ -111,8 +111,11 @@ func TestTypedNilRegistrarIsIgnored(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
+	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"auth_unavailable"`)) {
+		t.Fatalf("missing auth_unavailable error: %s", rec.Body.String())
 	}
 }
 
