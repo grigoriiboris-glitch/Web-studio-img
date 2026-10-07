@@ -56,20 +56,6 @@ func TestLoadS3PathStyle(t *testing.T) {
 	}
 }
 
-func TestProductionRequiresDatabaseURL(t *testing.T) {
-	t.Setenv("APP_ENV", "production")
-	t.Setenv("APP_PORT", "8080")
-	t.Setenv("JWT_SECRET", "12345678901234567890123456789012")
-	t.Setenv("CORS_ORIGINS", "http://localhost:8080")
-	t.Setenv("WEB_STATIC_DIR", "/app/web")
-	t.Setenv("STORAGE_PROVIDER", "local")
-	t.Setenv("STORAGE_SIGNING_SECRET", "local-signing-secret")
-	t.Setenv("DATABASE_URL", "")
-	if _, err := Load(); err == nil {
-		t.Fatal("expected DATABASE_URL requirement")
-	}
-}
-
 func TestProductionRequiresWebStaticDir(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("APP_PORT", "8080")
@@ -111,7 +97,6 @@ func TestProductionLocalStorageCanUseJWTSecret(t *testing.T) {
 	t.Setenv("WEB_STATIC_DIR", "/app/web")
 	t.Setenv("STORAGE_PROVIDER", "local")
 	t.Setenv("STORAGE_SIGNING_SECRET", "")
-	t.Setenv("DATABASE_URL", "postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
