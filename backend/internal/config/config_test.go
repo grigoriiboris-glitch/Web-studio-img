@@ -111,6 +111,7 @@ func TestProductionLocalStorageCanUseJWTSecret(t *testing.T) {
 	t.Setenv("WEB_STATIC_DIR", "/app/web")
 	t.Setenv("STORAGE_PROVIDER", "local")
 	t.Setenv("STORAGE_SIGNING_SECRET", "")
+	t.Setenv("DATABASE_URL", "postgres://webstudio:webstudio@localhost:5432/webstudio?sslmode=disable")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
