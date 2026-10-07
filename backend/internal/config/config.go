@@ -51,6 +51,9 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	if err := loadDotEnv(); err != nil {
+		return Config{}, fmt.Errorf("load .env: %w", err)
+	}
 	cfg := Config{
 		Env:             getenv("APP_ENV", "development"),
 		Port:            getenv("APP_PORT", "8080"),
